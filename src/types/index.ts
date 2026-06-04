@@ -7,13 +7,15 @@ export interface EtaData {
   routeSummary: string;
 }
 
-export interface BusySlot {
+export interface CalendarEvent {
+  summary: string;
   start: string;
   end: string;
+  allDay: boolean;
 }
 
 export interface AvailabilityData {
-  busySlots: BusySlot[];
+  events: CalendarEvent[];
   windowStart: string;
   windowEnd: string;
 }

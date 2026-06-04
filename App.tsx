@@ -67,9 +67,9 @@ export default function App() {
         const availabilityData = await getAvailabilityData();
         input.availabilityData = availabilityData;
         setContextSummary(
-          availabilityData.busySlots.length === 0
+          availabilityData.events.length === 0
             ? 'No events in the next 7 days'
-            : `${availabilityData.busySlots.length} busy slot${availabilityData.busySlots.length !== 1 ? 's' : ''} in the next 7 days`
+            : `${availabilityData.events.length} event${availabilityData.events.length !== 1 ? 's' : ''} in the next 7 days`
         );
       }
 
