@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "ContextReply",
+    "slug": "context-reply",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.contextreply.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f0f0f"
+      },
+      "package": "com.contextreply.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
