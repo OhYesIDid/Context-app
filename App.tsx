@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -35,6 +35,13 @@ export default function App() {
   const [intent, setIntent] = useState<Intent | null>(null);
   const [contextSummary, setContextSummary] = useState('');
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    };
+  }, []);
 
   const handleSuggest = async () => {
     if (!message.trim()) return;
@@ -81,7 +88,8 @@ export default function App() {
   const handleCopy = async () => {
     await Clipboard.setStringAsync(reply);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const canSubmit = message.trim().length > 0 && !loading;
@@ -114,6 +122,7 @@ export default function App() {
             value={message}
             onChangeText={setMessage}
             editable={!loading}
+            maxLength={1000}
           />
 
           {/* Button */}
@@ -138,10 +147,8 @@ export default function App() {
           {(intent || reply) && !loading ? (
             <View style={styles.card}>
               {intent ? (
-                <View style={styles.row}>
-                  <View style={styles.intentBadge}>
-                    <Text style={styles.intentText}>{INTENT_LABEL[intent]}</Text>
-                  </View>
+                <View style={styles.intentBadge}>
+                  <Text style={styles.intentText}>{INTENT_LABEL[intent]}</Text>
                 </View>
               ) : null}
 
