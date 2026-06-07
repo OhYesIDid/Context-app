@@ -26,9 +26,12 @@ const NotificationListener = Platform.OS === 'android'
   : null;
 
 import { suggestReply } from './src/services/claude';
+import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
 import { getAvailabilityData } from './src/services/googleCalendar';
 import { getEtaData } from './src/services/googleMaps';
+import { importGoogleContacts } from './src/services/googlePeople';
+import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Intent, ReplyOptions, SuggestReplyInput, Tone } from './src/types';
 import { detectIntent } from './src/utils/intentDetector';
 
@@ -50,7 +53,27 @@ const TONE_COLOR: Record<Tone, string> = {
   brief: '#f59e0b',
 };
 
+function SetupRow({
+  label, status, done, loading, onPress,
+}: { label: string; status: string; done: boolean; loading: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={styles.settingRow} onPress={onPress} disabled={loading}>
+      <View style={styles.settingLeft}>
+        <Text style={[styles.setupDot, done && styles.setupDotDone]}>{done ? '✓' : '·'}</Text>
+        <View>
+          <Text style={styles.settingText}>{label}</Text>
+          <Text style={styles.setupStatus}>{loading ? 'Importing…' : status}</Text>
+        </View>
+      </View>
+      {!done && !loading && <Text style={styles.setupAction}>Import</Text>}
+    </Pressable>
+  );
+}
+
 const DEFAULT_TONE_KEY = 'default_tone';
+const GOOGLE_CONTACTS_COUNT_KEY = 'setup_google_contacts_count';
+const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
+const WHATSAPP_IMPORT_KEY = 'setup_whatsapp_messages';
 
 export default function App() {
   const [message, setMessage] = useState('');
@@ -65,6 +88,10 @@ export default function App() {
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [googleContactsCount, setGoogleContactsCount] = useState<number | null>(null);
+  const [deviceContactsCount, setDeviceContactsCount] = useState<number | null>(null);
+  const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
+  const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset copied indicator when switching tones
@@ -72,11 +99,23 @@ export default function App() {
 
   // Load settings + configure auth on mount
   useEffect(() => {
-    AsyncStorage.getItem(DEFAULT_TONE_KEY).then((saved) => {
+    AsyncStorage.multiGet([
+      DEFAULT_TONE_KEY,
+      GOOGLE_CONTACTS_COUNT_KEY,
+      DEVICE_CONTACTS_COUNT_KEY,
+      WHATSAPP_IMPORT_KEY,
+    ]).then((pairs) => {
+      const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
+      const saved = map[DEFAULT_TONE_KEY];
       if (saved === 'formal' || saved === 'casual' || saved === 'brief') {
-        setDefaultToneState(saved);
-        setTone(saved);
+        setDefaultToneState(saved); setTone(saved);
       }
+      const gc = map[GOOGLE_CONTACTS_COUNT_KEY];
+      if (gc !== null) setGoogleContactsCount(Number(gc));
+      const dc = map[DEVICE_CONTACTS_COUNT_KEY];
+      if (dc !== null) setDeviceContactsCount(Number(dc));
+      const wa = map[WHATSAPP_IMPORT_KEY];
+      if (wa !== null) setWhatsappMessages(Number(wa));
     });
     configureGoogleSignin();
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
@@ -143,6 +182,44 @@ export default function App() {
     setDefaultToneState(t);
     setTone(t);
     await AsyncStorage.setItem(DEFAULT_TONE_KEY, t);
+  };
+
+  const handleImportGoogleContacts = async () => {
+    if (!googleAuthed) { Alert.alert('Not signed in', 'Please sign in with Google first.'); return; }
+    setSetupLoading('google');
+    try {
+      const count = await importGoogleContacts();
+      setGoogleContactsCount(count);
+      await AsyncStorage.setItem(GOOGLE_CONTACTS_COUNT_KEY, String(count));
+      Alert.alert('Done', `Imported ${count} Google contacts.`);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
+    } finally { setSetupLoading(null); }
+  };
+
+  const handleImportDeviceContacts = async () => {
+    setSetupLoading('device');
+    try {
+      const count = await importDeviceContacts();
+      setDeviceContactsCount(count);
+      await AsyncStorage.setItem(DEVICE_CONTACTS_COUNT_KEY, String(count));
+      Alert.alert('Done', `Imported ${count} device contacts.`);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
+    } finally { setSetupLoading(null); }
+  };
+
+  const handleImportWhatsApp = async () => {
+    setSetupLoading('whatsapp');
+    try {
+      const { contactName, messageCount } = await pickAndParseWhatsAppExport();
+      setWhatsappMessages(messageCount);
+      await AsyncStorage.setItem(WHATSAPP_IMPORT_KEY, String(messageCount));
+      Alert.alert('Done', `Imported ${messageCount} messages from chat with ${contactName}.`);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Cancelled') { setSetupLoading(null); return; }
+      Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
+    } finally { setSetupLoading(null); }
   };
 
   const handleSuggest = async () => {
@@ -348,6 +425,32 @@ export default function App() {
               </Pressable>
             ))}
 
+            <View style={styles.divider} />
+            <Text style={styles.modalSection}>CONTEXT SETUP</Text>
+            <Text style={styles.setupHint}>Optional — improves reply quality</Text>
+
+            <SetupRow
+              label="Google Contacts"
+              status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
+              done={googleContactsCount !== null}
+              loading={setupLoading === 'google'}
+              onPress={handleImportGoogleContacts}
+            />
+            <SetupRow
+              label="Device Contacts"
+              status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
+              done={deviceContactsCount !== null}
+              loading={setupLoading === 'device'}
+              onPress={handleImportDeviceContacts}
+            />
+            <SetupRow
+              label="WhatsApp History"
+              status={whatsappMessages !== null ? `${whatsappMessages} messages imported` : 'Not imported'}
+              done={whatsappMessages !== null}
+              loading={setupLoading === 'whatsapp'}
+              onPress={handleImportWhatsApp}
+            />
+
             <Pressable style={styles.modalClose} onPress={() => setSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </Pressable>
@@ -427,4 +530,10 @@ const styles = StyleSheet.create({
   settingCheck: { fontSize: 18, fontWeight: '700' },
   modalClose: { marginTop: 24, backgroundColor: PURPLE, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   modalCloseText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+
+  setupHint: { color: MUTED, fontSize: 12, marginBottom: 12 },
+  setupDot: { fontSize: 18, color: MUTED, width: 20, textAlign: 'center' },
+  setupDotDone: { color: '#4ade80' },
+  setupStatus: { fontSize: 12, color: MUTED, marginTop: 1 },
+  setupAction: { fontSize: 13, color: PURPLE, fontWeight: '600' },
 });

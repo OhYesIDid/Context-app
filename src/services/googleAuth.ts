@@ -3,7 +3,10 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 export function configureGoogleSignin(): void {
   GoogleSignin.configure({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_WEB_CLIENT_ID,
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    scopes: [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/contacts.readonly',
+    ],
     offlineAccess: false,
   });
 }

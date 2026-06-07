@@ -93,6 +93,8 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_platform_identities_contact
       ON platform_identities(contact_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_identities_unique
+      ON platform_identities(platform, identifier);
     CREATE INDEX IF NOT EXISTS idx_memories_contact
       ON memories(contact_id);
     CREATE INDEX IF NOT EXISTS idx_memories_type
@@ -211,8 +213,9 @@ export async function upsertPlatformIdentity(
     `INSERT INTO platform_identities
        (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       confidence=excluded.confidence, user_confirmed=excluded.user_confirmed,
+     ON CONFLICT(platform, identifier) DO UPDATE SET
+       contact_id=excluded.contact_id,
+       confidence=MAX(confidence, excluded.confidence),
        updated_at=excluded.updated_at`,
     [id, identity.contactId, identity.platform, identity.identifier, identity.identifierType,
      identity.confidence, identity.userConfirmed ? 1 : 0, now, now]
