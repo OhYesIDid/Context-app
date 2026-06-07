@@ -37,6 +37,7 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_CONV_KEY = "conv_key"
         const val EXTRA_INTENT = "reply_intent"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
+        const val ACTION_OPEN_CHAT = "com.contextreply.app.ACTION_OPEN_CHAT"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
 
         // Collapses rapid-fire messages from the same thread into one API call

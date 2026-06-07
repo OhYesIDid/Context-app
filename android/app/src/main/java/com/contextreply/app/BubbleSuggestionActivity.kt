@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -55,6 +56,8 @@ class BubbleSuggestionActivity : Activity() {
             setPadding(dp(20), dp(20), dp(20), dp(20))
         }
 
+        val packageName = convKey?.substringBefore(":") ?: ""
+
         // Contact name — tappable if we have a contentIntent to open the conversation
         root.addView(TextView(this).apply {
             text = if (openChatIntent != null) "↗ $contact" else contact
@@ -63,8 +66,24 @@ class BubbleSuggestionActivity : Activity() {
             setPadding(0, 0, 0, dp(10))
             if (openChatIntent != null) {
                 setOnClickListener {
-                    try { openChatIntent.send() } catch (_: Exception) {}
-                    finish()
+                    val selectedText = textMap[available[selectedIdx]] ?: casualText
+                    val a11yEnabled = isAccessibilityEnabled()
+                    // Only write pending inject (and close the bubble) when the
+                    // AccessibilityService is active — otherwise the user needs
+                    // the bubble to stay open so they can copy/send manually.
+                    if (a11yEnabled && packageName.isNotEmpty()) {
+                        getSharedPreferences("contextreply_prefs", MODE_PRIVATE).edit()
+                            .putString("pending_inject_$packageName", selectedText)
+                            .apply()
+                    }
+                    sendBroadcast(
+                        Intent(this@BubbleSuggestionActivity, ReplySendReceiver::class.java).apply {
+                            action = ContextReplyBgService.ACTION_OPEN_CHAT
+                            putExtra(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
+                            if (convKey != null) putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
+                        }
+                    )
+                    if (a11yEnabled) finish()
                 }
             }
         })
@@ -154,6 +173,13 @@ class BubbleSuggestionActivity : Activity() {
         })
 
         setContentView(root)
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabled.contains("com.contextreply.app/com.contextreply.app.ContextReplyAccessibilityService")
     }
 
     private fun sendAction(

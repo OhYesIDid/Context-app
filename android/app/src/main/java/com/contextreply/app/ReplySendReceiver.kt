@@ -1,10 +1,12 @@
 package com.contextreply.app
 
+import android.app.ActivityOptions
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.core.app.RemoteInput
 import java.util.concurrent.ConcurrentHashMap
@@ -16,6 +18,43 @@ class ReplySendReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Open-chat action: fire the WhatsApp contentIntent with its own credentials
+        // (zero-arg send uses the PendingIntent creator's UID, same as notification shade)
+        if (intent.action == ContextReplyBgService.ACTION_OPEN_CHAT) {
+            @Suppress("DEPRECATION")
+            val pi = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
+            val pkg = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)?.substringBefore(":") ?: ""
+            if (pi == null) {
+                android.widget.Toast.makeText(context, "CR: PI is null", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                try {
+                    // API 34+: explicitly allow background activity start so Android
+                    // doesn't silently block WhatsApp from coming to the foreground.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        val opts = ActivityOptions.makeBasic().apply {
+                            setPendingIntentBackgroundActivityStartMode(
+                                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                            )
+                        }
+                        pi.send(context, 0, null, null, null, null, opts.toBundle())
+                    } else {
+                        pi.send()
+                    }
+                    android.widget.Toast.makeText(context, "CR: sent OK", android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "CR: send failed – ${e.javaClass.simpleName}", android.widget.Toast.LENGTH_LONG).show()
+                    // Fallback: open the app home screen
+                    if (pkg.isNotEmpty()) {
+                        context.packageManager.getLaunchIntentForPackage(pkg)?.apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                            try { context.startActivity(this) } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+            return
+        }
+
         val notifId = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
         val convKey = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
 
