@@ -1,5 +1,4 @@
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import { insertMemory, upsertContact } from './database';
 
 // Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg
@@ -17,7 +16,9 @@ export async function pickAndParseWhatsAppExport(): Promise<{ contactName: strin
   if (result.canceled) throw new Error('Cancelled');
 
   const uri = result.assets[0].uri;
-  const text = await FileSystem.readAsStringAsync(uri);
+  const res = await fetch(uri);
+  if (!res.ok) throw new Error('Could not read file');
+  const text = await res.text();
 
   // Collect messages per sender
   const bySender = new Map<string, string[]>();

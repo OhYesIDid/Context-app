@@ -1,14 +1,15 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { upsertContact, upsertPlatformIdentity } from './database';
-import { getAccessToken } from './googleAuth';
 
 export async function importGoogleContacts(): Promise<number> {
-  // Ensure contacts scope is granted — will prompt if not yet authorised
+  // Request contacts scope; prompts the user if not yet granted
   await GoogleSignin.addScopes({
     scopes: ['https://www.googleapis.com/auth/contacts.readonly'],
   });
 
-  const token = await getAccessToken();
+  // Get a fresh token after the scope grant — the cached one won't include the new scope
+  const { accessToken: token } = await GoogleSignin.getTokens();
+  if (!token) throw new Error('Not signed in to Google');
   let count = 0;
   let nextPageToken: string | undefined;
 
@@ -22,6 +23,7 @@ export async function importGoogleContacts(): Promise<number> {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
+      if (res.status === 403) throw new Error('People API not enabled. Go to console.cloud.google.com → APIs & Services → Enable "People API".');
       const body = await res.text().catch(() => '');
       throw new Error(`People API ${res.status}: ${body}`);
     }
