@@ -293,7 +293,7 @@ class ContextReplyBgService : NotificationListenerService() {
             android.R.drawable.ic_menu_send, "Send", sendPi
         ).build()
 
-        nm.notify(notifId, NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Suggested reply")
             .setContentText(replyText)
@@ -303,7 +303,10 @@ class ContextReplyBgService : NotificationListenerService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
-            .build()
+
+        BubbleHelper.attach(this, builder, replyText, remoteInputKey, notifId, convKey, intent)
+
+        nm.notify(notifId, builder.build()
         )
     }
 

@@ -1,0 +1,70 @@
+package com.contextreply.app
+
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
+
+/**
+ * Attaches BubbleMetadata + MessagingStyle to an existing notification builder.
+ * Everything bubble-related is contained here.
+ * To remove bubbles entirely: delete this file, delete BubbleSuggestionActivity.kt,
+ * remove the BubbleHelper.attach() call from ContextReplyBgService, and remove
+ * the BubbleSuggestionActivity entry from AndroidManifest.xml.
+ */
+object BubbleHelper {
+
+    fun attach(
+        context: Context,
+        builder: NotificationCompat.Builder,
+        replyText: String,
+        remoteInputKey: String,
+        notifId: Int,
+        convKey: String,
+        intentExtra: String?,
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+
+        val bubbleIntent = Intent(context, BubbleSuggestionActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra(ContextReplyBgService.EXTRA_REPLY_TEXT, replyText)
+            putExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
+            putExtra(ContextReplyBgService.EXTRA_NOTIF_ID, notifId)
+            putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
+            if (intentExtra != null) putExtra(ContextReplyBgService.EXTRA_INTENT, intentExtra)
+        }
+        val bubblePi = PendingIntent.getActivity(
+            context, notifId + 2, bubbleIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+
+        builder.setBubbleMetadata(
+            NotificationCompat.BubbleMetadata.Builder(
+                bubblePi,
+                IconCompat.createWithResource(context, R.mipmap.ic_launcher)
+            )
+            .setDesiredHeight(320)
+            .setAutoExpandBubble(false)
+            .setSuppressNotification(false)
+            .build()
+        )
+
+        // MessagingStyle is required for bubble eligibility on Android 11+
+        val contact = convKey.substringAfter(":")
+        builder.setStyle(
+            NotificationCompat.MessagingStyle(Person.Builder().setName("You").build())
+                .setConversationTitle(contact)
+                .addMessage(
+                    NotificationCompat.MessagingStyle.Message(
+                        replyText,
+                        System.currentTimeMillis(),
+                        Person.Builder().setName("Suggested reply").build()
+                    )
+                )
+        )
+        builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
+    }
+}

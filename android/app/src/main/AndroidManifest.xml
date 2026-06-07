@@ -61,6 +61,14 @@
       </intent-filter>
     </service>
 
+    <!-- Bubble suggestion window — remove this + BubbleHelper.kt + BubbleSuggestionActivity.kt to disable bubbles -->
+    <activity
+      android:name=".BubbleSuggestionActivity"
+      android:allowEmbedded="true"
+      android:resizeableActivity="true"
+      android:theme="@android:style/Theme.NoTitleBar"
+      android:exported="false"/>
+
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
