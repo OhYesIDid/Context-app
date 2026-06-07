@@ -281,6 +281,14 @@ class ContextReplyBgService : NotificationListenerService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Store suggestion so the AccessibilityService overlay can read it
+        val packageName = convKey.substringBefore(":")
+        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+            .putString("last_suggestion_$packageName", replyText)
+            .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
+            .putString("last_suggestion_conv_$packageName", convKey)
+            .apply()
+
         val sendAction = NotificationCompat.Action.Builder(
             android.R.drawable.ic_menu_send, "Send", sendPi
         ).build()

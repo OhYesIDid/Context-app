@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   PermissionsAndroid,
   Platform,
@@ -429,6 +430,19 @@ export default function App() {
             <View style={styles.divider} />
             <Text style={styles.modalSection}>CONTEXT SETUP</Text>
             <Text style={styles.setupHint}>Optional — improves reply quality</Text>
+
+            <Pressable style={styles.settingRow} onPress={() => {
+              if (Platform.OS === 'android') Linking.sendIntent('android.settings.ACCESSIBILITY_SETTINGS').catch(() => {});
+            }}>
+              <View style={styles.settingLeft}>
+                <Text style={styles.setupDot}>·</Text>
+                <View>
+                  <Text style={styles.settingText}>Accessibility Access</Text>
+                  <Text style={styles.setupStatus}>Enables overlay suggestions in messaging apps</Text>
+                </View>
+              </View>
+              <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
 
             <SetupRow
               label="Google Contacts"
