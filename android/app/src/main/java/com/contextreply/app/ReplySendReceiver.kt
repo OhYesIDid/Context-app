@@ -24,9 +24,7 @@ class ReplySendReceiver : BroadcastReceiver() {
             @Suppress("DEPRECATION")
             val pi = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
             val pkg = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)?.substringBefore(":") ?: ""
-            if (pi == null) {
-                android.widget.Toast.makeText(context, "CR: PI is null", android.widget.Toast.LENGTH_LONG).show()
-            } else {
+            if (pi != null) {
                 try {
                     // API 34+: explicitly allow background activity start so Android
                     // doesn't silently block WhatsApp from coming to the foreground.
@@ -40,9 +38,7 @@ class ReplySendReceiver : BroadcastReceiver() {
                     } else {
                         pi.send()
                     }
-                    android.widget.Toast.makeText(context, "CR: sent OK", android.widget.Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "CR: send failed – ${e.javaClass.simpleName}", android.widget.Toast.LENGTH_LONG).show()
+                } catch (_: Exception) {
                     // Fallback: open the app home screen
                     if (pkg.isNotEmpty()) {
                         context.packageManager.getLaunchIntentForPackage(pkg)?.apply {
