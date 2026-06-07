@@ -1,6 +1,7 @@
 package com.contextreply.app
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -28,8 +29,10 @@ class BubbleSuggestionActivity : Activity() {
             ?: run { finish(); return }
         val notifId    = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
         val convKey    = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
-        val intentExtra = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
-        val contact    = convKey?.substringAfter(":") ?: "Reply"
+        val intentExtra    = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
+        @Suppress("DEPRECATION")
+        val openChatIntent = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
+        val contact        = convKey?.substringAfter(":") ?: "Reply"
 
         val textMap = mapOf("casual" to casualText, "formal" to formalText, "brief" to briefText)
         val available = toneKeys.filter { textMap[it]?.isNotEmpty() == true }
@@ -52,12 +55,18 @@ class BubbleSuggestionActivity : Activity() {
             setPadding(dp(20), dp(20), dp(20), dp(20))
         }
 
-        // Contact name
+        // Contact name — tappable if we have a contentIntent to open the conversation
         root.addView(TextView(this).apply {
-            text = contact
-            setTextColor(MUTED)
+            text = if (openChatIntent != null) "↗ $contact" else contact
+            setTextColor(if (openChatIntent != null) PURPLE else MUTED)
             textSize = 12f
             setPadding(0, 0, 0, dp(10))
+            if (openChatIntent != null) {
+                setOnClickListener {
+                    try { openChatIntent.send() } catch (_: Exception) {}
+                    finish()
+                }
+            }
         })
 
         // Reply text (updates when tone tab changes)

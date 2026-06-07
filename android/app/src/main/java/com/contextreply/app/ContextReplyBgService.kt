@@ -36,6 +36,7 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_NOTIF_ID = "notif_id"
         const val EXTRA_CONV_KEY = "conv_key"
         const val EXTRA_INTENT = "reply_intent"
+        const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
 
         // Collapses rapid-fire messages from the same thread into one API call
@@ -120,6 +121,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
         val remoteInputKey = replyAction.remoteInputs?.firstOrNull()?.resultKey ?: return
         val replyPendingIntent = replyAction.actionIntent ?: return
+        val openChatIntent = notification.contentIntent
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
@@ -180,7 +182,8 @@ class ContextReplyBgService : NotificationListenerService() {
                     val primary = casual ?: formal ?: brief ?: return@submit
                     postSuggestionNotification(
                         primary, formal, brief,
-                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent
+                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
+                        openChatIntent
                     )
                 } catch (_: Exception) {}
             }
@@ -273,6 +276,7 @@ class ContextReplyBgService : NotificationListenerService() {
         notifId: Int,
         convKey: String,
         intent: String? = null,
+        openChatIntent: PendingIntent? = null,
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -324,7 +328,7 @@ class ContextReplyBgService : NotificationListenerService() {
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent)
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent)
 
         nm.notify(notifId, builder.build()
         )
