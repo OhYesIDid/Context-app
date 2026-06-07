@@ -70,10 +70,20 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 val node = event.source ?: return
                 val editable = node.isEditable
                 @Suppress("DEPRECATION") node.recycle()
-                if (pkg in ContextReplyBgService.TARGET_PACKAGES && editable && overlayView == null) {
-                    activePackage = pkg
-                    maybeShowOverlay(pkg)
+                if (pkg !in ContextReplyBgService.TARGET_PACKAGES || !editable) return
+                activePackage = pkg
+
+                // Auto-inject suggestion when user tapped "open chat" from the bubble
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val pendingText = prefs.getString("pending_inject_$pkg", null)
+                if (pendingText != null) {
+                    prefs.edit().remove("pending_inject_$pkg").apply()
+                    injectText(pendingText)
+                    clearAndDismiss(pkg)
+                    return
                 }
+
+                if (overlayView == null) maybeShowOverlay(pkg)
             }
         }
     }

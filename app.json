@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "ContextReply",
-    "slug": "context-reply",
-    "scheme": "contextreply",
+    "name": "Protxt",
+    "slug": "protxt",
+    "scheme": "protxt",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.contextreply.app"
+      "bundleIdentifier": "com.protxt.app"
     },
     "android": {
-      "package": "com.contextreply.app"
+      "package": "com.protxt.app"
     },
     "web": {
       "bundler": "metro"
@@ -53,7 +53,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow ContextReply to check your location for ETA replies."
+          "locationWhenInUsePermission": "Allow Protxt to check your location for ETA replies."
         }
       ]
     ],

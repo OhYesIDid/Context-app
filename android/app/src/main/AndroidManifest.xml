@@ -5,10 +5,7 @@
   <uses-permission android:name="android.permission.READ_CONTACTS"/>
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-  <uses-permission android:name="android.permission.VIBRATE"/>
-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -46,9 +43,9 @@
       android:name=".ReplySendReceiver"
       android:exported="false">
       <intent-filter>
-        <action android:name="com.contextreply.app.ACTION_SEND_REPLY"/>
-        <action android:name="com.contextreply.app.ACTION_DISMISS_REPLY"/>
-        <action android:name="com.contextreply.app.ACTION_OPEN_CHAT"/>
+        <action android:name="com.protxt.app.ACTION_SEND_REPLY"/>
+        <action android:name="com.protxt.app.ACTION_DISMISS_REPLY"/>
+        <action android:name="com.protxt.app.ACTION_OPEN_CHAT"/>
       </intent-filter>
     </receiver>
 
@@ -89,7 +86,7 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="contextreply"/>
+        <data android:scheme="protxt"/>
       </intent-filter>
     </activity>
   </application>

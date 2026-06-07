@@ -27,8 +27,8 @@ class ContextReplyBgService : NotificationListenerService() {
 
     companion object {
         const val CHANNEL_ID = "contextreply_suggestions"
-        const val ACTION_SEND = "com.contextreply.app.ACTION_SEND_REPLY"
-        const val ACTION_DISMISS = "com.contextreply.app.ACTION_DISMISS_REPLY"
+        const val ACTION_SEND = "com.protxt.app.ACTION_SEND_REPLY"
+        const val ACTION_DISMISS = "com.protxt.app.ACTION_DISMISS_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
         const val EXTRA_REPLY_FORMAL = "reply_formal"
         const val EXTRA_REPLY_BRIEF = "reply_brief"
@@ -37,7 +37,7 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_CONV_KEY = "conv_key"
         const val EXTRA_INTENT = "reply_intent"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
-        const val ACTION_OPEN_CHAT = "com.contextreply.app.ACTION_OPEN_CHAT"
+        const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
 
         // Collapses rapid-fire messages from the same thread into one API call
