@@ -12,14 +12,21 @@ import java.util.concurrent.ConcurrentHashMap
 class ReplySendReceiver : BroadcastReceiver() {
 
     companion object {
-        // Keyed by notifId so multiple concurrent suggestions don't clobber each other.
         val pendingReplyIntents = ConcurrentHashMap<Int, PendingIntent>()
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         val notifId = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
+        val convKey = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
+
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (notifId != -1) nm.cancel(notifId)
+
+        // On both Send and Dismiss: clear the stored thread so the next message
+        // from this contact starts a fresh context window.
+        if (convKey != null) {
+            NotificationStore.getInstance(context).markReplied(convKey)
+        }
 
         if (intent.action != ContextReplyBgService.ACTION_SEND) return
 
@@ -47,7 +54,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         try {
             replyPendingIntent.send(context, 0, replyIntent)
         } catch (_: PendingIntent.CanceledException) {
-            // Original notification was already dismissed — nothing to do
+            // Original notification already dismissed — nothing to do
         }
     }
 }
