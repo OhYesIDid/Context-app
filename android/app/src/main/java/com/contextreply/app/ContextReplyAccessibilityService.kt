@@ -37,16 +37,27 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
-                    if (activePackage != pkg) {
-                        activePackage = pkg
-                        maybeShowOverlay(pkg)
-                    }
-                } else if (pkg != packageName) {
-                    if (activePackage != null) {
-                        activePackage = null
-                        dismissOverlay()
-                    }
+                // Only use this event to detect entering a target app.
+                // Dismissal is handled by TYPE_WINDOWS_CHANGED so that opening
+                // the soft keyboard (which also fires this event) doesn't hide the strip.
+                if (pkg in ContextReplyBgService.TARGET_PACKAGES && activePackage != pkg) {
+                    activePackage = pkg
+                    maybeShowOverlay(pkg)
+                }
+            }
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                // Dismiss only when the target app window is no longer visible.
+                if (activePackage == null) return
+                val targetVisible = windows?.any { w ->
+                    val root = w.root
+                    val match = w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION &&
+                            root?.packageName?.toString() == activePackage
+                    @Suppress("DEPRECATION") root?.recycle()
+                    match
+                } == true
+                if (!targetVisible) {
+                    activePackage = null
+                    dismissOverlay()
                 }
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
