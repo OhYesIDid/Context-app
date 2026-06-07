@@ -92,7 +92,6 @@ class ContextReplyBgService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName !in TARGET_PACKAGES) return
-        if (isAppInForeground()) return
 
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
@@ -282,13 +281,9 @@ class ContextReplyBgService : NotificationListenerService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val remoteInput = RemoteInput.Builder(REMOTE_INPUT_KEY)
-            .setLabel("Edit reply…")
-            .build()
-
         val sendAction = NotificationCompat.Action.Builder(
             android.R.drawable.ic_menu_send, "Send", sendPi
-        ).addRemoteInput(remoteInput).build()
+        ).build()
 
         nm.notify(notifId, NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)

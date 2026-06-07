@@ -8,6 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Modal,
+  PermissionsAndroid,
   Platform,
   Pressable,
   SafeAreaView,
@@ -79,6 +80,10 @@ export default function App() {
     });
     configureGoogleSignin();
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
+    // Android 13+ requires runtime grant for posting notifications
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
+    }
   }, []);
 
   // Android notification listener setup

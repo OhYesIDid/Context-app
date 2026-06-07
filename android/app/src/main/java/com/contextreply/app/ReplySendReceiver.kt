@@ -49,7 +49,7 @@ class ReplySendReceiver : BroadcastReceiver() {
 
         val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)
             ?: return
-        val replyPendingIntent = if (notifId != -1) pendingReplyIntents.remove(notifId) else null
+        val replyPendingIntent = (if (notifId != -1) pendingReplyIntents.remove(notifId) else null)
             ?: return
 
         val replyIntent = Intent()
