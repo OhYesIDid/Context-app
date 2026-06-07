@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -32,6 +33,7 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_REMOTE_INPUT_KEY = "remote_input_key"
         const val EXTRA_NOTIF_ID = "notif_id"
         const val EXTRA_CONV_KEY = "conv_key"
+        const val EXTRA_INTENT = "reply_intent"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
 
         // Collapses rapid-fire messages from the same thread into one API call
@@ -68,7 +70,10 @@ class ContextReplyBgService : NotificationListenerService() {
         )
     }
 
+    private data class WorkerResult(val replies: JSONObject, val intent: String?)
+
     private val pendingJobs = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val lastOpenedTimestamp = ConcurrentHashMap<String, Long>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val workerPool = Executors.newFixedThreadPool(3)
     private lateinit var store: NotificationStore
@@ -146,25 +151,45 @@ class ContextReplyBgService : NotificationListenerService() {
 
         // Debounce: cancel any existing scheduled call for this conversation and
         // reschedule. A burst of messages waits for the last one to settle.
+        val packageName = sbn.packageName
         pendingJobs[convKey]?.cancel(false)
         pendingJobs[convKey] = scheduler.schedule({
             pendingJobs.remove(convKey)
-            // Snapshot the full accumulated thread at call time
             val fullThread = store.getThread(convKey)
             val latestMessage = fullThread.lastOrNull()?.second ?: text
 
             workerPool.submit {
                 try {
-                    val replies = callWorker(latestMessage, fullThread) ?: return@submit
-                    val suggestion = replies.optString("casual").takeIf { it.isNotEmpty() }
-                        ?: replies.optString("brief").takeIf { it.isNotEmpty() }
+                    val result = callWorker(latestMessage, fullThread) ?: return@submit
+                    val suggestion = result.replies.optString("casual").takeIf { it.isNotEmpty() }
+                        ?: result.replies.optString("brief").takeIf { it.isNotEmpty() }
                         ?: return@submit
                     postSuggestionNotification(
-                        suggestion, replyPendingIntent, remoteInputKey, notifId, convKey
+                        suggestion, replyPendingIntent, remoteInputKey, notifId, convKey, result.intent
                     )
                 } catch (_: Exception) {}
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
+        if (sbn.packageName !in TARGET_PACKAGES) return
+        if (reason != REASON_APP_CANCEL) return
+
+        // User opened the messaging app — note the timestamp and record which
+        // conversation was active. Used by the IME (Sprint 2) to know which
+        // thread to show a suggestion for when the keyboard opens.
+        lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
+
+        val extras = sbn.notification?.extras ?: return
+        val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+            ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+            ?: return
+
+        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("last_opened_conv_${sbn.packageName}", conversationTitle)
+            .apply()
     }
 
     private fun buildConversationKey(packageName: String, extras: Bundle): String {
@@ -188,7 +213,7 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
-    private fun callWorker(message: String, thread: List<Pair<String?, String>>): JSONObject? {
+    private fun callWorker(message: String, thread: List<Pair<String?, String>>): WorkerResult? {
         val url = URL("${BuildConfig.WORKER_URL}/suggest")
         val conn = url.openConnection() as HttpURLConnection
         return try {
@@ -215,7 +240,10 @@ class ContextReplyBgService : NotificationListenerService() {
             conn.outputStream.bufferedWriter().use { it.write(body) }
             if (conn.responseCode != 200) return null
             val response = conn.inputStream.bufferedReader().use { it.readText() }
-            JSONObject(response).optJSONObject("replies")
+            val responseObj = JSONObject(response)
+            val replies = responseObj.optJSONObject("replies") ?: return null
+            val intent = responseObj.optString("intent").ifEmpty { null }
+            WorkerResult(replies, intent)
         } finally {
             conn.disconnect()
         }
@@ -227,6 +255,7 @@ class ContextReplyBgService : NotificationListenerService() {
         remoteInputKey: String,
         notifId: Int,
         convKey: String,
+        intent: String? = null,
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -236,6 +265,7 @@ class ContextReplyBgService : NotificationListenerService() {
             putExtra(EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
             putExtra(EXTRA_NOTIF_ID, notifId)
             putExtra(EXTRA_CONV_KEY, convKey)
+            if (intent != null) putExtra(EXTRA_INTENT, intent)
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         val sendPi = PendingIntent.getBroadcast(this, notifId, sendIntent, flags)

@@ -30,13 +30,22 @@ class ReplySendReceiver : BroadcastReceiver() {
 
         if (intent.action != ContextReplyBgService.ACTION_SEND) return
 
+        val originalSuggestion = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
+        val intentType = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
+
         val remoteResults = RemoteInput.getResultsFromIntent(intent)
         val replyText = remoteResults
             ?.getCharSequence(ContextReplyBgService.REMOTE_INPUT_KEY)
             ?.toString()
             ?.takeIf { it.isNotBlank() }
-            ?: intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
+            ?: originalSuggestion
             ?: return
+
+        // Record (original suggestion → what was actually sent) for writing style learning.
+        // Sprint 3 will bridge this SharedPreferences queue into the SQLite style_edits table.
+        if (originalSuggestion != null && convKey != null) {
+            StyleEditQueue.enqueue(context, originalSuggestion, replyText, convKey, intentType)
+        }
 
         val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)
             ?: return
