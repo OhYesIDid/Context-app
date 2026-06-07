@@ -31,6 +31,7 @@ object StyleEditQueue {
             put("original", originalSuggestion)
             put("edit", userSentText)
             put("platform", platformFromConvKey(convKey))
+            put("contact", convKey.substringAfter(":"))
             if (intent != null) put("intent", intent)
             put("ts", System.currentTimeMillis())
         })

@@ -102,10 +102,9 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_style_edits_contact
       ON style_edits(contact_id);
   `);
-  // Add preferred_tone column if it doesn't exist yet (safe to run repeatedly)
-  try {
-    await db.runAsync('ALTER TABLE contacts ADD COLUMN preferred_tone TEXT');
-  } catch (_) {}
+  // Add columns introduced after initial schema — safe to run repeatedly
+  try { await db.runAsync('ALTER TABLE contacts ADD COLUMN preferred_tone TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE contacts ADD COLUMN interaction_count INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 }
 
 // ── Saved places ──────────────────────────────────────────────────────────────
@@ -210,7 +209,7 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
 
 type ContactRow = {
   id: string; display_name: string; relationship: string | null;
-  preferred_tone: string | null; notes: string | null;
+  preferred_tone: string | null; interaction_count: number | null; notes: string | null;
   created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
 };
 
@@ -219,6 +218,7 @@ function rowToContact(r: ContactRow): Contact {
     id: r.id, displayName: r.display_name,
     relationship: (r.relationship as Contact['relationship']) ?? undefined,
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
+    interactionCount: r.interaction_count ?? 0,
     notes: r.notes ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
     syncedAt: r.synced_at ?? undefined, deletedAt: r.deleted_at ?? undefined,
@@ -247,9 +247,18 @@ export async function upsertContact(
 export async function getAllContacts(): Promise<Contact[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<ContactRow>(
-    'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY display_name'
+    'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY interaction_count DESC, display_name ASC'
   );
   return rows.map(rowToContact);
+}
+
+export async function incrementContactInteraction(displayName: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE contacts SET interaction_count = interaction_count + 1, updated_at = ?
+     WHERE LOWER(display_name) = LOWER(?) AND deleted_at IS NULL`,
+    [new Date().toISOString(), displayName]
+  );
 }
 
 export async function updateContactPreferences(

@@ -1,11 +1,12 @@
 import { NativeModules } from 'react-native';
-import { getAllContacts, getRecentStyleEdits, recordStyleEdit } from './database';
+import { getAllContacts, getRecentStyleEdits, incrementContactInteraction, recordStyleEdit } from './database';
 import type { Intent, Platform } from '../types';
 
 interface QueueItem {
   original: string;
   edit: string;
   platform: string;
+  contact?: string;
   intent?: string;
   ts: number;
 }
@@ -23,13 +24,14 @@ async function drainQueue(): Promise<void> {
   const json: string = await NativeModules.ContextReplySettings.drainStyleQueue();
   const items: QueueItem[] = JSON.parse(json);
   for (const item of items) {
-    if (!item.original || !item.edit) continue;
+    if (!item.original) continue;
     await recordStyleEdit({
       originalSuggestion: item.original,
       userEdit: item.edit,
       platform: item.platform as Platform,
       intent: item.intent as Intent | undefined,
     });
+    if (item.contact) await incrementContactInteraction(item.contact);
   }
 }
 

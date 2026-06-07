@@ -101,6 +101,8 @@ export default function App() {
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const [skipGroupMessages, setSkipGroupMessages] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [settingsPage, setSettingsPage] = useState<'main' | 'tone' | 'context' | 'contacts' | 'import'>('main');
+  const [contactSearch, setContactSearch] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset copied indicator when switching tones
@@ -449,140 +451,202 @@ export default function App() {
       </KeyboardAvoidingView>
 
       {/* Settings modal */}
-      <Modal visible={settingsVisible} transparent animationType="slide" onRequestClose={() => setSettingsVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setSettingsVisible(false)}>
+      <Modal visible={settingsVisible} transparent animationType="slide" onRequestClose={() => { setSettingsPage('main'); setContactSearch(''); setSettingsVisible(false); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setSettingsPage('main'); setContactSearch(''); setSettingsVisible(false); }}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
-            <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.modalTitle}>Settings</Text>
 
-            <Text style={styles.modalSection}>DEFAULT TONE</Text>
-            {(['formal', 'casual', 'brief'] as Tone[]).map((t) => (
-              <Pressable key={t} style={styles.settingRow} onPress={() => saveDefaultTone(t)}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingDot, { backgroundColor: TONE_COLOR[t] }]} />
-                  <Text style={styles.settingText}>{TONE_LABEL[t]}</Text>
+            {/* ── Main category page ── */}
+            {settingsPage === 'main' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={styles.modalTitle}>Settings</Text>
+                {([
+                  { page: 'tone', label: 'Default Tone', value: TONE_LABEL[defaultTone] },
+                  { page: 'context', label: 'Context Setup', value: notifPermission ? 'Connected' : 'Setup needed' },
+                  { page: 'contacts', label: 'Contacts', value: contacts.length > 0 ? `${contacts.length} contacts` : 'None imported' },
+                  { page: 'import', label: 'Data Import', value: 'Manage' },
+                ] as { page: typeof settingsPage; label: string; value: string }[]).map(({ page, label, value }) => (
+                  <Pressable key={page} style={styles.categoryRow} onPress={() => setSettingsPage(page)}>
+                    <Text style={styles.categoryLabel}>{label}</Text>
+                    <View style={styles.categoryRight}>
+                      <Text style={styles.categoryValue}>{value}</Text>
+                      <Text style={styles.chevron}>›</Text>
+                    </View>
+                  </Pressable>
+                ))}
+                <Pressable style={styles.modalClose} onPress={() => { setSettingsPage('main'); setContactSearch(''); setSettingsVisible(false); }}>
+                  <Text style={styles.modalCloseText}>Done</Text>
+                </Pressable>
+              </ScrollView>
+            )}
+
+            {/* ── Default Tone page ── */}
+            {settingsPage === 'tone' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.subPageHeader}>
+                  <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                    <Text style={styles.backBtnText}>‹ Settings</Text>
+                  </Pressable>
+                  <Text style={styles.subPageTitle}>Default Tone</Text>
                 </View>
-                {defaultTone === t ? <Text style={[styles.settingCheck, { color: TONE_COLOR[t] }]}>✓</Text> : null}
-              </Pressable>
-            ))}
+                {(['formal', 'casual', 'brief'] as Tone[]).map((t) => (
+                  <Pressable key={t} style={styles.settingRow} onPress={() => saveDefaultTone(t)}>
+                    <View style={styles.settingLeft}>
+                      <View style={[styles.settingDot, { backgroundColor: TONE_COLOR[t] }]} />
+                      <Text style={styles.settingText}>{TONE_LABEL[t]}</Text>
+                    </View>
+                    {defaultTone === t ? <Text style={[styles.settingCheck, { color: TONE_COLOR[t] }]}>✓</Text> : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
 
-            <View style={styles.divider} />
-            <Text style={styles.modalSection}>CONTEXT SETUP</Text>
-            <Text style={styles.setupHint}>Optional — improves reply quality</Text>
-
-            <Pressable style={styles.settingRow} onPress={() => {
-              if (Platform.OS === 'android') Linking.sendIntent('android.settings.ACCESSIBILITY_SETTINGS').catch(() => {});
-            }}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.setupDot}>·</Text>
-                <View>
-                  <Text style={styles.settingText}>Accessibility Access</Text>
-                  <Text style={styles.setupStatus}>Enables overlay suggestions in messaging apps</Text>
+            {/* ── Context Setup page ── */}
+            {settingsPage === 'context' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.subPageHeader}>
+                  <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                    <Text style={styles.backBtnText}>‹ Settings</Text>
+                  </Pressable>
+                  <Text style={styles.subPageTitle}>Context Setup</Text>
                 </View>
-              </View>
-              <Text style={styles.setupAction}>Open</Text>
-            </Pressable>
-
-            <Pressable style={styles.settingRow} onPress={() => {
-              if (Platform.OS === 'android') {
-                Linking.sendIntent('android.settings.NOTIFICATION_SETTINGS').catch(() => {});
-              }
-            }}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.setupDot}>·</Text>
-                <View>
-                  <Text style={styles.settingText}>Suggestion Bubbles</Text>
-                  <Text style={styles.setupStatus}>Notifications → More settings → Bubbles</Text>
-                </View>
-              </View>
-              <Text style={styles.setupAction}>Open</Text>
-            </Pressable>
-
-            <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.setupDot}>·</Text>
-                <View>
-                  <Text style={styles.settingText}>Skip group messages</Text>
-                  <Text style={styles.setupStatus}>Only suggest replies for 1-to-1 chats</Text>
-                </View>
-              </View>
-              <Switch
-                value={skipGroupMessages}
-                onValueChange={(v) => {
-                  setSkipGroupMessages(v);
-                  ContextReplySettings?.setSkipGroupMessages?.(v);
-                }}
-                trackColor={{ false: BORDER, true: PURPLE + '99' }}
-                thumbColor={skipGroupMessages ? PURPLE : MUTED}
-              />
-            </View>
-
-            <SetupRow
-              label="Google Contacts"
-              status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
-              done={googleContactsCount !== null}
-              loading={setupLoading === 'google'}
-              onPress={handleImportGoogleContacts}
-            />
-            <SetupRow
-              label="Device Contacts"
-              status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
-              done={deviceContactsCount !== null}
-              loading={setupLoading === 'device'}
-              onPress={handleImportDeviceContacts}
-            />
-            <SetupRow
-              label="WhatsApp History"
-              status={whatsappMessages !== null ? `${whatsappMessages} messages imported` : 'Not imported'}
-              done={whatsappMessages !== null}
-              loading={setupLoading === 'whatsapp'}
-              onPress={handleImportWhatsApp}
-            />
-
-            {contacts.length > 0 && <>
-              <View style={styles.divider} />
-              <Text style={styles.modalSection}>CONTACT PREFERENCES</Text>
-              <Text style={styles.setupHint}>Set relationship and preferred tone per contact</Text>
-              {contacts.slice(0, 20).map((c) => (
-                <View key={c.id} style={styles.contactCard}>
-                  <Text style={styles.contactName}>{c.displayName}</Text>
-                  <Text style={styles.chipLabel}>Relationship</Text>
-                  <View style={styles.chipRow}>
-                    {(['friend', 'colleague', 'family', 'partner', 'other'] as Relationship[]).map((r) => (
-                      <Pressable
-                        key={r}
-                        style={[styles.chip, c.relationship === r && styles.chipActive]}
-                        onPress={() => updateContactPref(c.id, 'relationship', c.relationship === r ? undefined : r)}
-                      >
-                        <Text style={[styles.chipText, c.relationship === r && styles.chipTextActive]}>
-                          {r.charAt(0).toUpperCase() + r.slice(1)}
-                        </Text>
-                      </Pressable>
-                    ))}
+                <Text style={styles.setupHint}>Optional — improves reply quality</Text>
+                <Pressable style={styles.settingRow} onPress={() => {
+                  if (Platform.OS === 'android') Linking.sendIntent('android.settings.ACCESSIBILITY_SETTINGS').catch(() => {});
+                }}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.setupDot}>·</Text>
+                    <View>
+                      <Text style={styles.settingText}>Accessibility Access</Text>
+                      <Text style={styles.setupStatus}>Enables overlay suggestions in messaging apps</Text>
+                    </View>
                   </View>
-                  <Text style={styles.chipLabel}>Preferred tone</Text>
-                  <View style={styles.chipRow}>
-                    {(['casual', 'formal', 'brief'] as Tone[]).map((t) => (
-                      <Pressable
-                        key={t}
-                        style={[styles.chip, c.preferredTone === t && styles.chipActive]}
-                        onPress={() => updateContactPref(c.id, 'preferredTone', c.preferredTone === t ? undefined : t)}
-                      >
-                        <Text style={[styles.chipText, c.preferredTone === t && styles.chipTextActive]}>
-                          {TONE_LABEL[t]}
-                        </Text>
-                      </Pressable>
-                    ))}
+                  <Text style={styles.setupAction}>Open</Text>
+                </Pressable>
+                <Pressable style={styles.settingRow} onPress={() => {
+                  if (Platform.OS === 'android') Linking.sendIntent('android.settings.NOTIFICATION_SETTINGS').catch(() => {});
+                }}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.setupDot}>·</Text>
+                    <View>
+                      <Text style={styles.settingText}>Suggestion Bubbles</Text>
+                      <Text style={styles.setupStatus}>Notifications → More settings → Bubbles</Text>
+                    </View>
                   </View>
+                  <Text style={styles.setupAction}>Open</Text>
+                </Pressable>
+                <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.setupDot}>·</Text>
+                    <View>
+                      <Text style={styles.settingText}>Skip group messages</Text>
+                      <Text style={styles.setupStatus}>Only suggest replies for 1-to-1 chats</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={skipGroupMessages}
+                    onValueChange={(v) => { setSkipGroupMessages(v); ContextReplySettings?.setSkipGroupMessages?.(v); }}
+                    trackColor={{ false: BORDER, true: PURPLE + '99' }}
+                    thumbColor={skipGroupMessages ? PURPLE : MUTED}
+                  />
                 </View>
-              ))}
-            </>}
+              </ScrollView>
+            )}
 
-            <Pressable style={styles.modalClose} onPress={() => setSettingsVisible(false)}>
-              <Text style={styles.modalCloseText}>Done</Text>
-            </Pressable>
-            </ScrollView>
+            {/* ── Contacts page ── */}
+            {settingsPage === 'contacts' && (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.subPageHeader}>
+                  <Pressable onPress={() => { setSettingsPage('main'); setContactSearch(''); }} style={styles.backBtn}>
+                    <Text style={styles.backBtnText}>‹ Settings</Text>
+                  </Pressable>
+                  <Text style={styles.subPageTitle}>Contacts</Text>
+                </View>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search contacts…"
+                  placeholderTextColor={MUTED}
+                  value={contactSearch}
+                  onChangeText={setContactSearch}
+                  autoCorrect={false}
+                />
+                {contacts.length === 0 ? (
+                  <Text style={styles.setupHint}>No contacts imported. Go to Data Import to add contacts.</Text>
+                ) : (() => {
+                  const shown = contactSearch
+                    ? contacts.filter((c) => c.displayName.toLowerCase().includes(contactSearch.toLowerCase()))
+                    : contacts.slice(0, 10);
+                  return <>
+                    {!contactSearch && <Text style={styles.setupHint}>Top 10 by interactions — search for others</Text>}
+                    {shown.map((c) => (
+                      <View key={c.id} style={styles.contactCard}>
+                        <Text style={styles.contactName}>{c.displayName}</Text>
+                        <Text style={styles.chipLabel}>Relationship</Text>
+                        <View style={styles.chipRow}>
+                          {(['friend', 'colleague', 'family', 'partner', 'other'] as Relationship[]).map((r) => (
+                            <Pressable key={r}
+                              style={[styles.chip, c.relationship === r && styles.chipActive]}
+                              onPress={() => updateContactPref(c.id, 'relationship', c.relationship === r ? undefined : r)}>
+                              <Text style={[styles.chipText, c.relationship === r && styles.chipTextActive]}>
+                                {r.charAt(0).toUpperCase() + r.slice(1)}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        <Text style={styles.chipLabel}>Preferred tone</Text>
+                        <View style={styles.chipRow}>
+                          {(['casual', 'formal', 'brief'] as Tone[]).map((t) => (
+                            <Pressable key={t}
+                              style={[styles.chip, c.preferredTone === t && styles.chipActive]}
+                              onPress={() => updateContactPref(c.id, 'preferredTone', c.preferredTone === t ? undefined : t)}>
+                              <Text style={[styles.chipText, c.preferredTone === t && styles.chipTextActive]}>
+                                {TONE_LABEL[t]}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                    {shown.length === 0 && <Text style={styles.setupHint}>No contacts match "{contactSearch}"</Text>}
+                  </>;
+                })()}
+              </ScrollView>
+            )}
+
+            {/* ── Data Import page ── */}
+            {settingsPage === 'import' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.subPageHeader}>
+                  <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                    <Text style={styles.backBtnText}>‹ Settings</Text>
+                  </Pressable>
+                  <Text style={styles.subPageTitle}>Data Import</Text>
+                </View>
+                <Text style={styles.setupHint}>Optional — improves reply quality</Text>
+                <SetupRow
+                  label="Google Contacts"
+                  status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
+                  done={googleContactsCount !== null}
+                  loading={setupLoading === 'google'}
+                  onPress={handleImportGoogleContacts}
+                />
+                <SetupRow
+                  label="Device Contacts"
+                  status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
+                  done={deviceContactsCount !== null}
+                  loading={setupLoading === 'device'}
+                  onPress={handleImportDeviceContacts}
+                />
+                <SetupRow
+                  label="WhatsApp History"
+                  status={whatsappMessages !== null ? `${whatsappMessages} messages imported` : 'Not imported'}
+                  done={whatsappMessages !== null}
+                  loading={setupLoading === 'whatsapp'}
+                  onPress={handleImportWhatsApp}
+                />
+              </ScrollView>
+            )}
+
           </Pressable>
         </Pressable>
       </Modal>
@@ -648,7 +712,7 @@ const styles = StyleSheet.create({
   notifBannerText: { color: '#fcd34d', fontSize: 13, lineHeight: 19 },
 
   modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
+  modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },
   modalHandle: { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: TEXT, marginBottom: 24 },
   modalSection: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
@@ -661,6 +725,19 @@ const styles = StyleSheet.create({
   modalCloseText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   setupHint: { color: MUTED, fontSize: 12, marginBottom: 12 },
+
+  categoryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
+  categoryLabel: { fontSize: 16, color: TEXT },
+  categoryRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  categoryValue: { fontSize: 14, color: MUTED },
+  chevron: { fontSize: 20, color: MUTED, lineHeight: 22 },
+
+  subPageHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 8 },
+  backBtn: { paddingRight: 4 },
+  backBtnText: { fontSize: 16, color: PURPLE },
+  subPageTitle: { fontSize: 18, fontWeight: '700', color: TEXT },
+
+  searchInput: { backgroundColor: SURFACE, borderRadius: 10, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: TEXT, marginBottom: 16 },
 
   contactCard: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   contactName: { color: TEXT, fontSize: 14, fontWeight: '600', marginBottom: 8 },

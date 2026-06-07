@@ -69,6 +69,7 @@ export interface Contact {
   displayName: string;
   relationship?: Relationship;
   preferredTone?: Tone;
+  interactionCount?: number;
   notes?: string;
   createdAt: string;
   updatedAt: string;
