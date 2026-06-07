@@ -7,22 +7,22 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.app.RemoteInput
+import java.util.concurrent.ConcurrentHashMap
 
 class ReplySendReceiver : BroadcastReceiver() {
 
     companion object {
-        // Held in memory for the lifetime of the process — safe because the service
-        // and receiver live in the same process and the intent is short-lived.
-        var pendingReplyIntent: PendingIntent? = null
+        // Keyed by notifId so multiple concurrent suggestions don't clobber each other.
+        val pendingReplyIntents = ConcurrentHashMap<Int, PendingIntent>()
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        val notifId = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancel(ContextReplyBgService.NOTIF_ID)
+        if (notifId != -1) nm.cancel(notifId)
 
         if (intent.action != ContextReplyBgService.ACTION_SEND) return
 
-        // Prefer RemoteInput text (user edited in notification shade) over original suggestion
         val remoteResults = RemoteInput.getResultsFromIntent(intent)
         val replyText = remoteResults
             ?.getCharSequence(ContextReplyBgService.REMOTE_INPUT_KEY)
@@ -33,9 +33,9 @@ class ReplySendReceiver : BroadcastReceiver() {
 
         val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)
             ?: return
-        val replyPendingIntent = pendingReplyIntent ?: return
+        val replyPendingIntent = if (notifId != -1) pendingReplyIntents.remove(notifId) else null
+            ?: return
 
-        // Build a reply intent with the text embedded in a RemoteInput bundle
         val replyIntent = Intent()
         val remoteInput = RemoteInput.Builder(remoteInputKey).build()
         RemoteInput.addResultsToIntent(
@@ -48,8 +48,6 @@ class ReplySendReceiver : BroadcastReceiver() {
             replyPendingIntent.send(context, 0, replyIntent)
         } catch (_: PendingIntent.CanceledException) {
             // Original notification was already dismissed — nothing to do
-        } finally {
-            pendingReplyIntent = null
         }
     }
 }

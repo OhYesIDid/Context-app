@@ -17,18 +17,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 class ContextReplyBgService : NotificationListenerService() {
 
     companion object {
         const val CHANNEL_ID = "contextreply_suggestions"
-        const val NOTIF_ID = 9001
         const val ACTION_SEND = "com.contextreply.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contextreply.app.ACTION_DISMISS_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
         const val EXTRA_REMOTE_INPUT_KEY = "remote_input_key"
+        const val EXTRA_NOTIF_ID = "notif_id"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
+
+        // Debounce delay — collapses rapid-fire messages from the same conversation
+        // into a single API call using the latest message in the thread.
+        private const val DEBOUNCE_MS = 2_500L
 
         val TARGET_PACKAGES = setOf(
             "com.whatsapp",
@@ -40,44 +47,41 @@ class ContextReplyBgService : NotificationListenerService() {
             "com.instagram.android",
         )
 
-        // Patterns that indicate a status update, not an incoming message requiring a reply.
-        // Applied to both the notification title and body text.
         private val NO_REPLY_TEXT_PATTERNS = listOf(
-            // Calls
             Regex("^(WhatsApp |Telegram )?(audio |video )?call$", RegexOption.IGNORE_CASE),
             Regex("^missed (voice |video )?call", RegexOption.IGNORE_CASE),
             Regex("\\bmissed call\\b", RegexOption.IGNORE_CASE),
-
-            // Delivery/read receipts
             Regex("^(voice|video) message$", RegexOption.IGNORE_CASE),
-
-            // Reactions and engagement (Instagram, Messenger, WhatsApp)
             Regex("reacted to your (message|story|photo|reel|post)", RegexOption.IGNORE_CASE),
             Regex("liked your (message|photo|reel|story|post)", RegexOption.IGNORE_CASE),
             Regex("commented on your (photo|reel|post|story)", RegexOption.IGNORE_CASE),
             Regex("(started following|accepted your follow request|sent you a follow request)", RegexOption.IGNORE_CASE),
             Regex("mentioned you in (a comment|their story|a post)", RegexOption.IGNORE_CASE),
-
-            // Broadcast / promotional
             Regex("^(offer|deal|sale|discount|promo|limited time)", RegexOption.IGNORE_CASE),
-
-            // Group count summaries
             Regex("^\\d+ (new )?messages?$", RegexOption.IGNORE_CASE),
             Regex("^\\d+ (new )?notifications?$", RegexOption.IGNORE_CASE),
         )
 
-        // Instagram titles that are engagement notifications, not DMs
         private val INSTAGRAM_NON_DM_TITLE_PATTERNS = listOf(
             Regex("\\bInstagram\\b", RegexOption.IGNORE_CASE),
             Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
         )
-
-        private val executor = Executors.newSingleThreadExecutor()
     }
+
+    // Debounce map: conversationKey → pending scheduled job
+    private val pendingJobs = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val scheduler = Executors.newSingleThreadScheduledExecutor()
+    private val worker = Executors.newFixedThreadPool(3) // up to 3 concurrent API calls
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scheduler.shutdownNow()
+        worker.shutdownNow()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -87,10 +91,10 @@ class ContextReplyBgService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        // Gate 1: messaging category only — filters out calls, promos, system events
+        // Gate 1: messaging category only
         if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) return
 
-        // Gate 2: must have a reply action with RemoteInput — no reply UI = not actionable
+        // Gate 2: must have an inline-reply action
         val replyAction = notification.actions?.firstOrNull { action ->
             action?.remoteInputs?.isNotEmpty() == true
         } ?: return
@@ -105,37 +109,52 @@ class ContextReplyBgService : NotificationListenerService() {
 
         if (text.length < 8) return
 
-        // Gate 3: text content patterns — delivery receipts, reactions, call notifications
+        // Gate 3: no-reply content patterns
         if (NO_REPLY_TEXT_PATTERNS.any { it.containsMatchIn(text) || it.containsMatchIn(title) }) return
 
-        // Gate 4: Instagram-specific — only process DMs, not engagement notifications
+        // Gate 4: Instagram engagement vs DM
         if (sbn.packageName == "com.instagram.android") {
             if (INSTAGRAM_NON_DM_TITLE_PATTERNS.any { it.containsMatchIn(title) }) return
         }
 
-        // Gate 5: group conversation flag — configurable; default to processing group messages
-        // (In a future settings screen this can be toggled off)
+        // Gate 5: group conversation — skip if user preference is set
         val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
         if (isGroup && shouldSkipGroupMessages()) return
 
+        // Stable key for this conversation: package + conversation title or sender name.
+        // Multiple messages from the same thread share the same key → they get debounced.
+        val convKey = buildConversationKey(sbn.packageName, extras)
+
+        // Notification ID is derived from the conversation key so each active conversation
+        // gets its own suggestion notification (not overwriting each other).
+        val notifId = convKey.hashCode().and(0x7FFFFFFF)
+
         val thread = extractConversationThread(extras)
 
-        executor.submit {
-            try {
-                val replies = callWorker(text, thread) ?: return@submit
-                val suggestion = replies.optString("casual").takeIf { it.isNotEmpty() }
-                    ?: replies.optString("brief").takeIf { it.isNotEmpty() }
-                    ?: return@submit
-
-                postSuggestionNotification(suggestion, replyPendingIntent, remoteInputKey)
-            } catch (_: Exception) {
-                // Silent failure — don't interrupt the user with error notifications
+        // Cancel any existing debounced job for this conversation and reschedule.
+        // Net effect: if 5 messages arrive in 2.5 seconds, only 1 API call fires — for the last thread.
+        pendingJobs[convKey]?.cancel(false)
+        pendingJobs[convKey] = scheduler.schedule({
+            pendingJobs.remove(convKey)
+            worker.submit {
+                try {
+                    val replies = callWorker(text, thread) ?: return@submit
+                    val suggestion = replies.optString("casual").takeIf { it.isNotEmpty() }
+                        ?: replies.optString("brief").takeIf { it.isNotEmpty() }
+                        ?: return@submit
+                    postSuggestionNotification(suggestion, replyPendingIntent, remoteInputKey, notifId)
+                } catch (_: Exception) {}
             }
-        }
+        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
 
-    // Read group-message preference from SharedPreferences.
-    // Defaults to false (process group messages) until a settings UI exposes the toggle.
+    // Build a stable string key for a conversation so bursts from the same thread collapse.
+    private fun buildConversationKey(packageName: String, extras: Bundle): String {
+        val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        return "$packageName:${conversationTitle ?: title ?: "unknown"}"
+    }
+
     private fun shouldSkipGroupMessages(): Boolean {
         return getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
             .getBoolean("skip_group_messages", false)
@@ -177,9 +196,7 @@ class ContextReplyBgService : NotificationListenerService() {
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }
-
             if (conn.responseCode != 200) return null
-
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             JSONObject(response).optJSONObject("replies")
         } finally {
@@ -191,6 +208,7 @@ class ContextReplyBgService : NotificationListenerService() {
         replyText: String,
         replyPendingIntent: PendingIntent,
         remoteInputKey: String,
+        notifId: Int,
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -198,17 +216,21 @@ class ContextReplyBgService : NotificationListenerService() {
             action = ACTION_SEND
             putExtra(EXTRA_REPLY_TEXT, replyText)
             putExtra(EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
+            putExtra(EXTRA_NOTIF_ID, notifId)
         }
+        // Use notifId as the PendingIntent request code so each conversation gets its own PI
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        val sendPi = PendingIntent.getBroadcast(this, 0, sendIntent, flags)
+        val sendPi = PendingIntent.getBroadcast(this, notifId, sendIntent, flags)
 
-        ReplySendReceiver.pendingReplyIntent = replyPendingIntent
+        // Store the original reply PendingIntent keyed by this notification's ID
+        ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
 
         val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
             action = ACTION_DISMISS
+            putExtra(EXTRA_NOTIF_ID, notifId)
         }
         val dismissPi = PendingIntent.getBroadcast(
-            this, 1, dismissIntent,
+            this, notifId + 1, dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -229,9 +251,10 @@ class ContextReplyBgService : NotificationListenerService() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setGroup("contextreply_suggestions") // groups multiple suggestions in the shade
             .build()
 
-        nm.notify(NOTIF_ID, notification)
+        nm.notify(notifId, notification)
     }
 
     private fun isAppInForeground(): Boolean {
