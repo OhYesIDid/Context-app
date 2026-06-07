@@ -36,6 +36,7 @@ import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/serv
 import { getAvailabilityData } from './src/services/googleCalendar';
 import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
+import { syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Intent, ReplyOptions, SuggestReplyInput, Tone } from './src/types';
 import { detectIntent } from './src/utils/intentDetector';
@@ -133,6 +134,9 @@ export default function App() {
     if (Platform.OS === 'android' && ContextReplySettings) {
       ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
+      // Drain the Kotlin-side StyleEditQueue into SQLite and rebuild the cached
+      // style profile so the next background suggestion is personalised.
+      syncStyleProfile();
     }
   }, []);
 

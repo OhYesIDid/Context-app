@@ -242,6 +242,9 @@ class ContextReplyBgService : NotificationListenerService() {
             conn.connectTimeout = 15_000
             conn.readTimeout = 15_000
 
+            val styleProfile = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+                .getString("style_profile", null)
+
             val body = JSONObject().apply {
                 put("message", message)
                 if (thread.isNotEmpty()) {
@@ -254,6 +257,7 @@ class ContextReplyBgService : NotificationListenerService() {
                         }
                     })
                 }
+                if (styleProfile != null) put("styleContext", styleProfile)
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }

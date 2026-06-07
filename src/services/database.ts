@@ -184,6 +184,24 @@ export async function recordStyleEdit(
   );
 }
 
+export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string; contact_id: string | null; original_suggestion: string; user_edit: string;
+    platform: string | null; intent: string | null; created_at: string; synced_at: string | null;
+  }>('SELECT * FROM style_edits ORDER BY created_at DESC LIMIT ?', [limit]);
+  return rows.map((r) => ({
+    id: r.id,
+    contactId: r.contact_id ?? undefined,
+    originalSuggestion: r.original_suggestion,
+    userEdit: r.user_edit,
+    platform: (r.platform as StyleEdit['platform']) ?? undefined,
+    intent: (r.intent as StyleEdit['intent']) ?? undefined,
+    createdAt: r.created_at,
+    syncedAt: r.synced_at ?? undefined,
+  }));
+}
+
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
 export async function upsertContact(
