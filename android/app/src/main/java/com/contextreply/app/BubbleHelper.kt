@@ -23,6 +23,8 @@ object BubbleHelper {
         context: Context,
         builder: NotificationCompat.Builder,
         replyText: String,
+        formalText: String?,
+        briefText: String?,
         remoteInputKey: String,
         notifId: Int,
         convKey: String,
@@ -31,10 +33,6 @@ object BubbleHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
         val contact = convKey.substringAfter(":")
-
-        // Android 12+ (API 31+) requires a published conversation shortcut.
-        // Without setShortcutId(), the system silently ignores the bubble and never
-        // shows the "Allow bubbles?" permission prompt.
         val shortcutId = "cr_conv_${convKey.hashCode().and(0x7FFFFFFF)}"
         val person = Person.Builder().setName(contact).build()
         try {
@@ -54,6 +52,8 @@ object BubbleHelper {
         val bubbleIntent = Intent(context, BubbleSuggestionActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             putExtra(ContextReplyBgService.EXTRA_REPLY_TEXT, replyText)
+            putExtra(ContextReplyBgService.EXTRA_REPLY_FORMAL, formalText ?: "")
+            putExtra(ContextReplyBgService.EXTRA_REPLY_BRIEF, briefText ?: "")
             putExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
             putExtra(ContextReplyBgService.EXTRA_NOTIF_ID, notifId)
             putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
@@ -70,9 +70,9 @@ object BubbleHelper {
                 bubblePi,
                 IconCompat.createWithResource(context, R.mipmap.ic_launcher)
             )
-            .setDesiredHeight(320)
+            .setDesiredHeight(420)
             .setAutoExpandBubble(false)
-            .setSuppressNotification(false)
+            .setSuppressNotification(true)
             .build()
         )
 

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.TextUtils
@@ -13,6 +14,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -25,7 +27,12 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
     private var activePackage: String? = null
+
+    // Tone state for the currently shown overlay
+    private var tones = mapOf<String, String>()   // key → text
+    private var selectedTone = "casual"
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -37,20 +44,16 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Only use this event to detect entering a target app.
-                // Dismissal is handled by TYPE_WINDOWS_CHANGED so that opening
-                // the soft keyboard (which also fires this event) doesn't hide the strip.
                 if (pkg in ContextReplyBgService.TARGET_PACKAGES && activePackage != pkg) {
                     activePackage = pkg
                     maybeShowOverlay(pkg)
                 }
             }
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                // Dismiss only when the target app window is no longer visible.
                 if (activePackage == null) return
                 val targetVisible = windows?.any { w ->
                     val root = w.root
-                    val match = w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION &&
+                    val match = w.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
                             root?.packageName?.toString() == activePackage
                     @Suppress("DEPRECATION") root?.recycle()
                     match
@@ -58,6 +61,9 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 if (!targetVisible) {
                     activePackage = null
                     dismissOverlay()
+                } else if (overlayView != null) {
+                    // Keyboard may have just appeared/resized — update overlay Y
+                    updateOverlayPosition()
                 }
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
@@ -74,50 +80,114 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
     private fun maybeShowOverlay(packageName: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val suggestion = prefs.getString("last_suggestion_$packageName", null) ?: return
+        val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
+            ?: return
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
         if (age > MAX_AGE_MS) return
-        showOverlay(suggestion, packageName)
+
+        val formal = prefs.getString("last_suggestion_formal_$packageName", null)?.takeIf { it.isNotEmpty() }
+        val brief  = prefs.getString("last_suggestion_brief_$packageName", null)?.takeIf { it.isNotEmpty() }
+
+        tones = buildMap {
+            put("casual", casual)
+            if (formal != null) put("formal", formal)
+            if (brief  != null) put("brief", brief)
+        }
+        selectedTone = if (tones.containsKey("casual")) "casual" else tones.keys.first()
+        showOverlay(packageName)
     }
 
-    private fun showOverlay(suggestion: String, packageName: String) {
+    private fun showOverlay(packageName: String) {
         dismissOverlay()
         val d = resources.displayMetrics.density
         fun dp(n: Int) = (n * d).toInt()
 
+        val PURPLE    = Color.parseColor("#6366f1")
+        val PURPLE_BG = Color.parseColor("#6366f122")
+        val TEXT      = Color.parseColor("#f4f4f5")
+        val MUTED     = Color.parseColor("#71717a")
+        val BG        = Color.parseColor("#1e1e22")
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#1e1e22"))
+            setBackgroundColor(BG)
             elevation = dp(6).toFloat()
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(16), dp(10), dp(16), dp(10))
         }
 
-        root.addView(TextView(this).apply {
-            text = suggestion
-            setTextColor(Color.parseColor("#f4f4f5"))
+        // Reply text
+        val replyView = TextView(this).apply {
+            text = tones[selectedTone]
+            setTextColor(TEXT)
             textSize = 14f
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
-        })
+        }
+        root.addView(replyView)
 
+        // Tone tabs + actions row
         root.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(8), 0, 0)
 
+            // Tone tabs (left side)
+            val toneOrder = listOf("casual", "formal", "brief")
+            val available = toneOrder.filter { tones.containsKey(it) }
+            val toneLabels = mapOf("casual" to "Casual", "formal" to "Formal", "brief" to "Brief")
+            val tabViews = mutableMapOf<String, TextView>()
+
+            if (available.size > 1) {
+                available.forEach { tone ->
+                    val tab = TextView(this@ContextReplyAccessibilityService).apply {
+                        text = toneLabels[tone]
+                        textSize = 12f
+                        setPadding(dp(8), dp(2), dp(8), dp(2))
+                        setOnClickListener {
+                            selectedTone = tone
+                            replyView.text = tones[tone]
+                            tabViews.forEach { (t, v) ->
+                                val active = t == tone
+                                v.setBackgroundColor(if (active) PURPLE_BG else Color.TRANSPARENT)
+                                v.setTextColor(if (active) PURPLE else MUTED)
+                                v.setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
+                            }
+                        }
+                    }
+                    tabViews[tone] = tab
+                    addView(tab)
+                }
+                // Apply initial tab styles
+                tabViews.forEach { (tone, v) ->
+                    val active = tone == selectedTone
+                    v.setBackgroundColor(if (active) PURPLE_BG else Color.TRANSPARENT)
+                    v.setTextColor(if (active) PURPLE else MUTED)
+                    v.setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
+                }
+
+                // Spacer pushes actions to right
+                addView(View(this@ContextReplyAccessibilityService).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+                })
+            }
+
+            // Use button
             addView(TextView(this@ContextReplyAccessibilityService).apply {
                 text = "Use"
-                setTextColor(Color.parseColor("#6366f1"))
+                setTextColor(PURPLE)
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
-                setPadding(0, 0, dp(24), 0)
+                setPadding(dp(16), 0, dp(16), 0)
                 setOnClickListener {
-                    injectText(suggestion)
+                    injectText(tones[selectedTone] ?: return@setOnClickListener)
                     clearAndDismiss(packageName)
                 }
             })
+
+            // Dismiss button
             addView(TextView(this@ContextReplyAccessibilityService).apply {
                 text = "Dismiss"
-                setTextColor(Color.parseColor("#71717a"))
+                setTextColor(MUTED)
                 textSize = 14f
                 setOnClickListener { clearAndDismiss(packageName) }
             })
@@ -132,25 +202,43 @@ class ContextReplyAccessibilityService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM
-            // Position the strip above the soft keyboard.
-            // Typical keyboard height is 240–290dp; 265dp covers most devices.
-            y = dp(265)
+            y = keyboardHeight() + dp(8)
         }
 
         try {
             windowManager?.addView(root, params)
             overlayView = root
+            overlayParams = params
             cancelPendingNotification(packageName)
         } catch (_: Exception) {}
+    }
+
+    private fun updateOverlayPosition() {
+        val view = overlayView ?: return
+        val params = overlayParams ?: return
+        val d = resources.displayMetrics.density
+        val newY = keyboardHeight() + (8 * d).toInt()
+        if (newY != params.y) {
+            params.y = newY
+            try { windowManager?.updateViewLayout(view, params) } catch (_: Exception) {}
+        }
+    }
+
+    private fun keyboardHeight(): Int {
+        val d = resources.displayMetrics.density
+        val imeWindow = windows?.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            ?: return (265 * d).toInt()
+        val bounds = Rect()
+        imeWindow.getBoundsInScreen(bounds)
+        val screenHeight = resources.displayMetrics.heightPixels
+        return (screenHeight - bounds.top).coerceAtLeast((200 * d).toInt())
     }
 
     private fun injectText(text: String) {
         val focused = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
         if (focused.isEditable) {
             val args = Bundle()
-            args.putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text
-            )
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
         }
         @Suppress("DEPRECATION") focused.recycle()
@@ -159,6 +247,8 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     private fun clearAndDismiss(packageName: String) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .remove("last_suggestion_$packageName")
+            .remove("last_suggestion_formal_$packageName")
+            .remove("last_suggestion_brief_$packageName")
             .remove("last_suggestion_ts_$packageName")
             .remove("last_suggestion_conv_$packageName")
             .apply()
@@ -176,6 +266,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         overlayView?.let {
             try { windowManager?.removeView(it) } catch (_: Exception) {}
             overlayView = null
+            overlayParams = null
         }
     }
 

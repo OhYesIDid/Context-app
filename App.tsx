@@ -9,16 +9,20 @@ import {
   KeyboardAvoidingView,
   Linking,
   Modal,
+  NativeModules,
   PermissionsAndroid,
   Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+
+const { ContextReplySettings } = NativeModules;
 
 // Lazy-load the Android-only native module to avoid a startup crash.
 type NotificationPayload = { bigText?: string; text?: string };
@@ -93,6 +97,7 @@ export default function App() {
   const [deviceContactsCount, setDeviceContactsCount] = useState<number | null>(null);
   const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
+  const [skipGroupMessages, setSkipGroupMessages] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset copied indicator when switching tones
@@ -123,6 +128,11 @@ export default function App() {
     // Android 13+ requires runtime grant for posting notifications
     if (Platform.OS === 'android' && Platform.Version >= 33) {
       PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
+    }
+    // Use native module for accurate NLS check (expo module returns true if any NLS is listed)
+    if (Platform.OS === 'android' && ContextReplySettings) {
+      ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
+      ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
     }
   }, []);
 
@@ -458,6 +468,25 @@ export default function App() {
               </View>
               <Text style={styles.setupAction}>Open</Text>
             </Pressable>
+
+            <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: BORDER }]}>
+              <View style={styles.settingLeft}>
+                <Text style={styles.setupDot}>·</Text>
+                <View>
+                  <Text style={styles.settingText}>Skip group messages</Text>
+                  <Text style={styles.setupStatus}>Only suggest replies for 1-to-1 chats</Text>
+                </View>
+              </View>
+              <Switch
+                value={skipGroupMessages}
+                onValueChange={(v) => {
+                  setSkipGroupMessages(v);
+                  ContextReplySettings?.setSkipGroupMessages?.(v);
+                }}
+                trackColor={{ false: BORDER, true: PURPLE + '99' }}
+                thumbColor={skipGroupMessages ? PURPLE : MUTED}
+              />
+            </View>
 
             <SetupRow
               label="Google Contacts"

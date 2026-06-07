@@ -30,6 +30,8 @@ class ContextReplyBgService : NotificationListenerService() {
         const val ACTION_SEND = "com.contextreply.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contextreply.app.ACTION_DISMISS_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
+        const val EXTRA_REPLY_FORMAL = "reply_formal"
+        const val EXTRA_REPLY_BRIEF = "reply_brief"
         const val EXTRA_REMOTE_INPUT_KEY = "remote_input_key"
         const val EXTRA_NOTIF_ID = "notif_id"
         const val EXTRA_CONV_KEY = "conv_key"
@@ -82,6 +84,18 @@ class ContextReplyBgService : NotificationListenerService() {
         super.onCreate()
         store = NotificationStore.getInstance(this)
         createChannel()
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("nls_connected", true).apply()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("nls_connected", false).apply()
     }
 
     override fun onDestroy() {
@@ -160,11 +174,13 @@ class ContextReplyBgService : NotificationListenerService() {
             workerPool.submit {
                 try {
                     val result = callWorker(latestMessage, fullThread) ?: return@submit
-                    val suggestion = result.replies.optString("casual").takeIf { it.isNotEmpty() }
-                        ?: result.replies.optString("brief").takeIf { it.isNotEmpty() }
-                        ?: return@submit
+                    val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
+                    val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
+                    val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
+                    val primary = casual ?: formal ?: brief ?: return@submit
                     postSuggestionNotification(
-                        suggestion, replyPendingIntent, remoteInputKey, notifId, convKey, result.intent
+                        primary, formal, brief,
+                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent
                     )
                 } catch (_: Exception) {}
             }
@@ -250,6 +266,8 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private fun postSuggestionNotification(
         replyText: String,
+        formalText: String?,
+        briefText: String?,
         replyPendingIntent: PendingIntent,
         remoteInputKey: String,
         notifId: Int,
@@ -281,10 +299,12 @@ class ContextReplyBgService : NotificationListenerService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Store suggestion so the AccessibilityService overlay can read it
+        // Store all suggestion tones for AccessibilityService overlay + bubble
         val packageName = convKey.substringBefore(":")
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putString("last_suggestion_$packageName", replyText)
+            .putString("last_suggestion_formal_$packageName", formalText ?: "")
+            .putString("last_suggestion_brief_$packageName", briefText ?: "")
             .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
             .putString("last_suggestion_conv_$packageName", convKey)
             .apply()
@@ -304,7 +324,7 @@ class ContextReplyBgService : NotificationListenerService() {
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
-        BubbleHelper.attach(this, builder, replyText, remoteInputKey, notifId, convKey, intent)
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent)
 
         nm.notify(notifId, builder.build()
         )
