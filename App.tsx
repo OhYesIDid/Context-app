@@ -65,7 +65,7 @@ function SetupRow({
           <Text style={styles.setupStatus}>{loading ? 'Importing…' : status}</Text>
         </View>
       </View>
-      {!done && !loading && <Text style={styles.setupAction}>Import</Text>}
+      {!loading && <Text style={styles.setupAction}>{done ? 'Update' : 'Import'}</Text>}
     </Pressable>
   );
 }
@@ -213,9 +213,10 @@ export default function App() {
     setSetupLoading('whatsapp');
     try {
       const { contactName, messageCount } = await pickAndParseWhatsAppExport();
-      setWhatsappMessages(messageCount);
-      await AsyncStorage.setItem(WHATSAPP_IMPORT_KEY, String(messageCount));
-      Alert.alert('Done', `Imported ${messageCount} messages from chat with ${contactName}.`);
+      const newTotal = (whatsappMessages ?? 0) + messageCount;
+      setWhatsappMessages(newTotal);
+      await AsyncStorage.setItem(WHATSAPP_IMPORT_KEY, String(newTotal));
+      Alert.alert('Done', `Imported ${messageCount} messages from chat with ${contactName}. Total: ${newTotal}.`);
     } catch (err) {
       if (err instanceof Error && err.message === 'Cancelled') { setSetupLoading(null); return; }
       Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
