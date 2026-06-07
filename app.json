@@ -2,6 +2,7 @@
   "expo": {
     "name": "ContextReply",
     "slug": "context-reply",
+    "scheme": "contextreply",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -14,6 +15,52 @@
     },
     "web": {
       "bundler": "metro"
+    },
+    "plugins": [
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "iosDisplayInForeground": true
+        }
+      ],
+      [
+        "expo-share-extension",
+        {
+          "activationRules": [
+            {
+              "type": "text"
+            },
+            {
+              "type": "url",
+              "max": 1
+            }
+          ],
+          "height": 480,
+          "backgroundColor": {
+            "red": 12,
+            "green": 12,
+            "blue": 14,
+            "alpha": 1
+          },
+          "excludedPackages": [
+            "expo-splash-screen",
+            "expo-updates"
+          ]
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow ContextReply to check your location for ETA replies."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "191da8c5-ddf6-4ae8-86fe-b39d8eb1ecb5"
+      }
     }
   }
 }

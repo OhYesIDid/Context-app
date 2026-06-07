@@ -1,18 +1,13 @@
 import type { AvailabilityData, CalendarEvent } from '../types';
+import { getAccessToken } from './googleAuth';
 
-const ACCESS_TOKEN = process.env.EXPO_PUBLIC_GOOGLE_CALENDAR_ACCESS_TOKEN;
 const CALENDAR_ID = process.env.EXPO_PUBLIC_GOOGLE_CALENDAR_ID ?? 'primary';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
 // Fetch all events for the next 7 days from midnight today
 export async function getAvailabilityData(): Promise<AvailabilityData> {
-  if (!ACCESS_TOKEN) {
-    throw new Error(
-      'Google Calendar access token missing. Add EXPO_PUBLIC_GOOGLE_CALENDAR_ACCESS_TOKEN to your .env file. ' +
-        'Generate one at https://developers.google.com/oauthplayground'
-    );
-  }
+  const accessToken = await getAccessToken();
 
   const windowStart = new Date();
   windowStart.setHours(0, 0, 0, 0);
@@ -36,14 +31,14 @@ export async function getAvailabilityData(): Promise<AvailabilityData> {
       {
         signal: controller.signal,
         headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       }
     );
 
     if (res.status === 401) {
       throw new Error(
-        'Calendar access token expired (tokens last ~1 hour). Re-generate it at https://developers.google.com/oauthplayground'
+        'Calendar access token is invalid. Please sign out and sign in again.'
       );
     }
     if (!res.ok) {

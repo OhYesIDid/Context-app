@@ -8,10 +8,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -48,7 +50,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName !in TARGET_PACKAGES) return
-        if (isAppInForeground()) return // JS pathway handles foreground case
+        if (isAppInForeground()) return
 
         val extras = sbn.notification?.extras ?: return
 
@@ -57,10 +59,8 @@ class ContextReplyBgService : NotificationListenerService() {
             ?: return
 
         if (text.length < 8) return
-        // Skip group count summaries like "3 new messages"
         if (text.matches(Regex("^\\d+ (new )?messages?$"))) return
 
-        // Find the reply action that has a RemoteInput
         val replyAction = sbn.notification?.actions?.firstOrNull { action ->
             action?.remoteInputs?.isNotEmpty() == true
         } ?: return
@@ -68,9 +68,12 @@ class ContextReplyBgService : NotificationListenerService() {
         val remoteInputKey = replyAction.remoteInputs?.firstOrNull()?.resultKey ?: return
         val replyPendingIntent = replyAction.actionIntent ?: return
 
+        // Extract full conversation thread from MessagingStyle extras (API 24+)
+        val thread = extractConversationThread(extras)
+
         executor.submit {
             try {
-                val replies = callWorker(text) ?: return@submit
+                val replies = callWorker(text, thread) ?: return@submit
                 val suggestion = replies.optString("casual").takeIf { it.isNotEmpty() }
                     ?: replies.optString("brief").takeIf { it.isNotEmpty() }
                     ?: return@submit
@@ -82,7 +85,18 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
-    private fun callWorker(message: String): JSONObject? {
+    private fun extractConversationThread(extras: Bundle): List<Pair<String?, String>> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return emptyList()
+        val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return emptyList()
+        return messages.mapNotNull { msg ->
+            if (msg !is Bundle) return@mapNotNull null
+            val text = msg.getCharSequence("android.text")?.toString() ?: return@mapNotNull null
+            val sender = msg.getCharSequence("android.sender")?.toString()
+            Pair(sender, text)
+        }
+    }
+
+    private fun callWorker(message: String, thread: List<Pair<String?, String>>): JSONObject? {
         val url = URL("${BuildConfig.WORKER_URL}/suggest")
         val conn = url.openConnection() as HttpURLConnection
         return try {
@@ -94,7 +108,17 @@ class ContextReplyBgService : NotificationListenerService() {
 
             val body = JSONObject().apply {
                 put("message", message)
-                put("intent", "other")
+                // No intent sent — Worker auto-detects from message text
+                if (thread.isNotEmpty()) {
+                    put("conversationThread", JSONArray().also { arr ->
+                        thread.forEach { (sender, text) ->
+                            arr.put(JSONObject().apply {
+                                if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
+                                put("text", text)
+                            })
+                        }
+                    })
+                }
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }
@@ -115,7 +139,6 @@ class ContextReplyBgService : NotificationListenerService() {
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Send action — RemoteInput lets user edit the text before sending
         val sendIntent = Intent(this, ReplySendReceiver::class.java).apply {
             action = ACTION_SEND
             putExtra(EXTRA_REPLY_TEXT, replyText)
@@ -124,7 +147,6 @@ class ContextReplyBgService : NotificationListenerService() {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         val sendPi = PendingIntent.getBroadcast(this, 0, sendIntent, flags)
 
-        // Store the original reply PendingIntent so the receiver can use it
         ReplySendReceiver.pendingReplyIntent = replyPendingIntent
 
         val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
