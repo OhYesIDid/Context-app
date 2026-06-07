@@ -102,6 +102,10 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_style_edits_contact
       ON style_edits(contact_id);
   `);
+  // Add preferred_tone column if it doesn't exist yet (safe to run repeatedly)
+  try {
+    await db.runAsync('ALTER TABLE contacts ADD COLUMN preferred_tone TEXT');
+  } catch (_) {}
 }
 
 // ── Saved places ──────────────────────────────────────────────────────────────
@@ -204,6 +208,23 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
+type ContactRow = {
+  id: string; display_name: string; relationship: string | null;
+  preferred_tone: string | null; notes: string | null;
+  created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
+};
+
+function rowToContact(r: ContactRow): Contact {
+  return {
+    id: r.id, displayName: r.display_name,
+    relationship: (r.relationship as Contact['relationship']) ?? undefined,
+    preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
+    notes: r.notes ?? undefined,
+    createdAt: r.created_at, updatedAt: r.updated_at,
+    syncedAt: r.synced_at ?? undefined, deletedAt: r.deleted_at ?? undefined,
+  };
+}
+
 export async function upsertContact(
   contact: Omit<Contact, 'id' | 'createdAt' | 'updatedAt' | 'syncedAt' | 'deletedAt'> & { id?: string }
 ): Promise<Contact> {
@@ -211,14 +232,36 @@ export async function upsertContact(
   const now = new Date().toISOString();
   const id = contact.id ?? randomUUID();
   await db.runAsync(
-    `INSERT INTO contacts (id, display_name, relationship, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO contacts (id, display_name, relationship, preferred_tone, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        display_name=excluded.display_name, relationship=excluded.relationship,
+       preferred_tone=excluded.preferred_tone,
        notes=excluded.notes, updated_at=excluded.updated_at, synced_at=NULL`,
-    [id, contact.displayName, contact.relationship ?? null, contact.notes ?? null, now, now]
+    [id, contact.displayName, contact.relationship ?? null,
+     contact.preferredTone ?? null, contact.notes ?? null, now, now]
   );
   return { ...contact, id, createdAt: now, updatedAt: now };
+}
+
+export async function getAllContacts(): Promise<Contact[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<ContactRow>(
+    'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY display_name'
+  );
+  return rows.map(rowToContact);
+}
+
+export async function updateContactPreferences(
+  id: string,
+  relationship: Contact['relationship'] | undefined,
+  preferredTone: Contact['preferredTone'] | undefined,
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE contacts SET relationship = ?, preferred_tone = ?, updated_at = ?, synced_at = NULL WHERE id = ?`,
+    [relationship ?? null, preferredTone ?? null, new Date().toISOString(), id]
+  );
 }
 
 export async function upsertPlatformIdentity(

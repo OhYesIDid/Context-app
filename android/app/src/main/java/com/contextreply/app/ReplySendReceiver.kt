@@ -63,6 +63,13 @@ class ReplySendReceiver : BroadcastReceiver() {
             NotificationStore.getInstance(context).markReplied(convKey)
         }
 
+        if (intent.action == ContextReplyBgService.ACTION_DISMISS) {
+            val original = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
+            if (original != null && convKey != null) {
+                StyleEditQueue.enqueue(context, original, "", convKey, "dismissed")
+            }
+            return
+        }
         if (intent.action != ContextReplyBgService.ACTION_SEND) return
 
         val originalSuggestion = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)

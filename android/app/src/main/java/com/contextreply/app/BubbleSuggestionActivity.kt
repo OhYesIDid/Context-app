@@ -154,7 +154,7 @@ class BubbleSuggestionActivity : Activity() {
                 textSize = 14f
                 setPadding(0, 0, dp(24), 0)
                 setOnClickListener {
-                    sendAction(ContextReplyBgService.ACTION_DISMISS, null, null, notifId, convKey, null)
+                    sendAction(ContextReplyBgService.ACTION_DISMISS, casualText, null, notifId, convKey, null)
                     finish()
                 }
             })

@@ -1,5 +1,5 @@
 import { NativeModules } from 'react-native';
-import { getRecentStyleEdits, recordStyleEdit } from './database';
+import { getAllContacts, getRecentStyleEdits, recordStyleEdit } from './database';
 import type { Intent, Platform } from '../types';
 
 interface QueueItem {
@@ -34,20 +34,38 @@ async function drainQueue(): Promise<void> {
 }
 
 async function rebuildCachedProfile(): Promise<void> {
-  const edits = await getRecentStyleEdits(20);
+  const [edits, contacts] = await Promise.all([
+    getRecentStyleEdits(20),
+    getAllContacts(),
+  ]);
 
-  // Only include edits where the user meaningfully changed the suggestion
+  const sections: string[] = [];
+
+  // Style examples — exclude dismissed (empty edit) and trivial no-ops
   const normalize = (s: string) => s.toLowerCase().replace(/[.,!?\s]+$/, '').trim();
   const meaningful = edits.filter(
     (e) => e.userEdit.length > 0 && normalize(e.userEdit) !== normalize(e.originalSuggestion)
   );
-  if (meaningful.length === 0) return;
+  if (meaningful.length > 0) {
+    const examples = meaningful
+      .slice(0, 10)
+      .map((e) => `• "${e.originalSuggestion}" → "${e.userEdit}"`)
+      .join('\n');
+    sections.push(`User's writing style (suggestion → what they actually sent):\n${examples}`);
+  }
 
-  const examples = meaningful
-    .slice(0, 10)
-    .map((e) => `• "${e.originalSuggestion}" → "${e.userEdit}"`)
-    .join('\n');
+  // Per-contact preferences — only include contacts with at least one pref set
+  const withPrefs = contacts.filter((c) => c.relationship || c.preferredTone);
+  if (withPrefs.length > 0) {
+    const lines = withPrefs.map((c) => {
+      const parts: string[] = [];
+      if (c.relationship) parts.push(c.relationship);
+      if (c.preferredTone) parts.push(`prefer ${c.preferredTone} tone`);
+      return `• ${c.displayName} — ${parts.join(', ')}`;
+    }).join('\n');
+    sections.push(`Contact preferences:\n${lines}`);
+  }
 
-  const profile = `User's writing style (suggestion → what they actually sent):\n${examples}`;
-  NativeModules.ContextReplySettings.cacheStyleProfile(profile);
+  if (sections.length === 0) return;
+  NativeModules.ContextReplySettings.cacheStyleProfile(sections.join('\n\n'));
 }

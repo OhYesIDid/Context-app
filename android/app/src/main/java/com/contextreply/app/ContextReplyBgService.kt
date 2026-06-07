@@ -302,6 +302,7 @@ class ContextReplyBgService : NotificationListenerService() {
             action = ACTION_DISMISS
             putExtra(EXTRA_NOTIF_ID, notifId)
             putExtra(EXTRA_CONV_KEY, convKey)
+            putExtra(EXTRA_REPLY_TEXT, replyText)
         }
         val dismissPi = PendingIntent.getBroadcast(
             this, notifId + 1, dismissIntent,

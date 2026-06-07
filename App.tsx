@@ -31,6 +31,7 @@ const NotificationListener = Platform.OS === 'android'
   : null;
 
 import { suggestReply } from './src/services/claude';
+import { getAllContacts, updateContactPreferences } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
 import { getAvailabilityData } from './src/services/googleCalendar';
@@ -38,7 +39,7 @@ import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
 import { syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
-import type { Intent, ReplyOptions, SuggestReplyInput, Tone } from './src/types';
+import type { Contact, Intent, ReplyOptions, Relationship, SuggestReplyInput, Tone } from './src/types';
 import { detectIntent } from './src/utils/intentDetector';
 
 const INTENT_LABEL: Record<Intent, string> = {
@@ -99,10 +100,18 @@ export default function App() {
   const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const [skipGroupMessages, setSkipGroupMessages] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset copied indicator when switching tones
   useEffect(() => { setCopied(false); }, [tone]);
+
+  // Load contacts when settings modal opens
+  useEffect(() => {
+    if (settingsVisible) {
+      getAllContacts().then(setContacts).catch(() => {});
+    }
+  }, [settingsVisible]);
 
   // Load settings + configure auth on mount
   useEffect(() => {
@@ -192,6 +201,22 @@ export default function App() {
   useEffect(() => {
     return () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); };
   }, []);
+
+  const updateContactPref = async (
+    id: string,
+    field: 'relationship' | 'preferredTone',
+    value: string | undefined,
+  ) => {
+    setContacts((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+    );
+    const updated = contacts.find((c) => c.id === id);
+    if (!updated) return;
+    const rel = field === 'relationship' ? (value as Relationship | undefined) : updated.relationship;
+    const tone = field === 'preferredTone' ? (value as Tone | undefined) : updated.preferredTone;
+    await updateContactPreferences(id, rel, tone);
+    syncStyleProfile();
+  };
 
   const saveDefaultTone = async (t: Tone) => {
     setDefaultToneState(t);
@@ -428,6 +453,7 @@ export default function App() {
         <Pressable style={styles.modalOverlay} onPress={() => setSettingsVisible(false)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
+            <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.modalTitle}>Settings</Text>
 
             <Text style={styles.modalSection}>DEFAULT TONE</Text>
@@ -514,9 +540,49 @@ export default function App() {
               onPress={handleImportWhatsApp}
             />
 
+            {contacts.length > 0 && <>
+              <View style={styles.divider} />
+              <Text style={styles.modalSection}>CONTACT PREFERENCES</Text>
+              <Text style={styles.setupHint}>Set relationship and preferred tone per contact</Text>
+              {contacts.slice(0, 20).map((c) => (
+                <View key={c.id} style={styles.contactCard}>
+                  <Text style={styles.contactName}>{c.displayName}</Text>
+                  <Text style={styles.chipLabel}>Relationship</Text>
+                  <View style={styles.chipRow}>
+                    {(['friend', 'colleague', 'family', 'partner', 'other'] as Relationship[]).map((r) => (
+                      <Pressable
+                        key={r}
+                        style={[styles.chip, c.relationship === r && styles.chipActive]}
+                        onPress={() => updateContactPref(c.id, 'relationship', c.relationship === r ? undefined : r)}
+                      >
+                        <Text style={[styles.chipText, c.relationship === r && styles.chipTextActive]}>
+                          {r.charAt(0).toUpperCase() + r.slice(1)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.chipLabel}>Preferred tone</Text>
+                  <View style={styles.chipRow}>
+                    {(['casual', 'formal', 'brief'] as Tone[]).map((t) => (
+                      <Pressable
+                        key={t}
+                        style={[styles.chip, c.preferredTone === t && styles.chipActive]}
+                        onPress={() => updateContactPref(c.id, 'preferredTone', c.preferredTone === t ? undefined : t)}
+                      >
+                        <Text style={[styles.chipText, c.preferredTone === t && styles.chipTextActive]}>
+                          {TONE_LABEL[t]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </>}
+
             <Pressable style={styles.modalClose} onPress={() => setSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -595,6 +661,15 @@ const styles = StyleSheet.create({
   modalCloseText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   setupHint: { color: MUTED, fontSize: 12, marginBottom: 12 },
+
+  contactCard: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
+  contactName: { color: TEXT, fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  chipLabel: { color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: BORDER },
+  chipActive: { backgroundColor: PURPLE + '33', borderColor: PURPLE },
+  chipText: { color: MUTED, fontSize: 12 },
+  chipTextActive: { color: PURPLE, fontWeight: '600' },
   setupDot: { fontSize: 18, color: MUTED, width: 20, textAlign: 'center' },
   setupDotDone: { color: '#4ade80' },
   setupStatus: { fontSize: 12, color: MUTED, marginTop: 1 },
