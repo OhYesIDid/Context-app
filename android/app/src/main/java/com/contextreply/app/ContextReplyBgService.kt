@@ -40,6 +40,38 @@ class ContextReplyBgService : NotificationListenerService() {
             "com.instagram.android",
         )
 
+        // Patterns that indicate a status update, not an incoming message requiring a reply.
+        // Applied to both the notification title and body text.
+        private val NO_REPLY_TEXT_PATTERNS = listOf(
+            // Calls
+            Regex("^(WhatsApp |Telegram )?(audio |video )?call$", RegexOption.IGNORE_CASE),
+            Regex("^missed (voice |video )?call", RegexOption.IGNORE_CASE),
+            Regex("\\bmissed call\\b", RegexOption.IGNORE_CASE),
+
+            // Delivery/read receipts
+            Regex("^(voice|video) message$", RegexOption.IGNORE_CASE),
+
+            // Reactions and engagement (Instagram, Messenger, WhatsApp)
+            Regex("reacted to your (message|story|photo|reel|post)", RegexOption.IGNORE_CASE),
+            Regex("liked your (message|photo|reel|story|post)", RegexOption.IGNORE_CASE),
+            Regex("commented on your (photo|reel|post|story)", RegexOption.IGNORE_CASE),
+            Regex("(started following|accepted your follow request|sent you a follow request)", RegexOption.IGNORE_CASE),
+            Regex("mentioned you in (a comment|their story|a post)", RegexOption.IGNORE_CASE),
+
+            // Broadcast / promotional
+            Regex("^(offer|deal|sale|discount|promo|limited time)", RegexOption.IGNORE_CASE),
+
+            // Group count summaries
+            Regex("^\\d+ (new )?messages?$", RegexOption.IGNORE_CASE),
+            Regex("^\\d+ (new )?notifications?$", RegexOption.IGNORE_CASE),
+        )
+
+        // Instagram titles that are engagement notifications, not DMs
+        private val INSTAGRAM_NON_DM_TITLE_PATTERNS = listOf(
+            Regex("\\bInstagram\\b", RegexOption.IGNORE_CASE),
+            Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
+        )
+
         private val executor = Executors.newSingleThreadExecutor()
     }
 
@@ -52,23 +84,40 @@ class ContextReplyBgService : NotificationListenerService() {
         if (sbn.packageName !in TARGET_PACKAGES) return
         if (isAppInForeground()) return
 
-        val extras = sbn.notification?.extras ?: return
+        val notification = sbn.notification ?: return
+        val extras = notification.extras ?: return
 
-        val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-            ?: return
+        // Gate 1: messaging category only — filters out calls, promos, system events
+        if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) return
 
-        if (text.length < 8) return
-        if (text.matches(Regex("^\\d+ (new )?messages?$"))) return
-
-        val replyAction = sbn.notification?.actions?.firstOrNull { action ->
+        // Gate 2: must have a reply action with RemoteInput — no reply UI = not actionable
+        val replyAction = notification.actions?.firstOrNull { action ->
             action?.remoteInputs?.isNotEmpty() == true
         } ?: return
 
         val remoteInputKey = replyAction.remoteInputs?.firstOrNull()?.resultKey ?: return
         val replyPendingIntent = replyAction.actionIntent ?: return
 
-        // Extract full conversation thread from MessagingStyle extras (API 24+)
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            ?: return
+
+        if (text.length < 8) return
+
+        // Gate 3: text content patterns — delivery receipts, reactions, call notifications
+        if (NO_REPLY_TEXT_PATTERNS.any { it.containsMatchIn(text) || it.containsMatchIn(title) }) return
+
+        // Gate 4: Instagram-specific — only process DMs, not engagement notifications
+        if (sbn.packageName == "com.instagram.android") {
+            if (INSTAGRAM_NON_DM_TITLE_PATTERNS.any { it.containsMatchIn(title) }) return
+        }
+
+        // Gate 5: group conversation flag — configurable; default to processing group messages
+        // (In a future settings screen this can be toggled off)
+        val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+        if (isGroup && shouldSkipGroupMessages()) return
+
         val thread = extractConversationThread(extras)
 
         executor.submit {
@@ -83,6 +132,13 @@ class ContextReplyBgService : NotificationListenerService() {
                 // Silent failure — don't interrupt the user with error notifications
             }
         }
+    }
+
+    // Read group-message preference from SharedPreferences.
+    // Defaults to false (process group messages) until a settings UI exposes the toggle.
+    private fun shouldSkipGroupMessages(): Boolean {
+        return getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .getBoolean("skip_group_messages", false)
     }
 
     private fun extractConversationThread(extras: Bundle): List<Pair<String?, String>> {
@@ -108,7 +164,6 @@ class ContextReplyBgService : NotificationListenerService() {
 
             val body = JSONObject().apply {
                 put("message", message)
-                // No intent sent — Worker auto-detects from message text
                 if (thread.isNotEmpty()) {
                     put("conversationThread", JSONArray().also { arr ->
                         thread.forEach { (sender, text) ->
