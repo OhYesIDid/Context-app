@@ -320,11 +320,21 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Delete before recreating — Android ignores setAllowBubbles() on channel
+            // updates, so recreating on each service start is the only reliable way to
+            // ensure mAllowBubbles=1. Suggestion notifications are transient, so data loss
+            // from the delete is acceptable.
+            nm.deleteNotificationChannel(CHANNEL_ID)
             val channel = NotificationChannel(
                 CHANNEL_ID, "Reply Suggestions", NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Suggested replies for incoming messages" }
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
+            ).apply {
+                description = "Suggested replies for incoming messages"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    setAllowBubbles(true)
+                }
+            }
+            nm.createNotificationChannel(channel)
         }
     }
 }

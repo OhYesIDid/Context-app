@@ -444,6 +444,26 @@ export default function App() {
               <Text style={styles.setupAction}>Open</Text>
             </Pressable>
 
+            <Pressable style={styles.settingRow} onPress={() => {
+              if (Platform.OS === 'android') {
+                Linking.sendIntent('android.settings.CHANNEL_NOTIFICATION_SETTINGS', [
+                  { key: 'android.provider.extra.APP_PACKAGE', value: 'com.contextreply.app' },
+                  { key: 'android.provider.extra.CHANNEL_ID', value: 'contextreply_suggestions' },
+                ]).catch(() => Linking.sendIntent('android.settings.APP_NOTIFICATION_SETTINGS', [
+                  { key: 'android.provider.extra.APP_PACKAGE', value: 'com.contextreply.app' },
+                ]).catch(() => {}));
+              }
+            }}>
+              <View style={styles.settingLeft}>
+                <Text style={styles.setupDot}>·</Text>
+                <View>
+                  <Text style={styles.settingText}>Suggestion Bubbles</Text>
+                  <Text style={styles.setupStatus}>Enable "Bubbles" for floating reply suggestions</Text>
+                </View>
+              </View>
+              <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
+
             <SetupRow
               label="Google Contacts"
               status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
