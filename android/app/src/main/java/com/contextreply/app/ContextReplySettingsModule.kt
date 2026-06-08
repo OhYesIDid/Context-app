@@ -64,7 +64,7 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getSharedText(promise: Promise) {
-        val activity = currentActivity ?: return promise.resolve(null)
+        val activity = reactApplicationContext.currentActivity ?: return promise.resolve(null)
         val intent = activity.intent ?: return promise.resolve(null)
         if (Intent.ACTION_SEND != intent.action || "text/plain" != intent.type) return promise.resolve(null)
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: ""
