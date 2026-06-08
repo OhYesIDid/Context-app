@@ -45,7 +45,9 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_REMOTE_INPUT_KEY = "remote_input_key"
         const val EXTRA_NOTIF_ID = "notif_id"
         const val EXTRA_CONV_KEY = "conv_key"
-        const val EXTRA_INTENT = "reply_intent"
+        const val EXTRA_INTENT   = "reply_intent"
+        const val EXTRA_INTENTS  = "reply_intents"
+        const val EXTRA_MESSAGE  = "reply_message"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
         const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
@@ -211,7 +213,8 @@ class ContextReplyBgService : NotificationListenerService() {
                     postSuggestionNotification(
                         primary, formal, brief,
                         replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                        openChatIntent
+                        openChatIntent, latestMessage,
+                        detectIntents(latestMessage).joinToString(",")
                     )
                 } catch (_: Exception) {}
             }
@@ -532,6 +535,8 @@ class ContextReplyBgService : NotificationListenerService() {
         convKey: String,
         intent: String? = null,
         openChatIntent: PendingIntent? = null,
+        message: String = "",
+        detectedIntents: String = "",
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -584,7 +589,7 @@ class ContextReplyBgService : NotificationListenerService() {
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent)
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents)
 
         nm.notify(notifId, builder.build()
         )

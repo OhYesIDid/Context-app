@@ -9,9 +9,12 @@ import android.os.Bundle
 import android.provider.Settings
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import org.json.JSONArray
+import org.json.JSONObject
 
 class BubbleSuggestionActivity : Activity() {
 
@@ -31,9 +34,12 @@ class BubbleSuggestionActivity : Activity() {
             ?: run { finish(); return }
         val notifId    = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
         val convKey    = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
-        val intentExtra    = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
+        val intentExtra     = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
+        val messageExtra    = intent.getStringExtra(ContextReplyBgService.EXTRA_MESSAGE) ?: ""
+        val intentsRaw      = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENTS) ?: ""
+        val detectedIntents = if (intentsRaw.isNotEmpty()) intentsRaw.split(",") else listOf("other")
         @Suppress("DEPRECATION")
-        val openChatIntent = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
+        val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
         val contact        = convKey?.substringAfter(":") ?: "Reply"
 
         val textMap = mapOf("casual" to casualText, "formal" to formalText, "brief" to briefText)
@@ -157,6 +163,94 @@ class BubbleSuggestionActivity : Activity() {
             root.addView(tabRow)
         }
 
+        // ── Intent context bar ───────────────────────────────────────────────
+        val GREEN     = Color.parseColor("#22c55e")
+        val GREEN_BG  = Color.parseColor("#22c55e22")
+        val intentLabels = mapOf("eta" to "ETA", "availability" to "Calendar", "booking" to "Bookings")
+        val allKnownIntents = listOf("eta", "availability", "booking")
+        val activeIntents = detectedIntents.filter { it != "other" }
+        val unusedIntents = allKnownIntents.filter { it !in detectedIntents }
+
+        fun makeChip(label: String, active: Boolean = true): TextView = TextView(this).apply {
+            text = label
+            setTextColor(if (active) PURPLE else GREEN)
+            textSize = 11f
+            setPadding(dp(8), dp(3), dp(8), dp(3))
+            background = GradientDrawable().apply {
+                setColor(if (active) PURPLE_BG else GREEN_BG)
+                cornerRadius = dp(12).toFloat()
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.marginEnd = dp(6)
+            layoutParams = lp
+        }
+
+        val intentBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.bottomMargin = dp(10)
+            layoutParams = lp
+        }
+
+        if (activeIntents.isEmpty()) {
+            intentBar.addView(TextView(this).apply {
+                text = "No context"
+                setTextColor(MUTED)
+                textSize = 11f
+            })
+        } else {
+            activeIntents.forEach { i -> intentBar.addView(makeChip(intentLabels[i] ?: i)) }
+        }
+
+        // Flex spacer
+        intentBar.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+        })
+
+        val addContextRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.bottomMargin = dp(10)
+            layoutParams = lp
+        }
+
+        if (unusedIntents.isNotEmpty()) {
+            val addExpanded = booleanArrayOf(false)
+            val addBtn = TextView(this).apply {
+                text = "+ Context"
+                setTextColor(MUTED)
+                textSize = 11f
+            }
+
+            unusedIntents.forEach { i ->
+                addContextRow.addView(makeChip("+ ${intentLabels[i] ?: i}", false).apply {
+                    setOnClickListener {
+                        logCorrection(detectedIntents, detectedIntents + i, messageExtra)
+                        addBtn.text = "Noted"
+                        addBtn.setTextColor(GREEN)
+                        addContextRow.visibility = View.GONE
+                    }
+                })
+            }
+
+            addBtn.setOnClickListener {
+                addExpanded[0] = !addExpanded[0]
+                addContextRow.visibility = if (addExpanded[0]) View.VISIBLE else View.GONE
+            }
+            intentBar.addView(addBtn)
+        }
+
+        root.addView(intentBar)
+        if (unusedIntents.isNotEmpty()) root.addView(addContextRow)
+
         // Action row
         root.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -187,6 +281,23 @@ class BubbleSuggestionActivity : Activity() {
         })
 
         setContentView(root)
+    }
+
+    private fun logCorrection(from: List<String>, to: List<String>, message: String) {
+        val prefs = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+        val existing = prefs.getString("intent_corrections", "[]")
+        val arr = try { JSONArray(existing) } catch (_: Exception) { JSONArray() }
+        arr.put(JSONObject().apply {
+            put("ts", System.currentTimeMillis())
+            put("from", JSONArray().also { a -> from.forEach { a.put(it) } })
+            put("to",   JSONArray().also { a -> to.forEach   { a.put(it) } })
+            put("message", message.take(200))
+        })
+        // Keep last 100
+        val trimmed = if (arr.length() > 100) {
+            JSONArray().also { a -> for (i in (arr.length() - 100) until arr.length()) a.put(arr.get(i)) }
+        } else arr
+        prefs.edit().putString("intent_corrections", trimmed.toString()).apply()
     }
 
     private fun isAccessibilityEnabled(): Boolean {

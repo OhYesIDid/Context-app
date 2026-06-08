@@ -106,6 +106,17 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(json)
     }
 
+    // Atomically reads and clears intent corrections logged by BubbleSuggestionActivity.
+    // Returns a JSON array of {ts, from[], to[], message} objects.
+    @ReactMethod
+    fun drainIntentCorrections(promise: Promise) {
+        val prefs = reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val json = prefs.getString("intent_corrections", "[]") ?: "[]"
+        prefs.edit().putString("intent_corrections", "[]").apply()
+        promise.resolve(json)
+    }
+
     // JS calls this after rebuilding the style profile from SQLite so the
     // Kotlin worker path can include it in the next /suggest request.
     @ReactMethod
