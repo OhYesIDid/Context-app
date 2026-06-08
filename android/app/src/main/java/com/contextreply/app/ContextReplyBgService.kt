@@ -17,10 +17,17 @@ import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.api.signin.GoogleSignIn
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.URLEncoder
 import java.net.URL
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -271,15 +278,27 @@ class ContextReplyBgService : NotificationListenerService() {
         Regex("""how (close|soon)""", RegexOption.IGNORE_CASE),
     )
 
+    private val AVAILABILITY_PATTERNS = listOf(
+        Regex("""\b(free|available|availability)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(busy|schedule|calendar)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(meeting|catch.?up|call|chat)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(this|next) (week|weekend|morning|afternoon|evening)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\btomorrow\b""", RegexOption.IGNORE_CASE),
+        Regex("""\btonight\b""", RegexOption.IGNORE_CASE),
+        Regex("""are you (around|up for|down for)""", RegexOption.IGNORE_CASE),
+    )
+
     private val INTENT_ENRICHMENTS = mapOf(
         "eta"          to listOf("maps"),
-        "availability" to listOf<String>(),
+        "availability" to listOf("calendar"),
         "other"        to listOf<String>(),
     )
 
     private fun detectIntents(message: String): List<String> {
         val intents = mutableListOf<String>()
         if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
+        if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
         return intents.ifEmpty { listOf("other") }
     }
 
@@ -297,9 +316,56 @@ class ContextReplyBgService : NotificationListenerService() {
                         put("routeSummary", eta.routeSummary)
                     })
                 }
+                "calendar" -> fetchCalendarData()?.let { cal ->
+                    enrichments.put("calendar", cal)
+                }
             }
         }
         return enrichments
+    }
+
+    private fun fetchCalendarData(): JSONObject? {
+        return try {
+            val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
+            val token = GoogleAuthUtil.getToken(
+                this,
+                account.account ?: return null,
+                "oauth2:https://www.googleapis.com/auth/calendar.readonly"
+            )
+            val now = Instant.now()
+            val weekLater = now.plus(7, ChronoUnit.DAYS)
+            val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(now, ZoneOffset.UTC).toString(), "UTF-8")
+            val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(weekLater, ZoneOffset.UTC).toString(), "UTF-8")
+            val url = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=15")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            val body = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+
+            val root = JSONObject(body)
+            val items = root.optJSONArray("items") ?: JSONArray()
+            val events = JSONArray()
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val start = item.optJSONObject("start")
+                val end = item.optJSONObject("end")
+                val allDay = start?.has("date") == true && start.has("dateTime").not()
+                events.put(JSONObject().apply {
+                    put("summary", item.optString("summary", "Untitled"))
+                    put("start", start?.optString(if (allDay) "date" else "dateTime", "") ?: "")
+                    put("end", end?.optString(if (allDay) "date" else "dateTime", "") ?: "")
+                    put("allDay", allDay)
+                })
+            }
+            JSONObject().apply {
+                put("events", events)
+                put("windowStart", OffsetDateTime.ofInstant(now, ZoneOffset.UTC).toString())
+                put("windowEnd", OffsetDateTime.ofInstant(weekLater, ZoneOffset.UTC).toString())
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("ContextReplyBgService", "Calendar fetch failed: ${e.message}")
+            null
+        }
     }
 
     private fun isEtaIntent(message: String): Boolean = ETA_PATTERNS.any { it.containsMatchIn(message) }
