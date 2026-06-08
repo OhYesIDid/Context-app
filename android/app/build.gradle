@@ -104,6 +104,8 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "WORKER_URL", "\"https://contextreply-suggest.tommy-garnell.workers.dev\""
+        buildConfigField "String", "GOOGLE_MAPS_API_KEY", "\"${findProperty('GOOGLE_MAPS_API_KEY') ?: ''}\""
+        buildConfigField "String", "MAPS_DESTINATION", "\"${findProperty('MAPS_DESTINATION') ?: '51.5033,-0.0865'}\""
     }
     signingConfigs {
         debug {

@@ -7,6 +7,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
@@ -82,6 +85,12 @@ class ContextReplyBgService : NotificationListenerService() {
     private val workerPool = Executors.newFixedThreadPool(3)
     private lateinit var store: NotificationStore
 
+    @Volatile private var lastLocation: Location? = null
+    private val locationListener = object : LocationListener {
+        override fun onLocationChanged(loc: Location) { lastLocation = loc }
+        @Deprecated("Deprecated in Java") override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
+    }
+
     override fun onCreate() {
         super.onCreate()
         store = NotificationStore.getInstance(this)
@@ -92,18 +101,28 @@ class ContextReplyBgService : NotificationListenerService() {
         super.onListenerConnected()
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("nls_connected", true).apply()
+        // Keep location warm so ETA requests are instant
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+        listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
+            try {
+                if (lm.isProviderEnabled(provider))
+                    lm.requestLocationUpdates(provider, 60_000L, 100f, locationListener, mainLooper)
+            } catch (_: SecurityException) {}
+        }
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("nls_connected", false).apply()
+        try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
         super.onDestroy()
         scheduler.shutdownNow()
         workerPool.shutdownNow()
+        try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -176,7 +195,8 @@ class ContextReplyBgService : NotificationListenerService() {
 
             workerPool.submit {
                 try {
-                    val result = callWorker(latestMessage, fullThread) ?: return@submit
+                    val etaData = if (isEtaIntent(latestMessage)) fetchEtaData() else null
+                    val result = callWorker(latestMessage, fullThread, etaData) ?: return@submit
                     val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
                     val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
@@ -232,7 +252,50 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
-    private fun callWorker(message: String, thread: List<Pair<String?, String>>): WorkerResult? {
+    private data class EtaData(val duration: String, val distance: String, val routeSummary: String)
+
+    private fun isEtaIntent(message: String): Boolean {
+        val patterns = listOf(
+            Regex("""\beta\b""", RegexOption.IGNORE_CASE),
+            Regex("""when (will|are) you""", RegexOption.IGNORE_CASE),
+            Regex("""how (long|far)""", RegexOption.IGNORE_CASE),
+            Regex("""on (your|the) way""", RegexOption.IGNORE_CASE),
+            Regex("""(leaving|left) yet""", RegexOption.IGNORE_CASE),
+            Regex("""\b(arriving|arrive|arrival)\b""", RegexOption.IGNORE_CASE),
+            Regex("""where are you""", RegexOption.IGNORE_CASE),
+            Regex("""almost (here|there)""", RegexOption.IGNORE_CASE),
+            Regex("""how (close|soon)""", RegexOption.IGNORE_CASE),
+        )
+        return patterns.any { it.containsMatchIn(message) }
+    }
+
+    private fun getCurrentLocation(): Location? = lastLocation
+
+    private fun fetchEtaData(): EtaData? {
+        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { return null }
+        val location = getCurrentLocation() ?: return null
+        val destination = BuildConfig.MAPS_DESTINATION
+        val origin = "${location.latitude},${location.longitude}"
+        val params = "origin=$origin&destination=$destination&departure_time=now&key=$apiKey"
+        return try {
+            val conn = URL("https://maps.googleapis.com/maps/api/directions/json?$params")
+                .openConnection() as HttpURLConnection
+            conn.connectTimeout = 8_000
+            conn.readTimeout = 8_000
+            val json = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val obj = JSONObject(json)
+            if (obj.optString("status") != "OK") return null
+            val leg = obj.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0)
+            val duration = (leg.optJSONObject("duration_in_traffic") ?: leg.getJSONObject("duration"))
+                .getString("text")
+            val distance = leg.getJSONObject("distance").getString("text")
+            val route = obj.getJSONArray("routes").getJSONObject(0).optString("summary", "")
+            EtaData(duration, distance, route)
+        } catch (_: Exception) { null }
+    }
+
+    private fun callWorker(message: String, thread: List<Pair<String?, String>>, etaData: EtaData? = null): WorkerResult? {
         val url = URL("${BuildConfig.WORKER_URL}/suggest")
         val conn = url.openConnection() as HttpURLConnection
         return try {
@@ -258,6 +321,11 @@ class ContextReplyBgService : NotificationListenerService() {
                     })
                 }
                 if (styleProfile != null) put("styleContext", styleProfile)
+                if (etaData != null) put("etaData", JSONObject().apply {
+                    put("duration", etaData.duration)
+                    put("distance", etaData.distance)
+                    put("routeSummary", etaData.routeSummary)
+                })
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }

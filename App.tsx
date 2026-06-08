@@ -171,14 +171,25 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  // Auto-generate suggestion when a share intent arrives.
+  // Auto-generate suggestion when a share intent arrives (fetches ETA/calendar if needed).
   useEffect(() => {
     if (!shareText) return;
     setShareLoading(true);
-    suggestReply({ originalMessage: shareText, intent: detectIntent(shareText) })
-      .then(r => setShareReply(r.casual))
-      .catch(() => {})
-      .finally(() => setShareLoading(false));
+    (async () => {
+      try {
+        const detected = detectIntent(shareText);
+        const input: SuggestReplyInput = { originalMessage: shareText, intent: detected };
+        if (detected === 'eta') {
+          try { input.etaData = await getEtaData(); } catch {}
+        } else if (detected === 'availability' && googleAuthed) {
+          try { input.availabilityData = await getAvailabilityData(); } catch {}
+        }
+        const r = await suggestReply(input);
+        setShareReply(r.casual);
+      } catch {} finally {
+        setShareLoading(false);
+      }
+    })();
   }, [shareText]);
 
   // Android notification listener setup
