@@ -35,7 +35,7 @@ import { suggestReply } from './src/services/claude';
 import { getAllContacts, updateContactPreferences } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
-import { getAvailabilityData } from './src/services/googleCalendar';
+import { getCalendarData } from './src/services/googleCalendar';
 import { getBookingsContext } from './src/services/googleBookings';
 import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
@@ -226,7 +226,7 @@ export default function App() {
         for (const key of requiredEnrichments(detected)) {
           try {
             if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
-            if (key === 'calendar' && googleAuthed) enrichments.calendar = await getAvailabilityData();
+            if (key === 'calendar' && googleAuthed) enrichments.calendar = await getCalendarData(shareText);
             if (key === 'bookings' && gmailConnected) enrichments.bookings = await getBookingsContext(Number(enrichmentPrefs.bookings?.lookbackDays ?? 30));
           } catch {}
         }
@@ -375,7 +375,7 @@ export default function App() {
             if (!googleAuthed) {
               setStatusText('Sign in with Google to check your calendar');
             } else {
-              enrichments.calendar = await getAvailabilityData();
+              enrichments.calendar = await getCalendarData(message);
             }
           }
         } catch {}

@@ -316,7 +316,7 @@ class ContextReplyBgService : NotificationListenerService() {
                         put("routeSummary", eta.routeSummary)
                     })
                 }
-                "calendar" -> fetchCalendarData()?.let { cal ->
+                "calendar" -> fetchCalendarData(message)?.let { cal ->
                     enrichments.put("calendar", cal)
                 }
             }
@@ -324,7 +324,20 @@ class ContextReplyBgService : NotificationListenerService() {
         return enrichments
     }
 
-    private fun fetchCalendarData(): JSONObject? {
+    private fun extractEventKeyword(message: String): String? {
+        val patterns = listOf(
+            Regex("""when (?:is|are)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            Regex("""what (?:day|time|date) (?:is|are)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            Regex("""what (?:is|are) the (?:day|time|date) (?:of|for)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            Regex("""remind me (?:about|of)(?: my| the)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+        )
+        return patterns.firstNotNullOfOrNull { re ->
+            re.find(message)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length > 1 && it.length < 50 }
+        }
+    }
+
+    private fun fetchCalendarData(message: String): JSONObject? {
+        val keyword = extractEventKeyword(message)
         return try {
             val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
             val token = GoogleAuthUtil.getToken(
@@ -333,10 +346,13 @@ class ContextReplyBgService : NotificationListenerService() {
                 "oauth2:https://www.googleapis.com/auth/calendar.readonly"
             )
             val now = Instant.now()
-            val weekLater = now.plus(7, ChronoUnit.DAYS)
-            val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(now, ZoneOffset.UTC).toString(), "UTF-8")
-            val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(weekLater, ZoneOffset.UTC).toString(), "UTF-8")
-            val url = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=15")
+            val windowStart = if (keyword != null) now.minus(14, ChronoUnit.DAYS) else now
+            val windowEnd = if (keyword != null) now.plus(90, ChronoUnit.DAYS) else now.plus(7, ChronoUnit.DAYS)
+            val maxResults = if (keyword != null) 10 else 50
+            val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(windowStart, ZoneOffset.UTC).toString(), "UTF-8")
+            val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString(), "UTF-8")
+            val qParam = if (keyword != null) "&q=${URLEncoder.encode(keyword, "UTF-8")}" else ""
+            val url = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=$maxResults$qParam")
             val conn = url.openConnection() as HttpURLConnection
             conn.setRequestProperty("Authorization", "Bearer $token")
             val body = conn.inputStream.bufferedReader().readText()
@@ -360,7 +376,7 @@ class ContextReplyBgService : NotificationListenerService() {
             JSONObject().apply {
                 put("events", events)
                 put("windowStart", OffsetDateTime.ofInstant(now, ZoneOffset.UTC).toString())
-                put("windowEnd", OffsetDateTime.ofInstant(weekLater, ZoneOffset.UTC).toString())
+                put("windowEnd", OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString())
             }
         } catch (e: Exception) {
             android.util.Log.w("ContextReplyBgService", "Calendar fetch failed: ${e.message}")
