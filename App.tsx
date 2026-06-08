@@ -40,8 +40,8 @@ import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
 import { syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
-import type { Contact, Intent, ReplyOptions, Relationship, SuggestReplyInput, Tone } from './src/types';
-import { detectIntent } from './src/utils/intentDetector';
+import type { Contact, EnrichmentData, Intent, ReplyOptions, Relationship, SuggestReplyInput, Tone } from './src/types';
+import { ENRICHMENT_STATUS, INTENT_ENRICHMENTS, detectIntents, requiredEnrichments, summariseEnrichments } from './src/utils/intentDetector';
 
 const INTENT_LABEL: Record<Intent, string> = {
   eta: '📍 ETA request',
@@ -90,7 +90,7 @@ export default function App() {
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [intent, setIntent] = useState<Intent[]>([]);
   const [contextSummary, setContextSummary] = useState('');
   const [copied, setCopied] = useState(false);
   const [googleAuthed, setGoogleAuthed] = useState(false);
@@ -205,13 +205,15 @@ export default function App() {
     setShareLoading(true);
     (async () => {
       try {
-        const detected = detectIntent(shareText);
-        const input: SuggestReplyInput = { originalMessage: shareText, intent: detected };
-        if (detected === 'eta') {
-          try { input.etaData = await getEtaData(); } catch {}
-        } else if (detected === 'availability' && googleAuthed) {
-          try { input.availabilityData = await getAvailabilityData(); } catch {}
+        const detected = detectIntents(shareText);
+        const enrichments: EnrichmentData = {};
+        for (const key of requiredEnrichments(detected)) {
+          try {
+            if (key === 'maps') enrichments.maps = await getEtaData();
+            if (key === 'calendar' && googleAuthed) enrichments.calendar = await getAvailabilityData();
+          } catch {}
         }
+        const input: SuggestReplyInput = { originalMessage: shareText, intents: detected, enrichments };
         const r = await suggestReply(input);
         setShareReply(r.casual);
       } catch {} finally {
@@ -341,31 +343,26 @@ export default function App() {
     setContextSummary('');
     setCopied(false);
     try {
-      const detected = detectIntent(message);
+      const detected = detectIntents(message);
       setIntent(detected);
-      const input: SuggestReplyInput = { originalMessage: message, intent: detected };
-
-      if (detected === 'eta') {
-        setStatusText('Fetching journey time…');
-        const etaData = await getEtaData();
-        input.etaData = etaData;
-        setContextSummary(`${etaData.duration} to ${etaData.destinationLabel} · ${etaData.distance} via ${etaData.routeSummary}`);
-      } else if (detected === 'availability') {
-        if (!googleAuthed) {
-          Alert.alert('Not signed in', 'Please sign in with Google to check your calendar.');
-          return;
-        }
-        setStatusText('Checking your calendar…');
-        const availabilityData = await getAvailabilityData();
-        input.availabilityData = availabilityData;
-        setContextSummary(
-          availabilityData.events.length === 0
-            ? 'No events in the next 7 days'
-            : `${availabilityData.events.length} event${availabilityData.events.length !== 1 ? 's' : ''} in the next 7 days`
-        );
+      const enrichments: EnrichmentData = {};
+      for (const key of requiredEnrichments(detected)) {
+        setStatusText(ENRICHMENT_STATUS[key]);
+        try {
+          if (key === 'maps') enrichments.maps = await getEtaData();
+          if (key === 'calendar') {
+            if (!googleAuthed) {
+              setStatusText('Sign in with Google to check your calendar');
+            } else {
+              enrichments.calendar = await getAvailabilityData();
+            }
+          }
+        } catch {}
       }
-
+      const summary = summariseEnrichments(enrichments);
+      if (summary) setContextSummary(summary);
       setStatusText('Drafting replies with Claude…');
+      const input: SuggestReplyInput = { originalMessage: message, intents: detected, enrichments };
       const result = await suggestReply(input);
       setReplies(result);
     } catch (err: unknown) {
@@ -471,14 +468,14 @@ export default function App() {
           </Pressable>
 
           {/* Result card */}
-          {(intent || replies) && !loading ? (
+          {(intent.length > 0 || replies) && !loading ? (
             <View style={styles.card}>
               {/* Intent + context */}
-              {intent ? (
-                <View style={[styles.intentBadge, { backgroundColor: accentColor + '22', borderColor: accentColor + '55' }]}>
-                  <Text style={[styles.intentText, { color: accentColor }]}>{INTENT_LABEL[intent]}</Text>
+              {intent.filter((i) => i !== 'other').map((i) => (
+                <View key={i} style={[styles.intentBadge, { backgroundColor: accentColor + '22', borderColor: accentColor + '55' }]}>
+                  <Text style={[styles.intentText, { color: accentColor }]}>{INTENT_LABEL[i]}</Text>
                 </View>
-              ) : null}
+              ))}
               {contextSummary ? <Text style={styles.contextText}>{contextSummary}</Text> : null}
 
               {replies ? (

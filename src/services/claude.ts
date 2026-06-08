@@ -1,5 +1,5 @@
-import type { ReplyOptions, SuggestReplyInput } from '../types';
-import { formatAvailability } from './googleCalendar';
+import type { EnrichmentData, ReplyOptions, SuggestReplyInput } from '../types';
+import { ENRICHMENT_FORMATTERS } from '../utils/intentDetector';
 
 const WORKER_URL = process.env.EXPO_PUBLIC_WORKER_URL;
 const API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
@@ -16,13 +16,14 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - brief: one short sentence, direct`;
 
 function buildPrompt(input: SuggestReplyInput): string {
-  let contextBlock = '';
-  if (input.intent === 'eta' && input.etaData) {
-    const { duration, distance, routeSummary, destinationLabel } = input.etaData;
-    contextBlock = `Real-time travel data: currently ${duration} away from ${destinationLabel} (${distance}) via ${routeSummary}.`;
-  } else if (input.intent === 'availability' && input.availabilityData) {
-    contextBlock = formatAvailability(input.availabilityData);
-  }
+  const enrichments = input.enrichments ?? {};
+  const contextParts = (Object.entries(enrichments) as [keyof EnrichmentData, unknown][])
+    .filter(([, v]) => v != null)
+    .map(([key, value]) => {
+      const fmt = ENRICHMENT_FORMATTERS[key] as ((d: unknown) => string) | undefined;
+      return fmt?.(value) ?? '';
+    })
+    .filter(Boolean);
 
   const thread = input.conversationThread;
   const messageBlock = thread && thread.length > 1
@@ -31,7 +32,7 @@ function buildPrompt(input: SuggestReplyInput): string {
 
   return [
     messageBlock,
-    contextBlock && `\nContext:\n${contextBlock}`,
+    contextParts.length > 0 && `\nContext:\n${contextParts.join('\n')}`,
     '\nWrite the reply JSON for the user.',
   ].filter(Boolean).join('');
 }
@@ -61,13 +62,9 @@ async function callViaWorker(input: SuggestReplyInput): Promise<ReplyOptions> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: input.originalMessage,
-        intent: input.intent,
-        conversationThread: input.conversationThread?.map((m) => ({
-          sender: m.sender,
-          text: m.text,
-        })),
-        etaData: input.etaData,
-        availabilityData: input.availabilityData,
+        intents: input.intents,
+        conversationThread: input.conversationThread?.map((m) => ({ sender: m.sender, text: m.text })),
+        enrichments: input.enrichments,
       }),
     });
     const data = await res.json() as { reply?: string; replies?: Partial<ReplyOptions>; error?: string };

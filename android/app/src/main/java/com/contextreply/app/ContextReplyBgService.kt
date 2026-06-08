@@ -195,8 +195,8 @@ class ContextReplyBgService : NotificationListenerService() {
 
             workerPool.submit {
                 try {
-                    val etaData = if (isEtaIntent(latestMessage)) fetchEtaData(latestMessage) else null
-                    val result = callWorker(latestMessage, fullThread, etaData) ?: return@submit
+                    val enrichments = buildEnrichments(latestMessage)
+                    val result = callWorker(latestMessage, fullThread, enrichments) ?: return@submit
                     val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
                     val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
@@ -254,20 +254,55 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private data class EtaData(val duration: String, val distance: String, val routeSummary: String)
 
-    private fun isEtaIntent(message: String): Boolean {
-        val patterns = listOf(
-            Regex("""\beta\b""", RegexOption.IGNORE_CASE),
-            Regex("""when (will|are) you""", RegexOption.IGNORE_CASE),
-            Regex("""how (long|far)""", RegexOption.IGNORE_CASE),
-            Regex("""on (your|the) way""", RegexOption.IGNORE_CASE),
-            Regex("""(leaving|left) yet""", RegexOption.IGNORE_CASE),
-            Regex("""\b(arriving|arrive|arrival)\b""", RegexOption.IGNORE_CASE),
-            Regex("""where are you""", RegexOption.IGNORE_CASE),
-            Regex("""almost (here|there)""", RegexOption.IGNORE_CASE),
-            Regex("""how (close|soon)""", RegexOption.IGNORE_CASE),
-        )
-        return patterns.any { it.containsMatchIn(message) }
+    // ── Intent / enrichment registry ──────────────────────────────────────────
+    // Mirror of src/utils/intentDetector.ts — keep patterns in sync.
+    // To add a new data source: add an intent key, list its enrichment(s),
+    // implement a fetch function, and handle the key in buildEnrichments().
+
+    private val ETA_PATTERNS = listOf(
+        Regex("""\beta\b""", RegexOption.IGNORE_CASE),
+        Regex("""when (will|are) you""", RegexOption.IGNORE_CASE),
+        Regex("""how (long|far)""", RegexOption.IGNORE_CASE),
+        Regex("""on (your|the) way""", RegexOption.IGNORE_CASE),
+        Regex("""(leaving|left) yet""", RegexOption.IGNORE_CASE),
+        Regex("""\b(arriving|arrive|arrival)\b""", RegexOption.IGNORE_CASE),
+        Regex("""where are you""", RegexOption.IGNORE_CASE),
+        Regex("""almost (here|there)""", RegexOption.IGNORE_CASE),
+        Regex("""how (close|soon)""", RegexOption.IGNORE_CASE),
+    )
+
+    private val INTENT_ENRICHMENTS = mapOf(
+        "eta"          to listOf("maps"),
+        "availability" to listOf<String>(),
+        "other"        to listOf<String>(),
+    )
+
+    private fun detectIntents(message: String): List<String> {
+        val intents = mutableListOf<String>()
+        if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
+        return intents.ifEmpty { listOf("other") }
     }
+
+    private fun requiredEnrichments(message: String): List<String> =
+        detectIntents(message).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
+
+    private fun buildEnrichments(message: String): JSONObject {
+        val enrichments = JSONObject()
+        for (key in requiredEnrichments(message)) {
+            when (key) {
+                "maps" -> fetchEtaData(message)?.let { eta ->
+                    enrichments.put("maps", JSONObject().apply {
+                        put("duration", eta.duration)
+                        put("distance", eta.distance)
+                        put("routeSummary", eta.routeSummary)
+                    })
+                }
+            }
+        }
+        return enrichments
+    }
+
+    private fun isEtaIntent(message: String): Boolean = ETA_PATTERNS.any { it.containsMatchIn(message) }
 
     private fun getCurrentLocation(): Location? {
         if (lastLocation != null) return lastLocation
@@ -327,7 +362,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
-    private fun callWorker(message: String, thread: List<Pair<String?, String>>, etaData: EtaData? = null): WorkerResult? {
+    private fun callWorker(message: String, thread: List<Pair<String?, String>>, enrichments: JSONObject = JSONObject()): WorkerResult? {
         val url = URL("${BuildConfig.WORKER_URL}/suggest")
         val conn = url.openConnection() as HttpURLConnection
         return try {
@@ -353,10 +388,9 @@ class ContextReplyBgService : NotificationListenerService() {
                     })
                 }
                 if (styleProfile != null) put("styleContext", styleProfile)
-                if (etaData != null) put("etaData", JSONObject().apply {
-                    put("duration", etaData.duration)
-                    put("distance", etaData.distance)
-                    put("routeSummary", etaData.routeSummary)
+                if (enrichments.length() > 0) put("enrichments", enrichments)
+                put("intents", detectIntents(message).let { intents ->
+                    JSONArray().also { arr -> intents.forEach { arr.put(it) } }
                 })
             }.toString()
 

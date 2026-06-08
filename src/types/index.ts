@@ -1,4 +1,5 @@
 export type Intent = 'eta' | 'availability' | 'other';
+export type Enrichment = 'maps' | 'calendar';
 export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
 export type MemoryType = 'episodic' | 'semantic' | 'spatial' | 'relational' | 'conversation_history';
@@ -32,6 +33,11 @@ export interface AvailabilityData {
   windowEnd: string;
 }
 
+export interface EnrichmentData {
+  maps?: EtaData;
+  calendar?: AvailabilityData;
+}
+
 export interface ConversationMessage {
   sender: string | null;
   text: string;
@@ -39,10 +45,9 @@ export interface ConversationMessage {
 
 export interface SuggestReplyInput {
   originalMessage: string;
-  intent: Intent;
+  intents: Intent[];
   conversationThread?: ConversationMessage[];
-  etaData?: EtaData;
-  availabilityData?: AvailabilityData;
+  enrichments?: EnrichmentData;
 }
 
 // ── Saved places ──────────────────────────────────────────────────────────────
