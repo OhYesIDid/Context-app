@@ -7,8 +7,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.provider.Settings
-import android.text.TextUtils
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -58,6 +59,27 @@ class BubbleSuggestionActivity : Activity() {
 
         val packageName = convKey?.substringBefore(":") ?: ""
 
+        // Editable reply field — user can tweak before sending; final text is captured for style learning
+        val replyEdit = EditText(this).apply {
+            setText(textMap[available[selectedIdx]])
+            setTextColor(TEXT)
+            setHintTextColor(MUTED)
+            textSize = 15f
+            minLines = 2
+            maxLines = 6
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#27272a"))
+                cornerRadius = dp(10).toFloat()
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp.bottomMargin = dp(16)
+            layoutParams = lp
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+
         // Contact name — tappable if we have a contentIntent to open the conversation
         root.addView(TextView(this).apply {
             text = if (openChatIntent != null) "↗ $contact" else contact
@@ -66,7 +88,7 @@ class BubbleSuggestionActivity : Activity() {
             setPadding(0, 0, 0, dp(10))
             if (openChatIntent != null) {
                 setOnClickListener {
-                    val selectedText = textMap[available[selectedIdx]] ?: casualText
+                    val selectedText = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: casualText }
                     val a11yEnabled = isAccessibilityEnabled()
                     // Only write pending inject (and close the bubble) when the
                     // AccessibilityService is active — otherwise the user needs
@@ -88,16 +110,7 @@ class BubbleSuggestionActivity : Activity() {
             }
         })
 
-        // Reply text (updates when tone tab changes)
-        val replyView = TextView(this).apply {
-            text = textMap[available[selectedIdx]]
-            setTextColor(TEXT)
-            textSize = 15f
-            maxLines = 5
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(0, 0, 0, dp(16))
-        }
-        root.addView(replyView)
+        root.addView(replyEdit)
 
         // Tone tabs (only shown when more than one tone available)
         val tabViews = mutableMapOf<String, TextView>()
@@ -122,7 +135,8 @@ class BubbleSuggestionActivity : Activity() {
                 }
                 tab.setOnClickListener {
                     selectedIdx = idx
-                    replyView.text = textMap[available[idx]]
+                    replyEdit.setText(textMap[available[idx]])
+                    replyEdit.setSelection(replyEdit.text.length)
                     refreshTabs(idx)
                 }
                 tabViews[tone] = tab
@@ -165,7 +179,7 @@ class BubbleSuggestionActivity : Activity() {
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
                 setOnClickListener {
-                    val text = textMap[available[selectedIdx]] ?: casualText
+                    val text = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: casualText }
                     sendAction(ContextReplyBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra)
                     finish()
                 }
