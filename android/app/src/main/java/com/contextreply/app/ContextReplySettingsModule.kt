@@ -62,6 +62,16 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(label)
     }
 
+    @ReactMethod
+    fun getSharedText(promise: Promise) {
+        val activity = currentActivity ?: return promise.resolve(null)
+        val intent = activity.intent ?: return promise.resolve(null)
+        if (Intent.ACTION_SEND != intent.action || "text/plain" != intent.type) return promise.resolve(null)
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: ""
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        promise.resolve(text.ifEmpty { null })
+    }
+
     // Atomically reads and clears the StyleEditQueue SharedPrefs, returning
     // the raw JSON array string so JS can drain it into SQLite.
     @ReactMethod

@@ -1,5 +1,6 @@
 package com.contextreply.app
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -24,6 +25,13 @@ class MainActivity : ReactActivity() {
    * rendering of the component.
    */
   override fun getMainComponentName(): String = "main"
+
+  // singleTask: new share intents arrive via onNewIntent, not onCreate.
+  // Calling setIntent() makes getIntent() return the latest intent to JS.
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+  }
 
   /**
    * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]

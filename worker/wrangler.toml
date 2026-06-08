@@ -1,0 +1,8 @@
+name = "contextreply-suggest"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Set the Claude API key as a secret (never commit the real value):
+#   wrangler secret put CLAUDE_API_KEY
+# Then add it to your EAS / .env as:
+#   EXPO_PUBLIC_WORKER_URL=https://contextreply-suggest.<your-subdomain>.workers.dev

@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -105,6 +106,9 @@ export default function App() {
   const [settingsPage, setSettingsPage] = useState<'main' | 'tone' | 'context' | 'contacts' | 'import'>('main');
   const [contactSearch, setContactSearch] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [shareText, setShareText] = useState<string | null>(null);
+  const [shareReply, setShareReply] = useState('');
+  const [shareLoading, setShareLoading] = useState(false);
 
   // Reset copied indicator when switching tones
   useEffect(() => { setCopied(false); }, [tone]);
@@ -147,11 +151,35 @@ export default function App() {
       ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
       ContextReplySettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
+      ContextReplySettings.getSharedText().then((text: string | null) => {
+        if (text) { setShareText(text); setShareReply(''); }
+      }).catch(() => {});
       // Drain the Kotlin-side StyleEditQueue into SQLite and rebuild the cached
       // style profile so the next background suggestion is personalised.
       syncStyleProfile();
     }
   }, []);
+
+  // Re-check for share intents when the app comes back to the foreground.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || Platform.OS !== 'android' || !ContextReplySettings) return;
+      ContextReplySettings.getSharedText().then((text: string | null) => {
+        if (text) { setShareText(text); setShareReply(''); }
+      }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Auto-generate suggestion when a share intent arrives.
+  useEffect(() => {
+    if (!shareText) return;
+    setShareLoading(true);
+    suggestReply({ originalMessage: shareText, intent: detectIntent(shareText) })
+      .then(r => setShareReply(r.casual))
+      .catch(() => {})
+      .finally(() => setShareLoading(false));
+  }, [shareText]);
 
   // Android notification listener setup
   useEffect(() => {
@@ -649,6 +677,55 @@ export default function App() {
               </ScrollView>
             )}
 
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Share intent modal */}
+      <Modal visible={shareText !== null} transparent animationType="slide" onRequestClose={() => setShareText(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShareText(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Suggest Reply</Text>
+            <Text style={styles.modalSection}>Incoming message</Text>
+            <Text style={{ color: MUTED, fontSize: 15, lineHeight: 22, marginBottom: 16 }} numberOfLines={4}>
+              {shareText}
+            </Text>
+            {shareLoading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <ActivityIndicator color={PURPLE} size="small" />
+                <Text style={{ color: MUTED, fontSize: 14 }}>Drafting reply…</Text>
+              </View>
+            ) : shareReply ? (
+              <>
+                <Text style={styles.modalSection}>Suggested reply</Text>
+                <TextInput
+                  style={[styles.input, { marginBottom: 16 }]}
+                  value={shareReply}
+                  onChangeText={setShareReply}
+                  multiline
+                />
+              </>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                style={[styles.modalClose, { flex: 1, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER }]}
+                onPress={() => setShareText(null)}
+              >
+                <Text style={[styles.modalCloseText, { color: MUTED }]}>Cancel</Text>
+              </Pressable>
+              {shareReply ? (
+                <Pressable
+                  style={[styles.modalClose, { flex: 2 }]}
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(shareReply);
+                    setShareText(null);
+                  }}
+                >
+                  <Text style={styles.modalCloseText}>Copy & Close</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
