@@ -49,8 +49,9 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_NOTIF_ID = "notif_id"
         const val EXTRA_CONV_KEY = "conv_key"
         const val EXTRA_INTENT   = "reply_intent"
-        const val EXTRA_INTENTS  = "reply_intents"
-        const val EXTRA_MESSAGE  = "reply_message"
+        const val EXTRA_INTENTS        = "reply_intents"
+        const val EXTRA_MESSAGE        = "reply_message"
+        const val EXTRA_PREFERRED_TONE = "reply_preferred_tone"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
         const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
@@ -541,6 +542,15 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
+    private fun preferredToneForContact(convKey: String): String? {
+        val contact = convKey.substringAfter(":").lowercase()
+        return try {
+            val json = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+                .getString("contact_tone_map", "{}") ?: "{}"
+            JSONObject(json).optString(contact).ifEmpty { null }
+        } catch (_: Exception) { null }
+    }
+
     private fun postSuggestionNotification(
         replyText: String,
         formalText: String?,
@@ -554,6 +564,7 @@ class ContextReplyBgService : NotificationListenerService() {
         message: String = "",
         detectedIntents: String = "",
     ) {
+        val preferredTone = preferredToneForContact(convKey)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val sendIntent = Intent(this, ReplySendReceiver::class.java).apply {
@@ -605,7 +616,7 @@ class ContextReplyBgService : NotificationListenerService() {
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents)
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone)
 
         nm.notify(notifId, builder.build()
         )

@@ -98,6 +98,13 @@ async function rebuildCachedProfile(): Promise<void> {
     sections.push(`Intent corrections (user flagged missing context):\n${lines}`);
   }
 
+  // Write per-contact tone map so BgService can pre-select the right bubble tab
+  const toneMap: Record<string, string> = {};
+  for (const c of contacts) {
+    if (c.preferredTone) toneMap[c.displayName.toLowerCase()] = c.preferredTone;
+  }
+  NativeModules.ContextReplySettings.cacheContactTones(JSON.stringify(toneMap));
+
   if (sections.length === 0) return;
   NativeModules.ContextReplySettings.cacheStyleProfile(sections.join('\n\n'));
 }

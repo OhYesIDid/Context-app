@@ -32,6 +32,7 @@ object BubbleHelper {
         openChatIntent: android.app.PendingIntent? = null,
         message: String = "",
         detectedIntents: String = "",
+        preferredTone: String? = null,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
@@ -64,6 +65,7 @@ object BubbleHelper {
             if (openChatIntent != null) putExtra(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
             if (message.isNotEmpty()) putExtra(ContextReplyBgService.EXTRA_MESSAGE, message)
             if (detectedIntents.isNotEmpty()) putExtra(ContextReplyBgService.EXTRA_INTENTS, detectedIntents)
+            if (preferredTone != null) putExtra(ContextReplyBgService.EXTRA_PREFERRED_TONE, preferredTone)
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,

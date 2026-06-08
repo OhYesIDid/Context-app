@@ -38,6 +38,7 @@ class BubbleSuggestionActivity : Activity() {
         val messageExtra    = intent.getStringExtra(ContextReplyBgService.EXTRA_MESSAGE) ?: ""
         val intentsRaw      = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENTS) ?: ""
         val detectedIntents = if (intentsRaw.isNotEmpty()) intentsRaw.split(",") else listOf("other")
+        val preferredTone   = intent.getStringExtra(ContextReplyBgService.EXTRA_PREFERRED_TONE)
         @Suppress("DEPRECATION")
         val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
         val contact        = convKey?.substringAfter(":") ?: "Reply"
@@ -46,7 +47,8 @@ class BubbleSuggestionActivity : Activity() {
         val available = toneKeys.filter { textMap[it]?.isNotEmpty() == true }
         if (available.isEmpty()) { finish(); return }
 
-        var selectedIdx = available.indexOf("casual").coerceAtLeast(0)
+        var selectedIdx = if (preferredTone != null) available.indexOf(preferredTone).takeIf { it >= 0 } ?: available.indexOf("casual").coerceAtLeast(0)
+                         else available.indexOf("casual").coerceAtLeast(0)
 
         val d = resources.displayMetrics.density
         fun dp(n: Int) = (n * d).toInt()

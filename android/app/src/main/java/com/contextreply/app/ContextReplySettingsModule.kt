@@ -117,6 +117,15 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(json)
     }
 
+    // Stores a JSON map of {contactName(lowercase): preferredTone} so BgService
+    // can pre-select the right tone tab when posting a bubble for a known contact.
+    @ReactMethod
+    fun cacheContactTones(json: String) {
+        reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .edit().putString("contact_tone_map", json).apply()
+    }
+
     // JS calls this after rebuilding the style profile from SQLite so the
     // Kotlin worker path can include it in the next /suggest request.
     @ReactMethod
