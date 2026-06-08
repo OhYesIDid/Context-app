@@ -94,6 +94,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
+  const [bubbleLabel, setBubbleLabel] = useState('Notifications → Bubbles');
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [googleContactsCount, setGoogleContactsCount] = useState<number | null>(null);
   const [deviceContactsCount, setDeviceContactsCount] = useState<number | null>(null);
@@ -145,6 +146,7 @@ export default function App() {
     if (Platform.OS === 'android' && ContextReplySettings) {
       ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
+      ContextReplySettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
       // Drain the Kotlin-side StyleEditQueue into SQLite and rebuild the cached
       // style profile so the next background suggestion is personalised.
       syncStyleProfile();
@@ -524,13 +526,13 @@ export default function App() {
                   <Text style={styles.setupAction}>Open</Text>
                 </Pressable>
                 <Pressable style={styles.settingRow} onPress={() => {
-                  if (Platform.OS === 'android') Linking.sendIntent('android.settings.NOTIFICATION_SETTINGS').catch(() => {});
+                  if (Platform.OS === 'android') ContextReplySettings?.openAppNotificationSettings?.();
                 }}>
                   <View style={styles.settingLeft}>
                     <Text style={styles.setupDot}>·</Text>
                     <View>
                       <Text style={styles.settingText}>Suggestion Bubbles</Text>
-                      <Text style={styles.setupStatus}>Notifications → More settings → Bubbles</Text>
+                      <Text style={styles.setupStatus}>Tap Open, then enable {bubbleLabel}</Text>
                     </View>
                   </View>
                   <Text style={styles.setupAction}>Open</Text>

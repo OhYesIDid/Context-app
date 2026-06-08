@@ -1,6 +1,8 @@
 package com.contextreply.app
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -35,9 +37,29 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
             reactApplicationContext.contentResolver,
             "enabled_notification_listeners"
         ) ?: ""
-        promise.resolve(
-            listeners.contains("com.contextreply.app/com.contextreply.app.ContextReplyBgService")
-        )
+        val pkg = reactApplicationContext.packageName
+        promise.resolve(listeners.contains("$pkg/com.contextreply.app.ContextReplyBgService"))
+    }
+
+    @ReactMethod
+    fun openAppNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, reactApplicationContext.packageName)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        reactApplicationContext.startActivity(intent)
+    }
+
+    @ReactMethod
+    fun getBubbleSettingsLabel(promise: Promise) {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val label = when {
+            manufacturer.contains("samsung") -> "Notifications → Pop-up view"
+            manufacturer.contains("xiaomi") || manufacturer.contains("redmi") -> "Notifications → Floating notifications"
+            manufacturer.contains("huawei") || manufacturer.contains("honor") -> "Notifications → Floating window"
+            else -> "Notifications → Bubbles"
+        }
+        promise.resolve(label)
     }
 
     // Atomically reads and clears the StyleEditQueue SharedPrefs, returning
