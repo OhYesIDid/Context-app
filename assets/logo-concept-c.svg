@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ProTxt Logo — Concept C: Minimal single bubble with lightning bolt -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="#0c0c0e"/>
+
+  <!-- Single speech bubble, fills most of the icon -->
+  <rect x="100" y="140" width="824" height="580" rx="110" fill="url(#iconGrad)"/>
+  <!-- Tail bottom-right -->
+  <path d="M 820 720 L 920 860 L 680 720 Z" fill="#6366f1"/>
+
+  <!-- Lightning bolt (speed + AI) centered in bubble -->
+  <!-- Center of bubble: x=512, y=430 -->
+  <!-- Bolt: top-right chunk, then diagonal down-left, then bottom-right chunk -->
+  <path d="M 580 190
+           L 400 490
+           L 510 490
+           L 444 670
+           L 660 370
+           L 540 370 Z"
+        fill="white"
+        filter="url(#glow)"
+        opacity="0.95"/>
+</svg>
