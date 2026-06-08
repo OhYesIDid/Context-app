@@ -16,6 +16,7 @@ interface QueueItem {
 export async function syncStyleProfile(): Promise<void> {
   try {
     await drainQueue();
+    await drainCorrections();
     await rebuildCachedProfile();
   } catch (_) {}
 }
@@ -35,11 +36,33 @@ async function drainQueue(): Promise<void> {
   }
 }
 
+interface IntentCorrection {
+  ts: number;
+  from: string[];
+  to: string[];
+  message: string;
+}
+
+async function drainCorrections(): Promise<void> {
+  const json: string = await NativeModules.ContextReplySettings.drainIntentCorrections();
+  const corrections: IntentCorrection[] = JSON.parse(json);
+  if (corrections.length === 0) return;
+  // Append to AsyncStorage so rebuildCachedProfile can include them in the style profile
+  const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+  const existing = await AsyncStorage.getItem('intent_corrections').catch(() => null);
+  const prev: IntentCorrection[] = existing ? JSON.parse(existing) : [];
+  const merged = [...prev, ...corrections].slice(-50);
+  await AsyncStorage.setItem('intent_corrections', JSON.stringify(merged));
+}
+
 async function rebuildCachedProfile(): Promise<void> {
-  const [edits, contacts] = await Promise.all([
+  const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+  const [edits, contacts, correctionsJson] = await Promise.all([
     getRecentStyleEdits(20),
     getAllContacts(),
+    AsyncStorage.getItem('intent_corrections').catch(() => null),
   ]);
+  const corrections: IntentCorrection[] = correctionsJson ? JSON.parse(correctionsJson) : [];
 
   const sections: string[] = [];
 
@@ -66,6 +89,13 @@ async function rebuildCachedProfile(): Promise<void> {
       return `• ${c.displayName} — ${parts.join(', ')}`;
     }).join('\n');
     sections.push(`Contact preferences:\n${lines}`);
+  }
+
+  // Intent corrections — tell the worker which contexts were missed so it can compensate
+  const recent = corrections.slice(-10);
+  if (recent.length > 0) {
+    const lines = recent.map((c) => `• "${c.message.slice(0, 80)}" — missed: ${c.from.join('+')} should be ${c.to.join('+')}`).join('\n');
+    sections.push(`Intent corrections (user flagged missing context):\n${lines}`);
   }
 
   if (sections.length === 0) return;

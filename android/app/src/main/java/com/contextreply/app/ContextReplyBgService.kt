@@ -36,6 +36,9 @@ import java.util.concurrent.TimeUnit
 class ContextReplyBgService : NotificationListenerService() {
 
     companion object {
+        @Volatile private var instance: ContextReplyBgService? = null
+        fun getInstance(): ContextReplyBgService? = instance
+
         const val CHANNEL_ID = "contextreply_suggestions"
         const val ACTION_SEND = "com.protxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.protxt.app.ACTION_DISMISS_REPLY"
@@ -88,7 +91,11 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private data class WorkerResult(val replies: JSONObject, val intent: String?)
 
-    private val pendingJobs = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val arrivalBuffer = ConcurrentHashMap<String, MutableList<String>>()
+    // Tracks convKeys that currently have a live bubble so we don't stack duplicates.
+    // Cleared by ReplySendReceiver on send or dismiss.
+    val activeBubbles = ConcurrentHashMap.newKeySet<String>()
     private val lastOpenedTimestamp = ConcurrentHashMap<String, Long>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val workerPool = Executors.newFixedThreadPool(3)
@@ -102,6 +109,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         store = NotificationStore.getInstance(this)
         createChannel()
     }
@@ -129,6 +137,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        instance = null
         scheduler.shutdownNow()
         workerPool.shutdownNow()
         try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
@@ -174,6 +183,9 @@ class ContextReplyBgService : NotificationListenerService() {
         val convKey = buildConversationKey(sbn.packageName, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
 
+        // Track each notification's text so the debounce callback sees the full burst
+        arrivalBuffer.getOrPut(convKey) { mutableListOf() }.add(text)
+
         // ── Accumulate messages in local store ───────────────────────────────
         // Extract the structured thread from this notification's bundle.
         val notifThread = extractConversationThread(extras)
@@ -200,8 +212,17 @@ class ContextReplyBgService : NotificationListenerService() {
         pendingJobs[convKey] = scheduler.schedule({
             pendingJobs.remove(convKey)
             val fullThread = store.getThread(convKey)
-            val latestMessage = fullThread.lastOrNull()?.second ?: text
+            // Drain the arrival buffer — all texts that came in during the debounce window.
+            // This is more reliable than a sender-based walk-back because it doesn't depend
+            // on apps correctly setting sender=null for outgoing MessagingStyle messages.
+            val burstTexts = arrivalBuffer.remove(convKey)
+                ?.distinct()
+                ?.takeIf { it.isNotEmpty() }
+                ?: listOf(fullThread.lastOrNull()?.second ?: text)
+            val latestMessage = burstTexts.joinToString("\n")
+            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "burst ${burstTexts.size} msgs: ${latestMessage.take(120)}")
 
+            if (activeBubbles.contains(convKey)) return@schedule
             workerPool.submit {
                 try {
                     val enrichments = buildEnrichments(latestMessage)
@@ -210,6 +231,7 @@ class ContextReplyBgService : NotificationListenerService() {
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
                     val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
                     val primary = casual ?: formal ?: brief ?: return@submit
+                    activeBubbles.add(convKey)
                     postSuggestionNotification(
                         primary, formal, brief,
                         replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
@@ -403,7 +425,7 @@ class ContextReplyBgService : NotificationListenerService() {
                 put("windowEnd", OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString())
             }
         } catch (e: Exception) {
-            android.util.Log.w("ContextReplyBgService", "Calendar fetch failed: ${e.message}")
+            if (BuildConfig.DEBUG) android.util.Log.w("ContextReplyBgService", "Calendar fetch failed: ${e.message}")
             null
         }
     }
@@ -445,14 +467,11 @@ class ContextReplyBgService : NotificationListenerService() {
     }
 
     private fun fetchEtaData(message: String): EtaData? {
-        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { android.util.Log.w("ContextReply", "ETA: no API key"); return null }
-        val location = getCurrentLocation()
-        if (location == null) { android.util.Log.w("ContextReply", "ETA: no location cached yet"); return null }
-        val destination = extractDestination(message)
-        if (destination == null) { android.util.Log.w("ContextReply", "ETA: no destination in message: $message"); return null }
+        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { return null }
+        val location = getCurrentLocation() ?: return null
+        val destination = extractDestination(message) ?: return null
         val origin = "${location.latitude},${location.longitude}"
         val mode = getEnrichmentPref("maps", "transportMode", "driving")
-        android.util.Log.d("ContextReply", "ETA: origin=$origin destination=$destination mode=$mode")
         val params = buildString {
             append("origin=${encode(origin)}&destination=${encode(destination)}&mode=$mode")
             if (mode == "driving") append("&departure_time=now")
@@ -466,17 +485,14 @@ class ContextReplyBgService : NotificationListenerService() {
             val json = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
             val obj = JSONObject(json)
-            val status = obj.optString("status")
-            android.util.Log.d("ContextReply", "ETA: Maps status=$status")
-            if (status != "OK") return null
+            if (obj.optString("status") != "OK") return null
             val leg = obj.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0)
             val duration = (leg.optJSONObject("duration_in_traffic") ?: leg.getJSONObject("duration"))
                 .getString("text")
             val distance = leg.getJSONObject("distance").getString("text")
             val route = obj.getJSONArray("routes").getJSONObject(0).optString("summary", "")
-            android.util.Log.d("ContextReply", "ETA: $duration / $distance via $route")
             EtaData(duration, distance, route)
-        } catch (e: Exception) { android.util.Log.e("ContextReply", "ETA: exception: ${e.message}"); null }
+        } catch (_: Exception) { null }
     }
 
     private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")

@@ -57,10 +57,11 @@ class ReplySendReceiver : BroadcastReceiver() {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (notifId != -1) nm.cancel(notifId)
 
-        // On both Send and Dismiss: clear the stored thread so the next message
-        // from this contact starts a fresh context window.
+        // On both Send and Dismiss: clear the stored thread and active bubble tracking
+        // so the next message from this contact starts fresh.
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
+            ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
         }
 
         if (intent.action == ContextReplyBgService.ACTION_DISMISS) {
