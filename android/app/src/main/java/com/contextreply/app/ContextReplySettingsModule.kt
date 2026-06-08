@@ -9,6 +9,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import org.json.JSONArray
+import org.json.JSONObject
 
 class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -70,6 +71,28 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: ""
         intent.removeExtra(Intent.EXTRA_TEXT)
         promise.resolve(text.ifEmpty { null })
+    }
+
+    @ReactMethod
+    fun getEnrichmentPreference(enrichment: String, key: String, promise: Promise) {
+        val prefs = reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val value = try {
+            val obj = JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
+            obj.optJSONObject(enrichment)?.optString(key)?.ifEmpty { null }
+        } catch (_: Exception) { null }
+        promise.resolve(value)
+    }
+
+    @ReactMethod
+    fun setEnrichmentPreference(enrichment: String, key: String, value: String) {
+        val prefs = reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        try {
+            val obj = JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
+            val enrichmentObj = obj.optJSONObject(enrichment) ?: JSONObject()
+            enrichmentObj.put(key, value)
+            obj.put(enrichment, enrichmentObj)
+            prefs.edit().putString("enrichment_prefs", obj.toString()).apply()
+        } catch (_: Exception) {}
     }
 
     // Atomically reads and clears the StyleEditQueue SharedPrefs, returning

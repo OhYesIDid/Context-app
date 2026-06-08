@@ -1,5 +1,37 @@
 import type { Enrichment, EnrichmentData, Intent } from '../types';
 
+// ── Enrichment preference schema ──────────────────────────────────────────────
+
+export interface EnrichmentPrefOption {
+  value: string;
+  label: string;
+}
+
+export interface EnrichmentPrefField {
+  key: string;
+  label: string;
+  options: EnrichmentPrefOption[];
+  defaultValue: string;
+}
+
+// Declares what user-configurable preferences each enrichment exposes.
+// The Settings UI renders this generically — add new enrichments here.
+export const ENRICHMENT_PREFERENCES: Partial<Record<keyof EnrichmentData, EnrichmentPrefField[]>> = {
+  maps: [
+    {
+      key: 'transportMode',
+      label: 'Transport mode',
+      options: [
+        { value: 'driving',   label: 'Driving'  },
+        { value: 'walking',   label: 'Walking'  },
+        { value: 'transit',   label: 'Transit'  },
+        { value: 'bicycling', label: 'Cycling'  },
+      ],
+      defaultValue: 'driving',
+    },
+  ],
+};
+
 const ETA_PATTERNS = [
   /\beta\b/i,
   /when (will|are) you/i,

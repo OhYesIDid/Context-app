@@ -330,6 +330,14 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
+    private fun getEnrichmentPref(enrichment: String, key: String, default: String): String {
+        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        return try {
+            JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
+                .optJSONObject(enrichment)?.optString(key)?.ifEmpty { null } ?: default
+        } catch (_: Exception) { default }
+    }
+
     private fun fetchEtaData(message: String): EtaData? {
         val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { android.util.Log.w("ContextReply", "ETA: no API key"); return null }
         val location = getCurrentLocation()
@@ -337,8 +345,13 @@ class ContextReplyBgService : NotificationListenerService() {
         val destination = extractDestination(message)
         if (destination == null) { android.util.Log.w("ContextReply", "ETA: no destination in message: $message"); return null }
         val origin = "${location.latitude},${location.longitude}"
-        android.util.Log.d("ContextReply", "ETA: origin=$origin destination=$destination")
-        val params = "origin=${encode(origin)}&destination=${encode(destination)}&departure_time=now&key=$apiKey"
+        val mode = getEnrichmentPref("maps", "transportMode", "driving")
+        android.util.Log.d("ContextReply", "ETA: origin=$origin destination=$destination mode=$mode")
+        val params = buildString {
+            append("origin=${encode(origin)}&destination=${encode(destination)}&mode=$mode")
+            if (mode == "driving") append("&departure_time=now")
+            append("&key=$apiKey")
+        }
         return try {
             val conn = URL("https://maps.googleapis.com/maps/api/directions/json?$params")
                 .openConnection() as HttpURLConnection

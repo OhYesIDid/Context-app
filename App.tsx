@@ -41,7 +41,7 @@ import { importGoogleContacts } from './src/services/googlePeople';
 import { syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Contact, EnrichmentData, Intent, ReplyOptions, Relationship, SuggestReplyInput, Tone } from './src/types';
-import { ENRICHMENT_STATUS, INTENT_ENRICHMENTS, detectIntents, requiredEnrichments, summariseEnrichments } from './src/utils/intentDetector';
+import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, INTENT_ENRICHMENTS, detectIntents, requiredEnrichments, summariseEnrichments } from './src/utils/intentDetector';
 
 const INTENT_LABEL: Record<Intent, string> = {
   eta: '📍 ETA request',
@@ -103,7 +103,8 @@ export default function App() {
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const [skipGroupMessages, setSkipGroupMessages] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [settingsPage, setSettingsPage] = useState<'main' | 'tone' | 'context' | 'contacts' | 'import'>('main');
+  const [settingsPage, setSettingsPage] = useState<'main' | 'tone' | 'context' | 'contacts' | 'import' | 'enhancements'>('main');
+  const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
   const [contactSearch, setContactSearch] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shareText, setShareText] = useState<string | null>(null);
@@ -179,6 +180,18 @@ export default function App() {
       ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
       ContextReplySettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
+      // Load all enrichment preferences so settings UI and fetchers have them ready
+      (async () => {
+        const prefs: Record<string, Record<string, string>> = {};
+        for (const [enrichment, fields] of Object.entries(ENRICHMENT_PREFERENCES)) {
+          prefs[enrichment] = {};
+          for (const field of fields ?? []) {
+            const val = await ContextReplySettings.getEnrichmentPreference(enrichment, field.key).catch(() => null);
+            prefs[enrichment][field.key] = val ?? field.defaultValue;
+          }
+        }
+        setEnrichmentPrefs(prefs);
+      })();
       ContextReplySettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
@@ -209,7 +222,7 @@ export default function App() {
         const enrichments: EnrichmentData = {};
         for (const key of requiredEnrichments(detected)) {
           try {
-            if (key === 'maps') enrichments.maps = await getEtaData();
+            if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
             if (key === 'calendar' && googleAuthed) enrichments.calendar = await getAvailabilityData();
           } catch {}
         }
@@ -349,7 +362,7 @@ export default function App() {
       for (const key of requiredEnrichments(detected)) {
         setStatusText(ENRICHMENT_STATUS[key]);
         try {
-          if (key === 'maps') enrichments.maps = await getEtaData();
+          if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
           if (key === 'calendar') {
             if (!googleAuthed) {
               setStatusText('Sign in with Google to check your calendar');
@@ -531,6 +544,7 @@ export default function App() {
                   { page: 'context', label: 'Context Setup', value: notifPermission ? 'Connected' : 'Setup needed' },
                   { page: 'contacts', label: 'Contacts', value: contacts.length > 0 ? `${contacts.length} contacts` : 'None imported' },
                   { page: 'import', label: 'Data Import', value: 'Manage' },
+                  { page: 'enhancements', label: 'Enhancements', value: 'Location & more' },
                 ] as { page: typeof settingsPage; label: string; value: string }[]).map(({ page, label, value }) => (
                   <Pressable key={page} style={styles.categoryRow} onPress={() => setSettingsPage(page)}>
                     <Text style={styles.categoryLabel}>{label}</Text>
@@ -710,6 +724,48 @@ export default function App() {
                   loading={setupLoading === 'whatsapp'}
                   onPress={handleImportWhatsApp}
                 />
+              </ScrollView>
+            )}
+
+            {/* ── Enhancements page ── */}
+            {settingsPage === 'enhancements' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.subPageHeader}>
+                  <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                    <Text style={styles.backBtnText}>‹ Settings</Text>
+                  </Pressable>
+                  <Text style={styles.subPageTitle}>Enhancements</Text>
+                </View>
+                {(Object.entries(ENRICHMENT_PREFERENCES) as [string, typeof ENRICHMENT_PREFERENCES[keyof typeof ENRICHMENT_PREFERENCES]][]).map(([enrichment, fields]) => (
+                  <View key={enrichment}>
+                    <Text style={[styles.modalSection, { marginTop: 8 }]}>{enrichment === 'maps' ? 'Google Maps' : enrichment}</Text>
+                    {(fields ?? []).map((field) => (
+                      <View key={field.key} style={{ marginBottom: 20 }}>
+                        <Text style={{ color: TEXT, fontSize: 15, marginBottom: 10 }}>{field.label}</Text>
+                        <View style={styles.chipRow}>
+                          {field.options.map((opt) => {
+                            const active = (enrichmentPrefs[enrichment]?.[field.key] ?? field.defaultValue) === opt.value;
+                            return (
+                              <Pressable
+                                key={opt.value}
+                                style={[styles.chip, active && styles.chipActive]}
+                                onPress={() => {
+                                  setEnrichmentPrefs((prev) => ({
+                                    ...prev,
+                                    [enrichment]: { ...prev[enrichment], [field.key]: opt.value },
+                                  }));
+                                  ContextReplySettings?.setEnrichmentPreference?.(enrichment, field.key, opt.value);
+                                }}
+                              >
+                                <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
               </ScrollView>
             )}
 

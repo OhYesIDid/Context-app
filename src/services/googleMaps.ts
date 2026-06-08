@@ -7,7 +7,7 @@ const FALLBACK_DESTINATION = process.env.EXPO_PUBLIC_MAPS_DESTINATION ?? '51.503
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export async function getEtaData(): Promise<EtaData> {
+export async function getEtaData(transportMode = 'driving'): Promise<EtaData> {
   if (!API_KEY) {
     throw new Error('Google Maps API key missing. Add EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to your .env file.');
   }
@@ -33,7 +33,8 @@ export async function getEtaData(): Promise<EtaData> {
   const params = new URLSearchParams({
     origin,
     destination,
-    departure_time: 'now',
+    mode: transportMode,
+    ...(transportMode === 'driving' ? { departure_time: 'now' } : {}),
     key: API_KEY,
   });
 
