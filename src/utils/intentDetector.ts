@@ -78,6 +78,10 @@ const AVAILABILITY_PATTERNS = [
   /\btomorrow\b/i,
   /\btonight\b/i,
   /are you (around|up for|down for)/i,
+  // event-lookup: "when is X?", "what day/date/time is X?"
+  /\bwhen (?:is|are)\b/i,
+  /\bwhat (?:day|date|time) (?:is|are)\b/i,
+  /\bwhat (?:is|are) the (?:date|day|time)\b/i,
 ];
 
 // Which enrichments each intent requires. Add new intents and their data

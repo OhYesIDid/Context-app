@@ -21,9 +21,68 @@ function extractEventKeyword(message: string): string | null {
   return null;
 }
 
-// Fetches calendar data in one of two modes depending on the message:
-//   event-lookup  — keyword found → q=keyword, 14d back + 90d forward, maxResults 10
-//   availability  — no keyword    → no q,       0d back  + 7d  forward, maxResults 50
+// Strips possessives and stopwords to get the most distinctive search term.
+// "Irina's bday" → "Irina",  "the dentist appointment" → "dentist"
+function extractSearchTerm(keyword: string): string {
+  const stopwords = new Set(['my', 'the', 'a', 'an', 'our', 'your', 'his', 'her', 'their', 'its']);
+  const words = keyword.split(/\s+/);
+  const word = words.find(w => !stopwords.has(w.toLowerCase().replace(/'s$/i, ''))) ?? words[0];
+  return word.replace(/'s$/i, '');
+}
+
+async function fetchEvents(
+  accessToken: string,
+  windowStart: Date,
+  windowEnd: Date,
+  maxResults: number,
+  q?: string,
+): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams({
+    timeMin: windowStart.toISOString(),
+    timeMax: windowEnd.toISOString(),
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: String(maxResults),
+  });
+  if (q) params.set('q', q);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${params}`,
+      { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (res.status === 401) throw new Error('Calendar access token is invalid. Please sign out and sign in again.');
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(`Google Calendar error: ${err?.error?.message ?? res.statusText}`);
+    }
+    const data = await res.json();
+    const items = (data.items ?? []) as Array<{
+      summary?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
+    }>;
+    return items.map((item) => ({
+      summary: item.summary ?? '(No title)',
+      start: item.start?.dateTime ?? item.start?.date ?? '',
+      end: item.end?.dateTime ?? item.end?.date ?? '',
+      allDay: !item.start?.dateTime,
+    }));
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError')
+      throw new Error('Calendar request timed out — check your connection and try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Fetches calendar data in one of two modes:
+//   event-lookup  — keyword found → q=<name>, 14d back + 90d forward
+//                   if 0 results  → fallback: no q, same range, maxResults 30
+//   availability  — no keyword    → no q, today + 7d, maxResults 50
 export async function getCalendarData(message: string): Promise<AvailabilityData> {
   const accessToken = await getAccessToken();
   const keyword = extractEventKeyword(message);
@@ -35,72 +94,16 @@ export async function getCalendarData(message: string): Promise<AvailabilityData
   if (keyword) {
     windowStart.setDate(now.getDate() - 14);
     windowEnd.setDate(now.getDate() + 90);
+    const searchTerm = extractSearchTerm(keyword);
+    let events = await fetchEvents(accessToken, windowStart, windowEnd, 10, searchTerm);
+    if (events.length === 0) {
+      events = await fetchEvents(accessToken, windowStart, windowEnd, 30);
+    }
+    return { events, windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
   } else {
     windowStart.setHours(0, 0, 0, 0);
     windowEnd.setDate(now.getDate() + 7);
-  }
-
-  const params = new URLSearchParams({
-    timeMin: windowStart.toISOString(),
-    timeMax: windowEnd.toISOString(),
-    singleEvents: 'true',
-    orderBy: 'startTime',
-    maxResults: keyword ? '10' : '50',
-  });
-  if (keyword) params.set('q', keyword);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${params}`,
-      {
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
-
-    if (res.status === 401) {
-      throw new Error(
-        'Calendar access token is invalid. Please sign out and sign in again.'
-      );
-    }
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(`Google Calendar error: ${err?.error?.message ?? res.statusText}`);
-    }
-
-    const data = await res.json();
-    const items = (data.items ?? []) as Array<{
-      summary?: string;
-      start?: { dateTime?: string; date?: string };
-      end?: { dateTime?: string; date?: string };
-    }>;
-
-    const events: CalendarEvent[] = items.map((item) => {
-      const allDay = !item.start?.dateTime;
-      return {
-        summary: item.summary ?? '(No title)',
-        start: item.start?.dateTime ?? item.start?.date ?? '',
-        end: item.end?.dateTime ?? item.end?.date ?? '',
-        allDay,
-      };
-    });
-
-    return {
-      events,
-      windowStart: windowStart.toISOString(),
-      windowEnd: windowEnd.toISOString(),
-    };
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('Calendar request timed out — check your connection and try again.');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+    const events = await fetchEvents(accessToken, windowStart, windowEnd, 50);
+    return { events, windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
   }
 }

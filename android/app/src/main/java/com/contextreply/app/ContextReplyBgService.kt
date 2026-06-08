@@ -287,6 +287,10 @@ class ContextReplyBgService : NotificationListenerService() {
         Regex("""\btomorrow\b""", RegexOption.IGNORE_CASE),
         Regex("""\btonight\b""", RegexOption.IGNORE_CASE),
         Regex("""are you (around|up for|down for)""", RegexOption.IGNORE_CASE),
+        // event-lookup: "when is X?", "what day/date/time is X?"
+        Regex("""\bwhen (?:is|are)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwhat (?:day|date|time) (?:is|are)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
     )
 
     private val INTENT_ENRICHMENTS = mapOf(
@@ -336,6 +340,25 @@ class ContextReplyBgService : NotificationListenerService() {
         }
     }
 
+    private fun extractSearchTerm(keyword: String): String {
+        val stopwords = setOf("my", "the", "a", "an", "our", "your", "his", "her", "their", "its")
+        val words = keyword.split(Regex("\\s+"))
+        val word = words.firstOrNull { !stopwords.contains(it.lowercase().replace(Regex("'s$"), "")) } ?: words[0]
+        return word.replace(Regex("'s$", RegexOption.IGNORE_CASE), "")
+    }
+
+    private fun calendarApiCall(token: String, timeMin: String, timeMax: String, maxResults: Int, q: String? = null): JSONArray {
+        val qParam = if (q != null) "&q=${URLEncoder.encode(q, "UTF-8")}" else ""
+        val conn = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=$maxResults$qParam")
+            .openConnection() as HttpURLConnection
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        return try {
+            JSONObject(conn.inputStream.bufferedReader().readText()).optJSONArray("items") ?: JSONArray()
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun fetchCalendarData(message: String): JSONObject? {
         val keyword = extractEventKeyword(message)
         return try {
@@ -348,18 +371,16 @@ class ContextReplyBgService : NotificationListenerService() {
             val now = Instant.now()
             val windowStart = if (keyword != null) now.minus(14, ChronoUnit.DAYS) else now
             val windowEnd = if (keyword != null) now.plus(90, ChronoUnit.DAYS) else now.plus(7, ChronoUnit.DAYS)
-            val maxResults = if (keyword != null) 10 else 50
             val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(windowStart, ZoneOffset.UTC).toString(), "UTF-8")
             val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString(), "UTF-8")
-            val qParam = if (keyword != null) "&q=${URLEncoder.encode(keyword, "UTF-8")}" else ""
-            val url = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=$maxResults$qParam")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            val body = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
 
-            val root = JSONObject(body)
-            val items = root.optJSONArray("items") ?: JSONArray()
+            val items = if (keyword != null) {
+                val searchTerm = extractSearchTerm(keyword)
+                val first = calendarApiCall(token, timeMin, timeMax, 10, searchTerm)
+                if (first.length() > 0) first else calendarApiCall(token, timeMin, timeMax, 30)
+            } else {
+                calendarApiCall(token, timeMin, timeMax, 50)
+            }
             val events = JSONArray()
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
