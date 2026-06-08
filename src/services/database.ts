@@ -101,6 +101,25 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       ON memories(type);
     CREATE INDEX IF NOT EXISTS idx_style_edits_contact
       ON style_edits(contact_id);
+
+    -- Phase 2: populated by background Gmail sync; Phase 1 reads Gmail live instead
+    CREATE TABLE IF NOT EXISTS bookings (
+      id              TEXT PRIMARY KEY NOT NULL,
+      type            TEXT NOT NULL,
+      subject         TEXT NOT NULL,
+      snippet         TEXT NOT NULL,
+      from_address    TEXT NOT NULL,
+      email_date      TEXT NOT NULL,
+      relevance_from  TEXT,
+      relevance_until TEXT,
+      raw_fields      TEXT,
+      synced_at       TEXT NOT NULL,
+      deleted_at      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_bookings_relevance
+      ON bookings(relevance_from, relevance_until);
+    CREATE INDEX IF NOT EXISTS idx_bookings_type
+      ON bookings(type);
   `);
   // Add columns introduced after initial schema — safe to run repeatedly
   try { await db.runAsync('ALTER TABLE contacts ADD COLUMN preferred_tone TEXT'); } catch (_) {}

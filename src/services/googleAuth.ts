@@ -28,6 +28,17 @@ export function isSignedIn(): boolean {
   return GoogleSignin.getCurrentUser() !== null;
 }
 
+export async function requestGmailScope(): Promise<boolean> {
+  try {
+    const result = await GoogleSignin.addScopes({
+      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    });
+    return result !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function signOut(): Promise<void> {
   await GoogleSignin.signOut();
 }

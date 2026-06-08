@@ -1,5 +1,6 @@
-export type Intent = 'eta' | 'availability' | 'other';
-export type Enrichment = 'maps' | 'calendar';
+export type Intent = 'eta' | 'availability' | 'booking' | 'other';
+export type Enrichment = 'maps' | 'calendar' | 'bookings';
+export type BookingType = 'flight' | 'hotel' | 'train' | 'delivery' | 'restaurant' | 'event' | 'other';
 export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
 export type MemoryType = 'episodic' | 'semantic' | 'spatial' | 'relational' | 'conversation_history';
@@ -33,9 +34,27 @@ export interface AvailabilityData {
   windowEnd: string;
 }
 
+export interface BookingItem {
+  id: string;               // Gmail message ID — used as dedup key in Phase 2 local cache
+  type: BookingType;
+  subject: string;
+  snippet: string;
+  from: string;
+  date: string;             // ISO string parsed from email Date header
+  relevanceFrom?: string;   // Phase 2: populated by local sync when booking activates
+  relevanceUntil?: string;  // Phase 2: populated by local sync when booking expires
+}
+
+export interface BookingContext {
+  items: BookingItem[];
+  windowStart: string;
+  windowEnd: string;
+}
+
 export interface EnrichmentData {
   maps?: EtaData;
   calendar?: AvailabilityData;
+  bookings?: BookingContext;
 }
 
 export interface ConversationMessage {

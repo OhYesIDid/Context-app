@@ -14,9 +14,17 @@ interface ConversationMessage {
   text: string;
 }
 
+interface BookingItem {
+  type: string;
+  subject: string;
+  snippet: string;
+  date: string;
+}
+
 interface EnrichmentData {
   maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string };
   calendar?: { events: CalendarEvent[]; windowStart: string; windowEnd: string };
+  bookings?: { items: BookingItem[]; windowStart: string; windowEnd: string };
 }
 
 interface SuggestRequest {
@@ -88,6 +96,11 @@ function formatCalendar(events: CalendarEvent[]): string {
   return `User's calendar events in the next 7 days (${events.length} total):\n${lines}`;
 }
 
+const TYPE_LABEL: Record<string, string> = {
+  flight: 'Flight', hotel: 'Hotel', train: 'Train',
+  delivery: 'Delivery', restaurant: 'Restaurant', event: 'Event', other: 'Booking',
+};
+
 const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => string> = {
   maps: (data) => {
     const d = data as EnrichmentData['maps']!;
@@ -96,6 +109,16 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
   calendar: (data) => {
     const d = data as EnrichmentData['calendar']!;
     return formatCalendar(d.events);
+  },
+  bookings: (data) => {
+    const d = data as EnrichmentData['bookings']!;
+    if (d.items.length === 0) return 'No recent travel or purchase emails found.';
+    const lines = d.items.slice(0, 8).map((item) => {
+      const label = TYPE_LABEL[item.type] ?? 'Booking';
+      const date = new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      return `  • [${label}] ${item.subject} (${date}) — ${item.snippet.slice(0, 120)}`;
+    }).join('\n');
+    return `Recent bookings and reservations (${d.items.length} found):\n${lines}`;
   },
 };
 

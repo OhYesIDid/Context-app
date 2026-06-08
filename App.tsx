@@ -34,8 +34,9 @@ const NotificationListener = Platform.OS === 'android'
 import { suggestReply } from './src/services/claude';
 import { getAllContacts, updateContactPreferences } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
-import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
+import { configureGoogleSignin, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
 import { getAvailabilityData } from './src/services/googleCalendar';
+import { getBookingsContext } from './src/services/googleBookings';
 import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
 import { syncStyleProfile } from './src/services/styleSync';
@@ -46,6 +47,7 @@ import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, INTENT_ENRICHMENTS, detectIn
 const INTENT_LABEL: Record<Intent, string> = {
   eta: '📍 ETA request',
   availability: '📅 Availability request',
+  booking: '🎫 Booking lookup',
   other: '💬 General message',
 };
 
@@ -105,6 +107,7 @@ export default function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [settingsPage, setSettingsPage] = useState<'main' | 'tone' | 'context' | 'contacts' | 'import' | 'enhancements'>('main');
   const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
+  const [gmailConnected, setGmailConnected] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shareText, setShareText] = useState<string | null>(null);
@@ -224,6 +227,7 @@ export default function App() {
           try {
             if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
             if (key === 'calendar' && googleAuthed) enrichments.calendar = await getAvailabilityData();
+            if (key === 'bookings' && gmailConnected) enrichments.bookings = await getBookingsContext(Number(enrichmentPrefs.bookings?.lookbackDays ?? 30));
           } catch {}
         }
         const input: SuggestReplyInput = { originalMessage: shareText, intents: detected, enrichments };
@@ -363,6 +367,10 @@ export default function App() {
         setStatusText(ENRICHMENT_STATUS[key]);
         try {
           if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
+          if (key === 'bookings') {
+            if (!gmailConnected) { setStatusText('Connect Gmail in Settings → Enhancements to use bookings'); }
+            else enrichments.bookings = await getBookingsContext(Number(enrichmentPrefs.bookings?.lookbackDays ?? 30));
+          }
           if (key === 'calendar') {
             if (!googleAuthed) {
               setStatusText('Sign in with Google to check your calendar');
@@ -738,7 +746,31 @@ export default function App() {
                 </View>
                 {(Object.entries(ENRICHMENT_PREFERENCES) as [string, typeof ENRICHMENT_PREFERENCES[keyof typeof ENRICHMENT_PREFERENCES]][]).map(([enrichment, fields]) => (
                   <View key={enrichment}>
-                    <Text style={[styles.modalSection, { marginTop: 8 }]}>{enrichment === 'maps' ? 'Google Maps' : enrichment}</Text>
+                    <Text style={[styles.modalSection, { marginTop: 8 }]}>
+                      {enrichment === 'maps' ? 'Google Maps' : enrichment === 'bookings' ? 'Gmail Bookings' : enrichment}
+                    </Text>
+                    {enrichment === 'bookings' && (
+                      <View style={[styles.settingRow, { marginBottom: 12 }]}>
+                        <View>
+                          <Text style={styles.settingText}>{gmailConnected ? 'Gmail connected' : 'Connect Gmail'}</Text>
+                          <Text style={styles.setupStatus}>{gmailConnected ? 'Bookings will be checked automatically' : 'Required to look up reservations'}</Text>
+                        </View>
+                        {gmailConnected
+                          ? <Text style={styles.authConnected}>✓ Connected</Text>
+                          : <Pressable style={styles.authButton} onPress={async () => {
+                              if (!googleAuthed) {
+                                Alert.alert('Sign in first', 'Please sign in with Google before connecting Gmail.');
+                                return;
+                              }
+                              const ok = await requestGmailScope();
+                              if (ok) setGmailConnected(true);
+                              else Alert.alert('Permission denied', 'Gmail access is needed to look up your bookings.');
+                            }}>
+                              <Text style={styles.authButtonText}>Connect</Text>
+                            </Pressable>
+                        }
+                      </View>
+                    )}
                     {(fields ?? []).map((field) => (
                       <View key={field.key} style={{ marginBottom: 20 }}>
                         <Text style={{ color: TEXT, fontSize: 15, marginBottom: 10 }}>{field.label}</Text>
