@@ -423,15 +423,55 @@ export default function App() {
             </Pressable>
           </View>
 
-          {/* Notification access banner */}
-          {Platform.OS === 'android' && !notifPermission && NotificationListener ? (
-            <Pressable style={styles.notifBanner} onPress={() => {
-              try { NotificationListener.openNotificationListenerSettings(); } catch {}
-            }}>
-              <Text style={styles.notifBannerText}>
-                Tap to grant Notification Access so replies surface automatically
-              </Text>
-            </Pressable>
+          {/* Setup card — shown until notification access + Google sign-in are both done */}
+          {Platform.OS === 'android' && (!notifPermission || !googleAuthed) ? (
+            <View style={styles.setupCard}>
+              <Text style={styles.setupCardTitle}>Get started</Text>
+              {[
+                {
+                  label: 'Notification access',
+                  done: notifPermission,
+                  subtitle: 'Required for automatic reply bubbles',
+                  action: 'Enable',
+                  onPress: () => { try { NotificationListener?.openNotificationListenerSettings(); } catch {} },
+                },
+                {
+                  label: 'Suggestion bubbles',
+                  done: notifPermission,
+                  subtitle: `Open App settings → ${bubbleLabel}`,
+                  action: 'Open',
+                  onPress: () => ContextReplySettings?.openAppNotificationSettings?.(),
+                },
+                {
+                  label: 'Google Calendar (optional)',
+                  done: googleAuthed,
+                  subtitle: 'Checks your calendar for availability questions',
+                  action: 'Sign in',
+                  onPress: async () => {
+                    try {
+                      await GoogleSignin.hasPlayServices();
+                      await GoogleSignin.signIn();
+                      setGoogleAuthed(true);
+                    } catch {}
+                  },
+                },
+              ].map((step) => (
+                <View key={step.label} style={styles.setupCardRow}>
+                  <Text style={[styles.setupCardDot, step.done && styles.setupCardDotDone]}>
+                    {step.done ? '✓' : '·'}
+                  </Text>
+                  <View style={styles.setupCardContent}>
+                    <Text style={styles.setupCardLabel}>{step.label}</Text>
+                    <Text style={styles.setupCardSub}>{step.subtitle}</Text>
+                  </View>
+                  {!step.done && (
+                    <Pressable onPress={step.onPress}>
+                      <Text style={styles.setupCardAction}>{step.action}</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </View>
           ) : null}
 
           {/* Google Auth */}
@@ -911,8 +951,15 @@ const styles = StyleSheet.create({
   authButton: { backgroundColor: '#1d4ed8', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 18 },
   authButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
-  notifBanner: { backgroundColor: '#451a03', borderRadius: 12, borderWidth: 1, borderColor: '#92400e', padding: 14, marginBottom: 16 },
-  notifBannerText: { color: '#fcd34d', fontSize: 13, lineHeight: 19 },
+  setupCard: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 20 },
+  setupCardTitle: { fontSize: 13, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  setupCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+  setupCardDot: { fontSize: 18, color: MUTED, width: 18, textAlign: 'center', lineHeight: 22 },
+  setupCardDotDone: { color: '#4ade80' },
+  setupCardContent: { flex: 1 },
+  setupCardLabel: { fontSize: 14, color: TEXT, fontWeight: '500' },
+  setupCardSub: { fontSize: 12, color: MUTED, marginTop: 1 },
+  setupCardAction: { fontSize: 13, color: PURPLE, fontWeight: '600', paddingTop: 2 },
 
   modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },

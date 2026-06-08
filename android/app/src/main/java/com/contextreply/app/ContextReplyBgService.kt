@@ -55,6 +55,9 @@ class ContextReplyBgService : NotificationListenerService() {
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
         const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
+        // Sentinel placed in EXTRA_REPLY_TEXT while the worker is in-flight.
+        // BubbleSuggestionActivity detects this and shows a loading state.
+        const val LOADING_PLACEHOLDER = "__loading__"
 
         // Collapses rapid-fire messages from the same thread into one API call
         private const val DEBOUNCE_MS = 2_500L
@@ -89,8 +92,6 @@ class ContextReplyBgService : NotificationListenerService() {
             Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
         )
     }
-
-    private data class WorkerResult(val replies: JSONObject, val intent: String?)
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
     private val arrivalBuffer = ConcurrentHashMap<String, MutableList<String>>()
@@ -224,22 +225,38 @@ class ContextReplyBgService : NotificationListenerService() {
             if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "burst ${burstTexts.size} msgs: ${latestMessage.take(120)}")
 
             if (activeBubbles.contains(convKey)) return@schedule
+            val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
+            // Post a loading placeholder immediately so the bubble appears at debounce time.
+            // BubbleSuggestionActivity shows a "Drafting…" state until the real reply arrives.
+            activeBubbles.add(convKey)
+            postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
             workerPool.submit {
                 try {
                     val enrichments = buildEnrichments(latestMessage)
-                    val result = callWorker(latestMessage, fullThread, enrichments) ?: return@submit
+                    val result = WorkerClient.call(this, latestMessage, fullThread, enrichments) ?: run {
+                        activeBubbles.remove(convKey)
+                        return@submit
+                    }
+                    // User may have dismissed the loading bubble — don't post a stale result
+                    if (!activeBubbles.contains(convKey)) return@submit
                     val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
                     val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
-                    val primary = casual ?: formal ?: brief ?: return@submit
-                    activeBubbles.add(convKey)
+                    val primary = casual ?: formal ?: brief ?: run {
+                        activeBubbles.remove(convKey)
+                        return@submit
+                    }
                     postSuggestionNotification(
                         primary, formal, brief,
                         replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                        openChatIntent, latestMessage,
-                        detectIntents(latestMessage).joinToString(",")
+                        openChatIntent, latestMessage, detectedIntentsStr
                     )
-                } catch (_: Exception) {}
+                    // Update the Activity if it's already open showing the loading state
+                    BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief)
+                    BubbleSuggestionActivity.onReplyReady = null
+                } catch (_: Exception) {
+                    activeBubbles.remove(convKey)
+                }
             }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
@@ -257,6 +274,19 @@ class ContextReplyBgService : NotificationListenerService() {
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             ?: return
+
+        // T2-C: When the accessibility service is active the user can reply inside the app
+        // via the overlay — suppress any pending or live bubble to avoid doubling up.
+        if (isAccessibilityEnabled()) {
+            val convKey = buildConversationKey(sbn.packageName, extras)
+            pendingJobs[convKey]?.cancel(false)
+            pendingJobs.remove(convKey)
+            arrivalBuffer.remove(convKey)
+            if (activeBubbles.remove(convKey)) {
+                val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            }
+        }
 
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
             .edit()
@@ -498,48 +528,49 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
-    private fun callWorker(message: String, thread: List<Pair<String?, String>>, enrichments: JSONObject = JSONObject()): WorkerResult? {
-        val url = URL("${BuildConfig.WORKER_URL}/suggest")
-        val conn = url.openConnection() as HttpURLConnection
-        return try {
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
+    private fun isAccessibilityEnabled(): Boolean {
+        val enabled = android.provider.Settings.Secure.getString(
+            contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabled.contains("$packageName/com.contextreply.app.ContextReplyAccessibilityService")
+    }
 
-            val styleProfile = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
-                .getString("style_profile", null)
-
-            val body = JSONObject().apply {
-                put("message", message)
-                if (thread.isNotEmpty()) {
-                    put("conversationThread", JSONArray().also { arr ->
-                        thread.forEach { (sender, text) ->
-                            arr.put(JSONObject().apply {
-                                if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
-                                put("text", text)
-                            })
-                        }
-                    })
-                }
-                if (styleProfile != null) put("styleContext", styleProfile)
-                if (enrichments.length() > 0) put("enrichments", enrichments)
-                put("intents", detectIntents(message).let { intents ->
-                    JSONArray().also { arr -> intents.forEach { arr.put(it) } }
-                })
-            }.toString()
-
-            conn.outputStream.bufferedWriter().use { it.write(body) }
-            if (conn.responseCode != 200) return null
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
-            val responseObj = JSONObject(response)
-            val replies = responseObj.optJSONObject("replies") ?: return null
-            val intent = responseObj.optString("intent").ifEmpty { null }
-            WorkerResult(replies, intent)
-        } finally {
-            conn.disconnect()
+    private fun postLoadingNotification(
+        notifId: Int,
+        convKey: String,
+        replyPendingIntent: PendingIntent,
+        remoteInputKey: String,
+        openChatIntent: PendingIntent?,
+        message: String,
+        detectedIntents: String,
+    ) {
+        ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
+            action = ACTION_DISMISS
+            putExtra(EXTRA_NOTIF_ID, notifId)
+            putExtra(EXTRA_CONV_KEY, convKey)
+            putExtra(EXTRA_REPLY_TEXT, "")
         }
+        val dismissPi = PendingIntent.getBroadcast(
+            this, notifId + 1, dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Drafting reply…")
+            .setContentText("Thinking…")
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup("contextreply_suggestions")
+        BubbleHelper.attach(
+            this, builder,
+            LOADING_PLACEHOLDER, null, null,
+            remoteInputKey, notifId, convKey, null,
+            openChatIntent, message, detectedIntents,
+            preferredToneForContact(convKey)
+        )
+        nm.notify(notifId, builder.build())
     }
 
     private fun preferredToneForContact(convKey: String): String? {
