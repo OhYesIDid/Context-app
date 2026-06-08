@@ -146,6 +146,34 @@ export default function App() {
     if (Platform.OS === 'android' && Platform.Version >= 33) {
       PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
     }
+    // Request location permissions for ETA features (background needed for NLS)
+    if (Platform.OS === 'android') {
+      (async () => {
+        try {
+          const bgKey = PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION;
+          const bgAlready = await PermissionsAndroid.check(bgKey);
+          if (!bgAlready) {
+            const fineAlready = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+            if (!fineAlready) {
+              await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
+                title: 'Location access',
+                message: 'Protxt uses your location to estimate your travel time when someone asks where you are.',
+                buttonPositive: 'Allow',
+                buttonNegative: 'Not now',
+              });
+            }
+            if (Platform.Version >= 29) {
+              await PermissionsAndroid.request(bgKey, {
+                title: 'Background location',
+                message: 'To estimate your ETA when a message arrives, Protxt needs location access even when the app is closed. Tap "Allow all the time" on the next screen.',
+                buttonPositive: 'Go to settings',
+                buttonNegative: 'Skip',
+              });
+            }
+          }
+        } catch {}
+      })();
+    }
     // Use native module for accurate NLS check (expo module returns true if any NLS is listed)
     if (Platform.OS === 'android' && ContextReplySettings) {
       ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});

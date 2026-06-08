@@ -11,6 +11,12 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def localPropertiesFile = rootProject.file("local.properties")
+def localProperties = new Properties()
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -104,8 +110,8 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "WORKER_URL", "\"https://contextreply-suggest.tommy-garnell.workers.dev\""
-        buildConfigField "String", "GOOGLE_MAPS_API_KEY", "\"${findProperty('GOOGLE_MAPS_API_KEY') ?: ''}\""
-        buildConfigField "String", "MAPS_DESTINATION", "\"${findProperty('MAPS_DESTINATION') ?: '51.5033,-0.0865'}\""
+        buildConfigField "String", "GOOGLE_MAPS_API_KEY", "\"${localProperties['GOOGLE_MAPS_API_KEY'] ?: ''}\""
+        buildConfigField "String", "MAPS_DESTINATION", "\"${localProperties['MAPS_DESTINATION'] ?: '51.5033,-0.0865'}\""
     }
     signingConfigs {
         debug {

@@ -195,7 +195,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
             workerPool.submit {
                 try {
-                    val etaData = if (isEtaIntent(latestMessage)) fetchEtaData() else null
+                    val etaData = if (isEtaIntent(latestMessage)) fetchEtaData(latestMessage) else null
                     val result = callWorker(latestMessage, fullThread, etaData) ?: return@submit
                     val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
@@ -269,14 +269,41 @@ class ContextReplyBgService : NotificationListenerService() {
         return patterns.any { it.containsMatchIn(message) }
     }
 
-    private fun getCurrentLocation(): Location? = lastLocation
+    private fun getCurrentLocation(): Location? {
+        if (lastLocation != null) return lastLocation
+        val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        return try {
+            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.FUSED_PROVIDER)
+                .mapNotNull { provider ->
+                    try { lm.getLastKnownLocation(provider) } catch (_: SecurityException) { null }
+                }
+                .maxByOrNull { it.time }
+        } catch (_: Exception) { null }
+    }
 
-    private fun fetchEtaData(): EtaData? {
-        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { return null }
-        val location = getCurrentLocation() ?: return null
-        val destination = BuildConfig.MAPS_DESTINATION
+    private fun extractDestination(message: String): String? {
+        val patterns = listOf(
+            // "how far are you from Tesco", "far from the office"
+            Regex("""(?:how far|far) (?:are you |is it )?from (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            // "are you near Tesco", "are you at Waterloo"
+            Regex("""(?:near|at|by|outside|around) (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            // "distance from Tesco"
+            Regex("""distance (?:from|to) (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+        )
+        return patterns.firstNotNullOfOrNull { re ->
+            re.find(message)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length > 1 }
+        }
+    }
+
+    private fun fetchEtaData(message: String): EtaData? {
+        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { android.util.Log.w("ContextReply", "ETA: no API key"); return null }
+        val location = getCurrentLocation()
+        if (location == null) { android.util.Log.w("ContextReply", "ETA: no location cached yet"); return null }
+        val destination = extractDestination(message)
+        if (destination == null) { android.util.Log.w("ContextReply", "ETA: no destination in message: $message"); return null }
         val origin = "${location.latitude},${location.longitude}"
-        val params = "origin=$origin&destination=$destination&departure_time=now&key=$apiKey"
+        android.util.Log.d("ContextReply", "ETA: origin=$origin destination=$destination")
+        val params = "origin=${encode(origin)}&destination=${encode(destination)}&departure_time=now&key=$apiKey"
         return try {
             val conn = URL("https://maps.googleapis.com/maps/api/directions/json?$params")
                 .openConnection() as HttpURLConnection
@@ -285,15 +312,20 @@ class ContextReplyBgService : NotificationListenerService() {
             val json = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
             val obj = JSONObject(json)
-            if (obj.optString("status") != "OK") return null
+            val status = obj.optString("status")
+            android.util.Log.d("ContextReply", "ETA: Maps status=$status")
+            if (status != "OK") return null
             val leg = obj.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0)
             val duration = (leg.optJSONObject("duration_in_traffic") ?: leg.getJSONObject("duration"))
                 .getString("text")
             val distance = leg.getJSONObject("distance").getString("text")
             val route = obj.getJSONArray("routes").getJSONObject(0).optString("summary", "")
+            android.util.Log.d("ContextReply", "ETA: $duration / $distance via $route")
             EtaData(duration, distance, route)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { android.util.Log.e("ContextReply", "ETA: exception: ${e.message}"); null }
     }
+
+    private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
     private fun callWorker(message: String, thread: List<Pair<String?, String>>, etaData: EtaData? = null): WorkerResult? {
         val url = URL("${BuildConfig.WORKER_URL}/suggest")
