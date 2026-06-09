@@ -271,25 +271,30 @@ class ContextReplyBgService : NotificationListenerService() {
                         activeBubbles.remove(convKey)
                         return@submit
                     }
-                    // Route to bubble unless the user is currently in the messaging app,
-                    // in which case the IME overlay picks it up via the onSuggestionReady callback.
                     val nowInApp = ContextReplyAccessibilityService.activePackage == packageName
-                    if (!nowInApp) {
+                    // If we posted a loading bubble (!userInApp), we must always update it
+                    // with the real reply — even if the user entered the app while the worker
+                    // was running. Skipping postSuggestionNotification leaves the bubble
+                    // stuck on the loading placeholder and the activity blank.
+                    // If the user left the app after an in-app debounce (userInApp && !nowInApp),
+                    // post a fresh bubble so the suggestion isn't silently dropped.
+                    if (!userInApp || !nowInApp) {
                         postSuggestionNotification(
                             primary, formal, brief,
                             replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
                             openChatIntent, latestMessage, detectedIntentsStr
                         )
-                    } else {
-                        // Save to SharedPrefs so the overlay can read the suggestion
+                    }
+                    if (nowInApp) {
+                        // Also cache for the overlay when user is currently in the app
                         cacheSuggestion(packageName, convKey, primary, formal, brief)
                     }
                     // Notify the IME overlay — shows/refreshes strip if the app is in focus
-                    android.util.Log.e("ContextReply", "worker done nowInApp=$nowInApp pkg=$packageName onSuggestionReady=${ContextReplyAccessibilityService.onSuggestionReady != null}")
                     ContextReplyAccessibilityService.onSuggestionReady?.invoke(packageName)
-                    // Update the Activity if it's already open showing the loading state
+                    // Update the Activity if it's already open showing the loading state.
+                    // The Activity nulls onReplyReady itself in its callback; we don't null
+                    // it here to avoid a race where we null it before the Activity registers.
                     BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief)
-                    BubbleSuggestionActivity.onReplyReady = null
                 } catch (_: Exception) {
                     activeBubbles.remove(convKey)
                 }
@@ -453,6 +458,8 @@ class ContextReplyBgService : NotificationListenerService() {
         val qParam = if (q != null) "&q=${URLEncoder.encode(q, "UTF-8")}" else ""
         val conn = URL("https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=$timeMin&timeMax=$timeMax&singleEvents=true&orderBy=startTime&maxResults=$maxResults$qParam")
             .openConnection() as HttpURLConnection
+        conn.connectTimeout = 8_000
+        conn.readTimeout = 8_000
         conn.setRequestProperty("Authorization", "Bearer $token")
         return try {
             JSONObject(conn.inputStream.bufferedReader().readText()).optJSONArray("items") ?: JSONArray()

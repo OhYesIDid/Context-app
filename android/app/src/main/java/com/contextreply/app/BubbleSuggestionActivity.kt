@@ -332,7 +332,9 @@ class BubbleSuggestionActivity : Activity() {
                 textSize = 14f
                 setPadding(0, 0, dp(20), 0)
                 setOnClickListener {
-                    sendAction(ContextReplyBgService.ACTION_DISMISS, casualText, null, notifId, convKey, null)
+                    // Use the current (possibly updated) casual text, never the loading placeholder
+                    val dismissText = textMap["casual"]?.takeIf { it.isNotEmpty() } ?: ""
+                    sendAction(ContextReplyBgService.ACTION_DISMISS, dismissText, null, notifId, convKey, null)
                     finish()
                 }
             })
@@ -341,21 +343,20 @@ class BubbleSuggestionActivity : Activity() {
             addView(sendBtn)
         })
 
-        // If loading, register for the reply-ready callback from BgService
-        if (isLoading) {
-            onReplyReady = { casual, formal, brief ->
-                runOnUiThread {
-                    onReplyReady = null
-                    textMap["casual"] = casual
-                    if (formal != null) textMap["formal"] = formal
-                    if (brief  != null) textMap["brief"]  = brief
-                    replyEdit.setText(casual)
-                    replyEdit.setTextColor(TEXT)
-                    replyEdit.isEnabled = true
-                    sendBtn.isEnabled = true
-                    sendBtn.setTextColor(PURPLE)
-                    regenBtn.isEnabled = true
-                }
+        // Register for the reply-ready callback from BgService unconditionally —
+        // the worker may complete after onCreate if the bubble was tapped early.
+        onReplyReady = { casual, formal, brief ->
+            runOnUiThread {
+                onReplyReady = null
+                textMap["casual"] = casual
+                if (formal != null) textMap["formal"] = formal
+                if (brief  != null) textMap["brief"]  = brief
+                replyEdit.setText(casual)
+                replyEdit.setTextColor(TEXT)
+                replyEdit.isEnabled = true
+                sendBtn.isEnabled = true
+                sendBtn.setTextColor(PURPLE)
+                regenBtn.isEnabled = true
             }
         }
 
@@ -388,7 +389,7 @@ class BubbleSuggestionActivity : Activity() {
         val enabled = Settings.Secure.getString(
             contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabled.contains("com.contextreply.app/com.contextreply.app.ContextReplyAccessibilityService")
+        return enabled.contains("${packageName}/com.contextreply.app.ContextReplyAccessibilityService")
     }
 
     private fun sendAction(

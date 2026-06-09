@@ -128,7 +128,7 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
 // ── Prompt building ───────────────────────────────────────────────────────────
 
 const MODEL = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 512;
+const MAX_TOKENS = 900;
 
 const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of the user. Rules:
 - Never say "I" as if you are the assistant; speak as the user

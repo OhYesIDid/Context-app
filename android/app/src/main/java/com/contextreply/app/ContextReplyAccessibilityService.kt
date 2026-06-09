@@ -8,6 +8,8 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -36,6 +38,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // Tone state for the currently shown overlay
     private var tones = mapOf<String, String>()   // key → text
@@ -45,10 +48,8 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         onSuggestionReady = { pkg ->
-            android.util.Log.e("ContextReply", "onSuggestionReady pkg=$pkg activePackage=$activePackage")
-            if (activePackage == pkg) maybeShowOverlay(pkg)
+            if (activePackage == pkg) mainHandler.post { maybeShowOverlay(pkg) }
         }
-        android.util.Log.e("ContextReply", "A11y service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -57,11 +58,12 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
-                    activePackage = pkg
-                    // User navigated within the app — clear cached suggestion so the
-                    // next conversation doesn't see a stale reply from a different chat.
-                    // The overlay re-shows when the reply field gets focus (TYPE_VIEW_FOCUSED)
-                    // and a fresh suggestion exists (written by onSuggestionReady).
+                    // Clear cached suggestion on any in-app navigation so the next
+                    // conversation doesn't inherit a stale reply from a different chat.
+                    // Do NOT set activePackage here — TYPE_WINDOW_STATE_CHANGED fires
+                    // for background WhatsApp events (sync, etc.) that don't mean the
+                    // user is in the app. activePackage is set only in TYPE_VIEW_FOCUSED
+                    // when an editable field is focused (keyboard is up).
                     clearSuggestionPrefs(pkg)
                     dismissOverlay()
                 }
@@ -109,12 +111,8 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     private fun maybeShowOverlay(packageName: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
-            ?: run {
-                android.util.Log.e("ContextReply", "maybeShowOverlay: no suggestion cached for $packageName")
-                return
-            }
+            ?: return
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
-        android.util.Log.e("ContextReply", "maybeShowOverlay: age=${age}ms suggestion=${casual.take(40)}")
         if (age > MAX_AGE_MS) return
 
         val formal = prefs.getString("last_suggestion_formal_$packageName", null)?.takeIf { it.isNotEmpty() }
@@ -211,7 +209,9 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 setTypeface(null, Typeface.BOLD)
                 setPadding(dp(16), 0, dp(16), 0)
                 setOnClickListener {
-                    injectText(tones[selectedTone] ?: return@setOnClickListener)
+                    val replyText = tones[selectedTone] ?: return@setOnClickListener
+                    injectText(replyText)
+                    recordOverlaySend(packageName, replyText, selectedTone)
                     clearAndDismiss(packageName)
                 }
             })
@@ -221,7 +221,11 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 text = "Dismiss"
                 setTextColor(MUTED)
                 textSize = 14f
-                setOnClickListener { clearAndDismiss(packageName) }
+                setOnClickListener {
+                    val suggestion = tones["casual"] ?: tones[selectedTone] ?: ""
+                    recordOverlayDismiss(packageName, suggestion)
+                    clearAndDismiss(packageName)
+                }
             })
         })
 
@@ -276,23 +280,44 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         @Suppress("DEPRECATION") focused.recycle()
     }
 
+    private fun recordOverlaySend(packageName: String, replyText: String, tone: String) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return
+        val casual  = prefs.getString("last_suggestion_$packageName", null) ?: return
+        StyleEditQueue.enqueue(this, casual, replyText, convKey, tone)
+        ContactMemory.saveLastSent(this, convKey, replyText)
+        NotificationStore.getInstance(this).markReplied(convKey)
+    }
+
+    private fun recordOverlayDismiss(packageName: String, suggestion: String) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return
+        if (suggestion.isNotEmpty()) {
+            StyleEditQueue.enqueue(this, suggestion, "", convKey, "dismissed")
+        }
+        ContactMemory.clearLastSent(this, convKey)
+    }
+
     private fun clearSuggestionPrefs(packageName: String) {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null)
+        prefs.edit()
             .remove("last_suggestion_$packageName")
             .remove("last_suggestion_formal_$packageName")
             .remove("last_suggestion_brief_$packageName")
             .remove("last_suggestion_ts_$packageName")
             .remove("last_suggestion_conv_$packageName")
             .apply()
-    }
-
-    private fun clearAndDismiss(packageName: String) {
-        val convKey = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString("last_suggestion_conv_$packageName", null)
-        clearSuggestionPrefs(packageName)
+        // Clear activeBubbles so the next message triggers a fresh suggestion cycle.
+        // Without this, activeBubbles.contains(convKey) stays true after navigation
+        // and the debounce callback exits early, producing no bubble or overlay.
         if (convKey != null) {
             ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
         }
+    }
+
+    private fun clearAndDismiss(packageName: String) {
+        clearSuggestionPrefs(packageName)
         dismissOverlay()
     }
 
