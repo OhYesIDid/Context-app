@@ -58,13 +58,14 @@ class ContextReplyAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
                     activePackage = pkg
-                    // User navigated within or into the app — dismiss stale overlay.
-                    // It re-shows when the reply field gets focus (TYPE_VIEW_FOCUSED).
-                    dismissOverlay()
-                } else if (activePackage != null) {
-                    activePackage = null
+                    // User navigated within the app — clear cached suggestion so the
+                    // next conversation doesn't see a stale reply from a different chat.
+                    // The overlay re-shows when the reply field gets focus (TYPE_VIEW_FOCUSED)
+                    // and a fresh suggestion exists (written by onSuggestionReady).
+                    clearSuggestionPrefs(pkg)
                     dismissOverlay()
                 }
+                // Ignore IME/system packages — TYPE_WINDOWS_CHANGED handles "left the app".
             }
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                 if (activePackage == null) return
@@ -275,16 +276,20 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         @Suppress("DEPRECATION") focused.recycle()
     }
 
-    private fun clearAndDismiss(packageName: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val convKey = prefs.getString("last_suggestion_conv_$packageName", null)
-        prefs.edit()
+    private fun clearSuggestionPrefs(packageName: String) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .remove("last_suggestion_$packageName")
             .remove("last_suggestion_formal_$packageName")
             .remove("last_suggestion_brief_$packageName")
             .remove("last_suggestion_ts_$packageName")
             .remove("last_suggestion_conv_$packageName")
             .apply()
+    }
+
+    private fun clearAndDismiss(packageName: String) {
+        val convKey = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("last_suggestion_conv_$packageName", null)
+        clearSuggestionPrefs(packageName)
         if (convKey != null) {
             ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
         }
