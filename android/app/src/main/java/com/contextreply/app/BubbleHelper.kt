@@ -3,12 +3,17 @@ package com.contextreply.app
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Attaches BubbleMetadata + MessagingStyle to an existing notification builder.
@@ -76,7 +81,7 @@ object BubbleHelper {
         builder.setBubbleMetadata(
             NotificationCompat.BubbleMetadata.Builder(
                 bubblePi,
-                IconCompat.createWithResource(context, R.mipmap.ic_launcher)
+                bubbleIcon(context)
             )
             .setDesiredHeight(420)
             .setAutoExpandBubble(false)
@@ -97,5 +102,28 @@ object BubbleHelper {
                 )
         )
         builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
+    }
+
+    // Android 12+ (API 31) requires bubble icons to be TYPE_URI or TYPE_URI_ADAPTIVE_BITMAP;
+    // resource icons are silently ignored and the notification falls back to heads-up.
+    private fun bubbleIcon(context: Context): IconCompat {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
+        return try {
+            val iconFile = File(context.cacheDir, "cr_bubble_icon.png")
+            if (!iconFile.exists() || iconFile.length() == 0L) {
+                val drawable = context.packageManager.getApplicationIcon(context.packageName)
+                val bm = (drawable as? BitmapDrawable)?.bitmap
+                    ?: Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                FileOutputStream(iconFile).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            }
+            val uri = FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", iconFile
+            )
+            IconCompat.createWithAdaptiveBitmapContentUri(uri)
+        } catch (_: Exception) {
+            IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
     }
 }
