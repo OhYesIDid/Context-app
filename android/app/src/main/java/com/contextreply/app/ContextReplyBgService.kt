@@ -153,6 +153,12 @@ class ContextReplyBgService : NotificationListenerService() {
 
         if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "notif from ${sbn.packageName} cat=${notification.category} actions=${notification.actions?.size ?: 0}")
 
+        // Gate 0: skip group-summary notifications — WhatsApp/Telegram post one real
+        // per-conversation notification (tagged with JID hash) and one summary notification
+        // (FLAG_GROUP_SUMMARY, untagged). Both can pass subsequent gates but with different
+        // titles → different convKeys → duplicate bubbles. Only process the real one.
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+
         // Gate 1: messaging category only
         if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) {
             if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "filtered: wrong category ${notification.category}")
@@ -190,7 +196,7 @@ class ContextReplyBgService : NotificationListenerService() {
         val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
         if (isGroup && shouldSkipGroupMessages()) return
 
-        val convKey = buildConversationKey(sbn.packageName, extras)
+        val convKey = buildConversationKey(sbn, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
 
         // Track each notification's text so the debounce callback sees the full burst
@@ -294,7 +300,7 @@ class ContextReplyBgService : NotificationListenerService() {
         // T2-C: When the accessibility service is active the user can reply inside the app
         // via the overlay — suppress any pending or live bubble to avoid doubling up.
         if (isAccessibilityEnabled()) {
-            val convKey = buildConversationKey(sbn.packageName, extras)
+            val convKey = buildConversationKey(sbn, extras)
             pendingJobs[convKey]?.cancel(false)
             pendingJobs.remove(convKey)
             arrivalBuffer.remove(convKey)
@@ -310,10 +316,21 @@ class ContextReplyBgService : NotificationListenerService() {
             .apply()
     }
 
-    private fun buildConversationKey(packageName: String, extras: Bundle): String {
+    private fun buildConversationKey(sbn: StatusBarNotification, extras: Bundle): String {
+        val packageName = sbn.packageName
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        return "$packageName:${conversationTitle ?: title ?: "unknown"}"
+        val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+        // For group chats without an explicit conversation title (e.g. Telegram groups use
+        // sender name as EXTRA_TITLE rather than group name), fall back to the notification
+        // ID which is stable per-conversation in WhatsApp, Telegram, and Messenger.
+        val key = when {
+            conversationTitle != null -> conversationTitle
+            isGroup -> "group:${sbn.id}"
+            else -> title ?: "unknown"
+        }
+        if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "convKey=$packageName:$key  isGroup=$isGroup  title=$title  convTitle=$conversationTitle  sbnId=${sbn.id}")
+        return "$packageName:$key"
     }
 
     private fun shouldSkipGroupMessages(): Boolean =
