@@ -224,6 +224,9 @@ class ContextReplyBgService : NotificationListenerService() {
         // reschedule. A burst of messages waits for the last one to settle.
         val packageName = sbn.packageName
         pendingJobs[convKey]?.cancel(false)
+        // A new message in the same conversation supersedes any existing suggestion —
+        // clear the active state so the fresh debounce generates a new one.
+        activeBubbles.remove(convKey)
         pendingJobs[convKey] = scheduler.schedule({
             pendingJobs.remove(convKey)
             val fullThread = store.getThread(convKey)
