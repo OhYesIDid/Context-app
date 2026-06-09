@@ -3,12 +3,16 @@ package com.contextreply.app
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
 data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?)
 
 object WorkerClient {
+
+    private const val MAX_RETRIES = 2
+    private const val RETRY_DELAY_MS = 1_000L
 
     fun call(
         context: Context,
@@ -19,39 +23,69 @@ object WorkerClient {
         contactMemory: String? = null,
         lastSentReply: String? = null,
     ): WorkerResult? {
+        val styleProfile = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .getString("style_profile", null)
+
+        val body = JSONObject().apply {
+            put("message", message)
+            if (thread.isNotEmpty()) {
+                put("conversationThread", JSONArray().also { arr ->
+                    thread.forEach { (sender, text) ->
+                        arr.put(JSONObject().apply {
+                            if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
+                            put("text", text)
+                        })
+                    }
+                })
+            }
+            if (styleProfile != null) put("styleContext", styleProfile)
+            if (enrichments.length() > 0) put("enrichments", enrichments)
+            if (regenerate) put("regenerate", true)
+            if (contactMemory != null) put("contactMemory", contactMemory)
+            if (lastSentReply != null) put("lastSentReply", lastSentReply)
+        }.toString()
+
+        var lastException: Exception? = null
+        for (attempt in 0..MAX_RETRIES) {
+            if (attempt > 0) Thread.sleep(RETRY_DELAY_MS)
+            try {
+                val result = attempt(body)
+                if (result != null) return result
+                // null means a 4xx — don't retry
+                return null
+            } catch (e: IOException) {
+                lastException = e
+                // retry on network errors
+            } catch (e: RetryableException) {
+                lastException = e
+                // retry on 5xx
+            }
+        }
+        if (BuildConfig.DEBUG) android.util.Log.w("WorkerClient", "all retries exhausted: ${lastException?.message}")
+        return null
+    }
+
+    private class RetryableException(message: String) : Exception(message)
+
+    private fun attempt(body: String): WorkerResult? {
         val conn = URL("${BuildConfig.WORKER_URL}/suggest").openConnection() as HttpURLConnection
         return try {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("X-App-Secret", BuildConfig.WORKER_SECRET)
             conn.doOutput = true
             conn.connectTimeout = 15_000
             conn.readTimeout = 15_000
 
-            val styleProfile = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
-                .getString("style_profile", null)
-
-            val body = JSONObject().apply {
-                put("message", message)
-                if (thread.isNotEmpty()) {
-                    put("conversationThread", JSONArray().also { arr ->
-                        thread.forEach { (sender, text) ->
-                            arr.put(JSONObject().apply {
-                                if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
-                                put("text", text)
-                            })
-                        }
-                    })
-                }
-                if (styleProfile != null) put("styleContext", styleProfile)
-                if (enrichments.length() > 0) put("enrichments", enrichments)
-                if (regenerate) put("regenerate", true)
-                if (contactMemory != null) put("contactMemory", contactMemory)
-                if (lastSentReply != null) put("lastSentReply", lastSentReply)
-            }.toString()
-
             conn.outputStream.bufferedWriter().use { it.write(body) }
-            if (conn.responseCode != 200) {
-                conn.errorStream?.use { it.readBytes() }  // drain so the connection can be reused
+
+            val code = conn.responseCode
+            if (code >= 500) {
+                conn.errorStream?.use { it.readBytes() }
+                throw RetryableException("HTTP $code")
+            }
+            if (code != 200) {
+                conn.errorStream?.use { it.readBytes() }
                 return null
             }
             val response = conn.inputStream.bufferedReader().use { it.readText() }

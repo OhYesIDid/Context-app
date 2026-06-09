@@ -54,7 +54,7 @@ class NotificationStore private constructor(context: Context) {
         prefs.edit().remove(storeKey(convKey)).apply()
     }
 
-    private fun storeKey(convKey: String) = "conv_${convKey.hashCode()}"
+    private fun storeKey(convKey: String) = "conv_${convKey.replace(Regex("[^a-zA-Z0-9_:.-]"), "_").take(200)}"
 
     private fun load(key: String): JSONArray =
         try { JSONArray(prefs.getString(key, "[]") ?: "[]") } catch (_: Exception) { JSONArray() }

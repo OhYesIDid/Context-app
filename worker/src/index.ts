@@ -1,5 +1,6 @@
 export interface Env {
   CLAUDE_API_KEY: string;
+  WORKER_SECRET: string;
 }
 
 interface CalendarEvent {
@@ -185,7 +186,7 @@ function parseReplies(raw: string): ReplyOptions {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-App-Secret',
 };
 
 export default {
@@ -195,6 +196,12 @@ export default {
     }
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 });
+    }
+
+    if (env.WORKER_SECRET && request.headers.get('X-App-Secret') !== env.WORKER_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
     }
 
     let body: SuggestRequest;

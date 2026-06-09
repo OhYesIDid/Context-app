@@ -112,6 +112,7 @@ android {
         buildConfigField "String", "WORKER_URL", "\"https://contextreply-suggest.tommy-garnell.workers.dev\""
         buildConfigField "String", "GOOGLE_MAPS_API_KEY", "\"${localProperties['GOOGLE_MAPS_API_KEY'] ?: ''}\""
         buildConfigField "String", "MAPS_DESTINATION", "\"${localProperties['MAPS_DESTINATION'] ?: '51.5033,-0.0865'}\""
+        buildConfigField "String", "WORKER_SECRET", "\"${localProperties['WORKER_SECRET'] ?: ''}\""
     }
     signingConfigs {
         debug {

@@ -313,10 +313,16 @@ class ContextReplyBgService : NotificationListenerService() {
         // inside the app via the IME overlay. Cancel any visible bubble notification, but
         // let the pending worker job continue — it will route the result to the overlay
         // instead of posting a new bubble.
+        // Guard: only act if we have a live bubble or pending job for this conversation.
+        // REASON_APP_CANCEL fires for every notification the app silently dismisses
+        // (e.g. read receipts, group summaries) — without this guard we'd cancel bubbles
+        // for conversations we never processed.
         if (isAccessibilityEnabled()) {
             val convKey = buildConversationKey(sbn, extras)
-            val notifId = convKey.hashCode().and(0x7FFFFFFF)
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            if (activeBubbles.contains(convKey) || pendingJobs.containsKey(convKey)) {
+                val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            }
         }
     }
 

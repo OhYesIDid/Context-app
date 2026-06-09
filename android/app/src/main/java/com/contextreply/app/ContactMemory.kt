@@ -37,6 +37,7 @@ object ContactMemory {
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private fun memKey(convKey: String) = "mem_${convKey.hashCode()}"
-    private fun sentKey(convKey: String) = "sent_${convKey.hashCode()}"
+    private fun sanitize(convKey: String) = convKey.replace(Regex("[^a-zA-Z0-9_:.-]"), "_").take(200)
+    private fun memKey(convKey: String) = "mem_${sanitize(convKey)}"
+    private fun sentKey(convKey: String) = "sent_${sanitize(convKey)}"
 }
