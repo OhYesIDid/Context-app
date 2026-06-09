@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class WorkerResult(val replies: JSONObject, val intent: String?)
+data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?)
 
 object WorkerClient {
 
@@ -16,6 +16,8 @@ object WorkerClient {
         thread: List<Pair<String?, String>>,
         enrichments: JSONObject = JSONObject(),
         regenerate: Boolean = false,
+        contactMemory: String? = null,
+        lastSentReply: String? = null,
     ): WorkerResult? {
         val conn = URL("${BuildConfig.WORKER_URL}/suggest").openConnection() as HttpURLConnection
         return try {
@@ -43,6 +45,8 @@ object WorkerClient {
                 if (styleProfile != null) put("styleContext", styleProfile)
                 if (enrichments.length() > 0) put("enrichments", enrichments)
                 if (regenerate) put("regenerate", true)
+                if (contactMemory != null) put("contactMemory", contactMemory)
+                if (lastSentReply != null) put("lastSentReply", lastSentReply)
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }
@@ -51,7 +55,8 @@ object WorkerClient {
             val obj = JSONObject(response)
             val replies = obj.optJSONObject("replies") ?: return null
             val intent = obj.optString("intent").ifEmpty { null }
-            WorkerResult(replies, intent)
+            val contextUpdate = obj.optString("contextUpdate").ifEmpty { null }
+            WorkerResult(replies, intent, contextUpdate)
         } finally {
             conn.disconnect()
         }

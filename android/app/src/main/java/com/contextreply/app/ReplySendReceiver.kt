@@ -65,6 +65,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         }
 
         if (intent.action == ContextReplyBgService.ACTION_DISMISS) {
+            if (convKey != null) ContactMemory.clearLastSent(context, convKey)
             val original = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
             if (original != null && convKey != null) {
                 StyleEditQueue.enqueue(context, original, "", convKey, "dismissed")
@@ -88,6 +89,12 @@ class ReplySendReceiver : BroadcastReceiver() {
         // Sprint 3 will bridge this SharedPreferences queue into the SQLite style_edits table.
         if (originalSuggestion != null && convKey != null) {
             StyleEditQueue.enqueue(context, originalSuggestion, replyText, convKey, intentType)
+        }
+
+        // Persist the outgoing reply so the next worker call for this contact knows
+        // what was last said (included in the prompt as "Your last reply to them was: …")
+        if (convKey != null) {
+            ContactMemory.saveLastSent(context, convKey, replyText)
         }
 
         val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)

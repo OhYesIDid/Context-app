@@ -151,13 +151,21 @@ class ContextReplyBgService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
+        if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "notif from ${sbn.packageName} cat=${notification.category} actions=${notification.actions?.size ?: 0}")
+
         // Gate 1: messaging category only
-        if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) return
+        if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) {
+            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "filtered: wrong category ${notification.category}")
+            return
+        }
 
         // Gate 2: must have an inline-reply action
         val replyAction = notification.actions?.firstOrNull { action ->
             action?.remoteInputs?.isNotEmpty() == true
-        } ?: return
+        } ?: run {
+            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "filtered: no reply action")
+            return
+        }
 
         val remoteInputKey = replyAction.remoteInputs?.firstOrNull()?.resultKey ?: return
         val replyPendingIntent = replyAction.actionIntent ?: return
@@ -230,13 +238,21 @@ class ContextReplyBgService : NotificationListenerService() {
             // BubbleSuggestionActivity shows a "Drafting…" state until the real reply arrives.
             activeBubbles.add(convKey)
             postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
+            val contactMemory = ContactMemory.getMemory(this, convKey)
+            val lastSent = ContactMemory.getLastSent(this, convKey)
             workerPool.submit {
                 try {
                     val enrichments = buildEnrichments(latestMessage)
-                    val result = WorkerClient.call(this, latestMessage, fullThread, enrichments) ?: run {
+                    val result = WorkerClient.call(
+                        this, latestMessage, fullThread, enrichments,
+                        contactMemory = contactMemory,
+                        lastSentReply = lastSent,
+                    ) ?: run {
                         activeBubbles.remove(convKey)
                         return@submit
                     }
+                    // Persist context update for future conversations with this contact
+                    result.contextUpdate?.let { ContactMemory.saveMemory(this, convKey, it) }
                     // User may have dismissed the loading bubble — don't post a stale result
                     if (!activeBubbles.contains(convKey)) return@submit
                     val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
@@ -664,11 +680,10 @@ class ContextReplyBgService : NotificationListenerService() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Delete before recreating — Android ignores setAllowBubbles() on channel
-            // updates, so recreating on each service start is the only reliable way to
-            // ensure mAllowBubbles=1. Suggestion notifications are transient, so data loss
-            // from the delete is acceptable.
-            nm.deleteNotificationChannel(CHANNEL_ID)
+            // Only create if the channel doesn't exist — deleting and recreating resets
+            // the user's bubble permission on OEM devices (OPPO, Samsung, etc.), which
+            // is why we preserve the existing channel when present.
+            if (nm.getNotificationChannel(CHANNEL_ID) != null) return
             val channel = NotificationChannel(
                 CHANNEL_ID, "Reply Suggestions", NotificationManager.IMPORTANCE_HIGH
             ).apply {
