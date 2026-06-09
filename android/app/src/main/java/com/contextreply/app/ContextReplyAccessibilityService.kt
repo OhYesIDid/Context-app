@@ -23,12 +23,19 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     companion object {
         private const val PREFS_NAME = "contextreply_prefs"
         private const val MAX_AGE_MS = 5 * 60 * 1000L
+
+        // Set to the foreground messaging package while user is in the app.
+        // Read by ContextReplyBgService to skip the bubble and route to the overlay instead.
+        @Volatile var activePackage: String? = null
+
+        // Invoked by ContextReplyBgService (on the worker thread) when a suggestion is ready.
+        // The accessibility service registers this in onServiceConnected and clears it on destroy.
+        @Volatile var onSuggestionReady: ((pkg: String) -> Unit)? = null
     }
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
-    private var activePackage: String? = null
 
     // Tone state for the currently shown overlay
     private var tones = mapOf<String, String>()   // key → text
@@ -37,6 +44,11 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        onSuggestionReady = { pkg ->
+            android.util.Log.e("ContextReply", "onSuggestionReady pkg=$pkg activePackage=$activePackage")
+            if (activePackage == pkg) maybeShowOverlay(pkg)
+        }
+        android.util.Log.e("ContextReply", "A11y service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -44,9 +56,14 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg in ContextReplyBgService.TARGET_PACKAGES && activePackage != pkg) {
+                if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
                     activePackage = pkg
-                    maybeShowOverlay(pkg)
+                    // User navigated within or into the app — dismiss stale overlay.
+                    // It re-shows when the reply field gets focus (TYPE_VIEW_FOCUSED).
+                    dismissOverlay()
+                } else if (activePackage != null) {
+                    activePackage = null
+                    dismissOverlay()
                 }
             }
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
@@ -62,7 +79,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                     activePackage = null
                     dismissOverlay()
                 } else if (overlayView != null) {
-                    // Keyboard may have just appeared/resized — update overlay Y
+                    // Keyboard may have appeared/resized — update overlay Y position
                     updateOverlayPosition()
                 }
             }
@@ -91,8 +108,12 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     private fun maybeShowOverlay(packageName: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
-            ?: return
+            ?: run {
+                android.util.Log.e("ContextReply", "maybeShowOverlay: no suggestion cached for $packageName")
+                return
+            }
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
+        android.util.Log.e("ContextReply", "maybeShowOverlay: age=${age}ms suggestion=${casual.take(40)}")
         if (age > MAX_AGE_MS) return
 
         val formal = prefs.getString("last_suggestion_formal_$packageName", null)?.takeIf { it.isNotEmpty() }
@@ -255,13 +276,18 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     }
 
     private fun clearAndDismiss(packageName: String) {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null)
+        prefs.edit()
             .remove("last_suggestion_$packageName")
             .remove("last_suggestion_formal_$packageName")
             .remove("last_suggestion_brief_$packageName")
             .remove("last_suggestion_ts_$packageName")
             .remove("last_suggestion_conv_$packageName")
             .apply()
+        if (convKey != null) {
+            ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
+        }
         dismissOverlay()
     }
 
@@ -284,6 +310,8 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        onSuggestionReady = null
+        activePackage = null
         dismissOverlay()
     }
 }

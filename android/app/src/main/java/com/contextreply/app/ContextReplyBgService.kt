@@ -240,10 +240,13 @@ class ContextReplyBgService : NotificationListenerService() {
 
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
-            // Post a loading placeholder immediately so the bubble appears at debounce time.
-            // BubbleSuggestionActivity shows a "Drafting…" state until the real reply arrives.
             activeBubbles.add(convKey)
-            postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
+            // Only show loading bubble when the user is not already in the messaging app.
+            // When they are in the app, the IME overlay handles the suggestion instead.
+            val userInApp = ContextReplyAccessibilityService.activePackage == packageName
+            if (!userInApp) {
+                postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
+            }
             val contactMemory = ContactMemory.getMemory(this, convKey)
             val lastSent = ContactMemory.getLastSent(this, convKey)
             workerPool.submit {
@@ -268,11 +271,22 @@ class ContextReplyBgService : NotificationListenerService() {
                         activeBubbles.remove(convKey)
                         return@submit
                     }
-                    postSuggestionNotification(
-                        primary, formal, brief,
-                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                        openChatIntent, latestMessage, detectedIntentsStr
-                    )
+                    // Route to bubble unless the user is currently in the messaging app,
+                    // in which case the IME overlay picks it up via the onSuggestionReady callback.
+                    val nowInApp = ContextReplyAccessibilityService.activePackage == packageName
+                    if (!nowInApp) {
+                        postSuggestionNotification(
+                            primary, formal, brief,
+                            replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
+                            openChatIntent, latestMessage, detectedIntentsStr
+                        )
+                    } else {
+                        // Save to SharedPrefs so the overlay can read the suggestion
+                        cacheSuggestion(packageName, convKey, primary, formal, brief)
+                    }
+                    // Notify the IME overlay — shows/refreshes strip if the app is in focus
+                    android.util.Log.e("ContextReply", "worker done nowInApp=$nowInApp pkg=$packageName onSuggestionReady=${ContextReplyAccessibilityService.onSuggestionReady != null}")
+                    ContextReplyAccessibilityService.onSuggestionReady?.invoke(packageName)
                     // Update the Activity if it's already open showing the loading state
                     BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief)
                     BubbleSuggestionActivity.onReplyReady = null
@@ -297,17 +311,16 @@ class ContextReplyBgService : NotificationListenerService() {
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             ?: return
 
-        // T2-C: When the accessibility service is active the user can reply inside the app
-        // via the overlay — suppress any pending or live bubble to avoid doubling up.
+        // T2-C: When the accessibility service is active the user is likely about to reply
+        // inside the app via the IME overlay. Cancel any visible bubble notification, but
+        // let the pending worker job continue — it will route the result to the overlay
+        // instead of posting a new bubble.
         if (isAccessibilityEnabled()) {
             val convKey = buildConversationKey(sbn, extras)
-            pendingJobs[convKey]?.cancel(false)
-            pendingJobs.remove(convKey)
-            arrivalBuffer.remove(convKey)
-            if (activeBubbles.remove(convKey)) {
-                val notifId = convKey.hashCode().and(0x7FFFFFFF)
-                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-            }
+            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            // Keep activeBubbles entry so the in-flight worker still posts its result
+            // (postSuggestionNotification checks activePackage and skips the bubble).
         }
 
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
@@ -684,6 +697,16 @@ class ContextReplyBgService : NotificationListenerService() {
 
         nm.notify(notifId, builder.build()
         )
+    }
+
+    private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?) {
+        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+            .putString("last_suggestion_$packageName", casual)
+            .putString("last_suggestion_formal_$packageName", formal ?: "")
+            .putString("last_suggestion_brief_$packageName", brief ?: "")
+            .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
+            .putString("last_suggestion_conv_$packageName", convKey)
+            .apply()
     }
 
     private fun isAppInForeground(): Boolean {
