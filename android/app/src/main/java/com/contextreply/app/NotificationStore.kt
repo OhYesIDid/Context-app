@@ -21,6 +21,7 @@ class NotificationStore private constructor(context: Context) {
     fun isEmpty(convKey: String): Boolean =
         prefs.getString(storeKey(convKey), null) == null
 
+    @Synchronized
     fun appendMessage(convKey: String, sender: String?, text: String) {
         val key = storeKey(convKey)
         val arr = load(key)

@@ -295,11 +295,17 @@ class BubbleSuggestionActivity : Activity() {
                     val thread = if (convKey != null)
                         NotificationStore.getInstance(this@BubbleSuggestionActivity).getThread(convKey)
                     else emptyList()
+                    val contactMemory = if (convKey != null)
+                        ContactMemory.getMemory(this@BubbleSuggestionActivity, convKey) else null
+                    val lastSent = if (convKey != null)
+                        ContactMemory.getLastSent(this@BubbleSuggestionActivity, convKey) else null
                     val result = WorkerClient.call(
                         this@BubbleSuggestionActivity,
                         messageExtra.ifEmpty { textMap["casual"] ?: "" },
                         thread,
                         regenerate = true,
+                        contactMemory = contactMemory,
+                        lastSentReply = lastSent,
                     )
                     val newCasual = result?.replies?.optString("casual")?.takeIf { it.isNotEmpty() }
                     val newFormal = result?.replies?.optString("formal")?.takeIf { it.isNotEmpty() }

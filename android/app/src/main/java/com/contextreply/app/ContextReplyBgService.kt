@@ -1,6 +1,5 @@
 package com.contextreply.app
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -306,15 +305,9 @@ class ContextReplyBgService : NotificationListenerService() {
         if (sbn.packageName !in TARGET_PACKAGES) return
         if (reason != REASON_APP_CANCEL) return
 
-        // User opened the messaging app — note the timestamp and record which
-        // conversation was active. Used by the IME (Sprint 2) to know which
-        // thread to show a suggestion for when the keyboard opens.
         lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
 
         val extras = sbn.notification?.extras ?: return
-        val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-            ?: return
 
         // T2-C: When the accessibility service is active the user is likely about to reply
         // inside the app via the IME overlay. Cancel any visible bubble notification, but
@@ -324,14 +317,7 @@ class ContextReplyBgService : NotificationListenerService() {
             val convKey = buildConversationKey(sbn, extras)
             val notifId = convKey.hashCode().and(0x7FFFFFFF)
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-            // Keep activeBubbles entry so the in-flight worker still posts its result
-            // (postSuggestionNotification checks activePackage and skips the bubble).
         }
-
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
-            .edit()
-            .putString("last_opened_conv_${sbn.packageName}", conversationTitle)
-            .apply()
     }
 
     private fun buildConversationKey(sbn: StatusBarNotification, extras: Bundle): String {
@@ -345,7 +331,7 @@ class ContextReplyBgService : NotificationListenerService() {
         val key = when {
             conversationTitle != null -> conversationTitle
             isGroup -> "group:${sbn.id}"
-            else -> title ?: "unknown"
+            else -> title ?: "id:${sbn.id}"
         }
         if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "convKey=$packageName:$key  isGroup=$isGroup  title=$title  convTitle=$conversationTitle  sbnId=${sbn.id}")
         return "$packageName:$key"
@@ -714,14 +700,6 @@ class ContextReplyBgService : NotificationListenerService() {
             .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
             .putString("last_suggestion_conv_$packageName", convKey)
             .apply()
-    }
-
-    private fun isAppInForeground(): Boolean {
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        return am.runningAppProcesses?.any {
-            it.processName == packageName &&
-            it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-        } == true
     }
 
     private fun createChannel() {

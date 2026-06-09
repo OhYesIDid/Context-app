@@ -50,7 +50,10 @@ object WorkerClient {
             }.toString()
 
             conn.outputStream.bufferedWriter().use { it.write(body) }
-            if (conn.responseCode != 200) return null
+            if (conn.responseCode != 200) {
+                conn.errorStream?.use { it.readBytes() }  // drain so the connection can be reused
+                return null
+            }
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             val obj = JSONObject(response)
             val replies = obj.optJSONObject("replies") ?: return null

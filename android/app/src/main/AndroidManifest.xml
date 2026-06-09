@@ -63,16 +63,6 @@
       android:theme="@android:style/Theme.NoTitleBar"
       android:exported="false"/>
 
-    <!-- Trampoline: launched from bubble with FLAG_ACTIVITY_NEW_TASK so it runs outside
-         the bubble's embedded task. Fires the stored contentIntent from normal context,
-         allowing WhatsApp to open in its own task. No allowEmbedded=true is intentional. -->
-    <activity
-      android:name=".OpenChatTrampolineActivity"
-      android:theme="@android:style/Theme.Translucent.NoTitleBar"
-      android:noHistory="true"
-      android:excludeFromRecents="true"
-      android:exported="false"/>
-
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
