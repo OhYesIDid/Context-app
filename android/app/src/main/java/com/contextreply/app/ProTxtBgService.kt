@@ -32,11 +32,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-class ContextReplyBgService : NotificationListenerService() {
+class ProTxtBgService : NotificationListenerService() {
 
     companion object {
-        @Volatile private var instance: ContextReplyBgService? = null
-        fun getInstance(): ContextReplyBgService? = instance
+        @Volatile private var instance: ProTxtBgService? = null
+        fun getInstance(): ProTxtBgService? = instance
 
         const val CHANNEL_ID = "contextreply_suggestions"
         const val ACTION_SEND = "com.protxt.app.ACTION_SEND_REPLY"
@@ -155,7 +155,7 @@ class ContextReplyBgService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "notif from ${sbn.packageName} cat=${notification.category} actions=${notification.actions?.size ?: 0}")
+        if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "notif from ${sbn.packageName} cat=${notification.category} actions=${notification.actions?.size ?: 0}")
 
         // Gate 0: skip group-summary notifications — WhatsApp/Telegram post one real
         // per-conversation notification (tagged with JID hash) and one summary notification
@@ -165,7 +165,7 @@ class ContextReplyBgService : NotificationListenerService() {
 
         // Gate 1: messaging category only
         if (notification.category != null && notification.category != Notification.CATEGORY_MESSAGE) {
-            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "filtered: wrong category ${notification.category}")
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "filtered: wrong category ${notification.category}")
             return
         }
 
@@ -173,7 +173,7 @@ class ContextReplyBgService : NotificationListenerService() {
         val replyAction = notification.actions?.firstOrNull { action ->
             action?.remoteInputs?.isNotEmpty() == true
         } ?: run {
-            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "filtered: no reply action")
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "filtered: no reply action")
             return
         }
 
@@ -243,14 +243,14 @@ class ContextReplyBgService : NotificationListenerService() {
                 ?.takeIf { it.isNotEmpty() }
                 ?: listOf(fullThread.lastOrNull()?.second ?: text)
             val latestMessage = burstTexts.joinToString("\n")
-            if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "burst ${burstTexts.size} msgs: ${latestMessage.take(120)}")
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "burst ${burstTexts.size} msgs: ${latestMessage.take(120)}")
 
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
             activeBubbles.add(convKey)
             // Only show loading bubble when the user is not already in the messaging app.
             // When they are in the app, the IME overlay handles the suggestion instead.
-            val userInApp = ContextReplyAccessibilityService.activePackage == packageName
+            val userInApp = ProTxtAccessibilityService.activePackage == packageName
             if (!userInApp) {
                 postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
             }
@@ -278,7 +278,7 @@ class ContextReplyBgService : NotificationListenerService() {
                         activeBubbles.remove(convKey)
                         return@submit
                     }
-                    val nowInApp = ContextReplyAccessibilityService.activePackage == packageName
+                    val nowInApp = ProTxtAccessibilityService.activePackage == packageName
                     // If we posted a loading bubble (!userInApp), we must always update it
                     // with the real reply — even if the user entered the app while the worker
                     // was running. Skipping postSuggestionNotification leaves the bubble
@@ -297,7 +297,7 @@ class ContextReplyBgService : NotificationListenerService() {
                         cacheSuggestion(packageName, convKey, primary, formal, brief)
                     }
                     // Notify the IME overlay — shows/refreshes strip if the app is in focus
-                    ContextReplyAccessibilityService.onSuggestionReady?.invoke(packageName)
+                    ProTxtAccessibilityService.onSuggestionReady?.invoke(packageName)
                     // Update the Activity if it's already open showing the loading state.
                     // The Activity nulls onReplyReady itself in its callback; we don't null
                     // it here to avoid a race where we null it before the Activity registers.
@@ -347,7 +347,7 @@ class ContextReplyBgService : NotificationListenerService() {
             isGroup -> "group:${sbn.id}"
             else -> title ?: "id:${sbn.id}"
         }
-        if (BuildConfig.DEBUG) android.util.Log.d("ContextReply", "convKey=$packageName:$key  isGroup=$isGroup  title=$title  convTitle=$conversationTitle  sbnId=${sbn.id}")
+        if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:$key  isGroup=$isGroup  title=$title  convTitle=$conversationTitle  sbnId=${sbn.id}")
         return "$packageName:$key"
     }
 
@@ -523,7 +523,7 @@ class ContextReplyBgService : NotificationListenerService() {
                 put("windowEnd", OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString())
             }
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG) android.util.Log.w("ContextReplyBgService", "Calendar fetch failed: ${e.message}")
+            if (BuildConfig.DEBUG) android.util.Log.w("ProTxtBgService", "Calendar fetch failed: ${e.message}")
             null
         }
     }
@@ -599,7 +599,7 @@ class ContextReplyBgService : NotificationListenerService() {
         val enabled = android.provider.Settings.Secure.getString(
             contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabled.contains("$packageName/com.contextreply.app.ContextReplyAccessibilityService")
+        return enabled.contains("$packageName/com.contextreply.app.ProTxtAccessibilityService")
     }
 
     private fun postLoadingNotification(

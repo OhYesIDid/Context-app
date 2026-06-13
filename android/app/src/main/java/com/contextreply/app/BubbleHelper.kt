@@ -19,7 +19,7 @@ import java.io.FileOutputStream
  * Attaches BubbleMetadata + MessagingStyle to an existing notification builder.
  * Everything bubble-related is contained here.
  * To remove bubbles entirely: delete this file, delete BubbleSuggestionActivity.kt,
- * remove the BubbleHelper.attach() call from ContextReplyBgService, and remove
+ * remove the BubbleHelper.attach() call from ProTxtBgService, and remove
  * the BubbleSuggestionActivity entry from AndroidManifest.xml.
  */
 object BubbleHelper {
@@ -60,17 +60,17 @@ object BubbleHelper {
 
         val bubbleIntent = Intent(context, BubbleSuggestionActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            putExtra(ContextReplyBgService.EXTRA_REPLY_TEXT, replyText)
-            putExtra(ContextReplyBgService.EXTRA_REPLY_FORMAL, formalText ?: "")
-            putExtra(ContextReplyBgService.EXTRA_REPLY_BRIEF, briefText ?: "")
-            putExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
-            putExtra(ContextReplyBgService.EXTRA_NOTIF_ID, notifId)
-            putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
-            if (intentExtra != null) putExtra(ContextReplyBgService.EXTRA_INTENT, intentExtra)
-            if (openChatIntent != null) putExtra(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
-            if (message.isNotEmpty()) putExtra(ContextReplyBgService.EXTRA_MESSAGE, message)
-            if (detectedIntents.isNotEmpty()) putExtra(ContextReplyBgService.EXTRA_INTENTS, detectedIntents)
-            if (preferredTone != null) putExtra(ContextReplyBgService.EXTRA_PREFERRED_TONE, preferredTone)
+            putExtra(ProTxtBgService.EXTRA_REPLY_TEXT, replyText)
+            putExtra(ProTxtBgService.EXTRA_REPLY_FORMAL, formalText ?: "")
+            putExtra(ProTxtBgService.EXTRA_REPLY_BRIEF, briefText ?: "")
+            putExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
+            putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
+            putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
+            if (intentExtra != null) putExtra(ProTxtBgService.EXTRA_INTENT, intentExtra)
+            if (openChatIntent != null) putExtra(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
+            if (message.isNotEmpty()) putExtra(ProTxtBgService.EXTRA_MESSAGE, message)
+            if (detectedIntents.isNotEmpty()) putExtra(ProTxtBgService.EXTRA_INTENTS, detectedIntents)
+            if (preferredTone != null) putExtra(ProTxtBgService.EXTRA_PREFERRED_TONE, preferredTone)
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,

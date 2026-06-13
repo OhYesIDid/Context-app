@@ -11,10 +11,10 @@ import com.facebook.react.bridge.Promise
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
+class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName() = "ContextReplySettings"
+    override fun getName() = "ProTxtSettings"
 
     @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
@@ -39,7 +39,7 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
             "enabled_notification_listeners"
         ) ?: ""
         val pkg = reactApplicationContext.packageName
-        promise.resolve(listeners.contains("$pkg/com.contextreply.app.ContextReplyBgService"))
+        promise.resolve(listeners.contains("$pkg/com.contextreply.app.ProTxtBgService"))
     }
 
     @ReactMethod
@@ -133,5 +133,24 @@ class ContextReplySettingsModule(reactContext: ReactApplicationContext) :
         reactApplicationContext
             .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
             .edit().putString("style_profile", profile).apply()
+    }
+
+    @ReactMethod
+    fun isAccessibilityServiceEnabled(promise: Promise) {
+        val enabled = Settings.Secure.getString(
+            reactApplicationContext.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        promise.resolve(enabled.contains(
+            "${reactApplicationContext.packageName}/com.contextreply.app.ProTxtAccessibilityService"
+        ))
+    }
+
+    @ReactMethod
+    fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        reactApplicationContext.startActivity(intent)
     }
 }

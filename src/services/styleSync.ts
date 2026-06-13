@@ -22,7 +22,7 @@ export async function syncStyleProfile(): Promise<void> {
 }
 
 async function drainQueue(): Promise<void> {
-  const json: string = await NativeModules.ContextReplySettings.drainStyleQueue();
+  const json: string = await NativeModules.ProTxtSettings.drainStyleQueue();
   const items: QueueItem[] = JSON.parse(json);
   for (const item of items) {
     if (!item.original) continue;
@@ -44,7 +44,7 @@ interface IntentCorrection {
 }
 
 async function drainCorrections(): Promise<void> {
-  const json: string = await NativeModules.ContextReplySettings.drainIntentCorrections();
+  const json: string = await NativeModules.ProTxtSettings.drainIntentCorrections();
   const corrections: IntentCorrection[] = JSON.parse(json);
   if (corrections.length === 0) return;
   // Append to AsyncStorage so rebuildCachedProfile can include them in the style profile
@@ -103,8 +103,8 @@ async function rebuildCachedProfile(): Promise<void> {
   for (const c of contacts) {
     if (c.preferredTone) toneMap[c.displayName.toLowerCase()] = c.preferredTone;
   }
-  NativeModules.ContextReplySettings.cacheContactTones(JSON.stringify(toneMap));
+  NativeModules.ProTxtSettings.cacheContactTones(JSON.stringify(toneMap));
 
   if (sections.length === 0) return;
-  NativeModules.ContextReplySettings.cacheStyleProfile(sections.join('\n\n'));
+  NativeModules.ProTxtSettings.cacheStyleProfile(sections.join('\n\n'));
 }

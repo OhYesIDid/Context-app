@@ -25,17 +25,17 @@ import android.widget.TextView
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.color.MaterialColors
 
-class ContextReplyAccessibilityService : AccessibilityService() {
+class ProTxtAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val PREFS_NAME = "contextreply_prefs"
         private const val MAX_AGE_MS = 5 * 60 * 1000L
 
         // Set to the foreground messaging package while user is in the app.
-        // Read by ContextReplyBgService to skip the bubble and route to the overlay instead.
+        // Read by ProTxtBgService to skip the bubble and route to the overlay instead.
         @Volatile var activePackage: String? = null
 
-        // Invoked by ContextReplyBgService (on the worker thread) when a suggestion is ready.
+        // Invoked by ProTxtBgService (on the worker thread) when a suggestion is ready.
         // The accessibility service registers this in onServiceConnected and clears it on destroy.
         @Volatile var onSuggestionReady: ((pkg: String) -> Unit)? = null
     }
@@ -84,7 +84,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 // Not currently tracking — dismiss any stale overlay then check if the user
                 // just gesture-switched back to a messaging app conversation.
                 if (overlayView != null) { dismissOverlay(); return }
-                val returnedPkg = ContextReplyBgService.TARGET_PACKAGES.firstOrNull { pkg ->
+                val returnedPkg = ProTxtBgService.TARGET_PACKAGES.firstOrNull { pkg ->
                     windows?.any { w ->
                         val root = w.root
                         val match = w.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
@@ -102,7 +102,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg !in ContextReplyBgService.TARGET_PACKAGES) return
+                if (pkg !in ProTxtBgService.TARGET_PACKAGES) return
                 if (overlayView != null) {
                     // Dismiss if user navigated away from the correct conversation
                     if (!isInCorrectConversation(pkg)) dismissOverlay()
@@ -114,7 +114,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 val node = event.source ?: return
                 val editable = node.isEditable
                 @Suppress("DEPRECATION") node.recycle()
-                if (pkg !in ContextReplyBgService.TARGET_PACKAGES || !editable) return
+                if (pkg !in ProTxtBgService.TARGET_PACKAGES || !editable) return
                 activePackage = pkg
 
                 // Auto-inject suggestion when user tapped "open chat" from the bubble
@@ -301,7 +301,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
             if (available.size > 1) {
                 available.forEach { tone ->
-                    val tab = TextView(this@ContextReplyAccessibilityService).apply {
+                    val tab = TextView(this@ProTxtAccessibilityService).apply {
                         text = toneLabels[tone]
                         textSize = 12f
                         setPadding(dp(8), dp(2), dp(8), dp(2))
@@ -328,13 +328,13 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                 }
 
                 // Spacer pushes actions to right
-                addView(View(this@ContextReplyAccessibilityService).apply {
+                addView(View(this@ProTxtAccessibilityService).apply {
                     layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
                 })
             }
 
             // Use button
-            addView(TextView(this@ContextReplyAccessibilityService).apply {
+            addView(TextView(this@ProTxtAccessibilityService).apply {
                 text = "Use"
                 setTextColor(PURPLE)
                 textSize = 14f
@@ -349,7 +349,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
             })
 
             // Dismiss button
-            addView(TextView(this@ContextReplyAccessibilityService).apply {
+            addView(TextView(this@ProTxtAccessibilityService).apply {
                 text = "Dismiss"
                 setTextColor(MUTED)
                 textSize = 14f
@@ -444,7 +444,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         // Without this, activeBubbles.contains(convKey) stays true after navigation
         // and the debounce callback exits early, producing no bubble or overlay.
         if (convKey != null) {
-            ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
+            ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
         }
     }
 

@@ -20,10 +20,10 @@ class ReplySendReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Open-chat action: fire the WhatsApp contentIntent with its own credentials
         // (zero-arg send uses the PendingIntent creator's UID, same as notification shade)
-        if (intent.action == ContextReplyBgService.ACTION_OPEN_CHAT) {
+        if (intent.action == ProTxtBgService.ACTION_OPEN_CHAT) {
             @Suppress("DEPRECATION")
-            val pi = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
-            val pkg = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)?.substringBefore(":") ?: ""
+            val pi = intent.getParcelableExtra<PendingIntent>(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT)
+            val pkg = intent.getStringExtra(ProTxtBgService.EXTRA_CONV_KEY)?.substringBefore(":") ?: ""
             if (pi != null) {
                 try {
                     // API 34+: explicitly allow background activity start so Android
@@ -51,8 +51,8 @@ class ReplySendReceiver : BroadcastReceiver() {
             return
         }
 
-        val notifId = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
-        val convKey = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
+        val notifId = intent.getIntExtra(ProTxtBgService.EXTRA_NOTIF_ID, -1)
+        val convKey = intent.getStringExtra(ProTxtBgService.EXTRA_CONV_KEY)
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (notifId != -1) nm.cancel(notifId)
@@ -61,25 +61,25 @@ class ReplySendReceiver : BroadcastReceiver() {
         // so the next message from this contact starts fresh.
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
-            ContextReplyBgService.getInstance()?.activeBubbles?.remove(convKey)
+            ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
         }
 
-        if (intent.action == ContextReplyBgService.ACTION_DISMISS) {
+        if (intent.action == ProTxtBgService.ACTION_DISMISS) {
             if (convKey != null) ContactMemory.clearLastSent(context, convKey)
-            val original = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
+            val original = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
             if (original != null && convKey != null) {
                 StyleEditQueue.enqueue(context, original, "", convKey, "dismissed")
             }
             return
         }
-        if (intent.action != ContextReplyBgService.ACTION_SEND) return
+        if (intent.action != ProTxtBgService.ACTION_SEND) return
 
-        val originalSuggestion = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
-        val intentType = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
+        val originalSuggestion = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
+        val intentType = intent.getStringExtra(ProTxtBgService.EXTRA_INTENT)
 
         val remoteResults = RemoteInput.getResultsFromIntent(intent)
         val replyText = remoteResults
-            ?.getCharSequence(ContextReplyBgService.REMOTE_INPUT_KEY)
+            ?.getCharSequence(ProTxtBgService.REMOTE_INPUT_KEY)
             ?.toString()
             ?.takeIf { it.isNotBlank() }
             ?: originalSuggestion
@@ -97,7 +97,7 @@ class ReplySendReceiver : BroadcastReceiver() {
             ContactMemory.saveLastSent(context, convKey, replyText)
         }
 
-        val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)
+        val remoteInputKey = intent.getStringExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY)
             ?: return
         val replyPendingIntent = (if (notifId != -1) pendingReplyIntents.remove(notifId) else null)
             ?: return

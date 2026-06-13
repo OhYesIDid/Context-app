@@ -30,26 +30,26 @@ class BubbleSuggestionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val casualText = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_TEXT)
+        val casualText = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
             ?: run { finish(); return }
-        val formalText = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_FORMAL)
+        val formalText = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_FORMAL)
             ?.takeIf { it.isNotEmpty() }
-        val briefText  = intent.getStringExtra(ContextReplyBgService.EXTRA_REPLY_BRIEF)
+        val briefText  = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_BRIEF)
             ?.takeIf { it.isNotEmpty() }
-        val remoteInputKey = intent.getStringExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY)
+        val remoteInputKey = intent.getStringExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY)
             ?: run { finish(); return }
-        val notifId    = intent.getIntExtra(ContextReplyBgService.EXTRA_NOTIF_ID, -1)
-        val convKey    = intent.getStringExtra(ContextReplyBgService.EXTRA_CONV_KEY)
-        val intentExtra     = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENT)
-        val messageExtra    = intent.getStringExtra(ContextReplyBgService.EXTRA_MESSAGE) ?: ""
-        val intentsRaw      = intent.getStringExtra(ContextReplyBgService.EXTRA_INTENTS) ?: ""
+        val notifId    = intent.getIntExtra(ProTxtBgService.EXTRA_NOTIF_ID, -1)
+        val convKey    = intent.getStringExtra(ProTxtBgService.EXTRA_CONV_KEY)
+        val intentExtra     = intent.getStringExtra(ProTxtBgService.EXTRA_INTENT)
+        val messageExtra    = intent.getStringExtra(ProTxtBgService.EXTRA_MESSAGE) ?: ""
+        val intentsRaw      = intent.getStringExtra(ProTxtBgService.EXTRA_INTENTS) ?: ""
         val detectedIntents = if (intentsRaw.isNotEmpty()) intentsRaw.split(",") else listOf("other")
-        val preferredTone   = intent.getStringExtra(ContextReplyBgService.EXTRA_PREFERRED_TONE)
+        val preferredTone   = intent.getStringExtra(ProTxtBgService.EXTRA_PREFERRED_TONE)
         @Suppress("DEPRECATION")
-        val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT)
+        val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT)
         val contact        = convKey?.substringAfter(":") ?: "Reply"
 
-        val isLoading = casualText == ContextReplyBgService.LOADING_PLACEHOLDER
+        val isLoading = casualText == ProTxtBgService.LOADING_PLACEHOLDER
 
         // Mutable so Regenerate can update all tone variants in-place
         val textMap = mutableMapOf(
@@ -119,9 +119,9 @@ class BubbleSuggestionActivity : Activity() {
                     }
                     sendBroadcast(
                         Intent(this@BubbleSuggestionActivity, ReplySendReceiver::class.java).apply {
-                            action = ContextReplyBgService.ACTION_OPEN_CHAT
-                            putExtra(ContextReplyBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
-                            if (convKey != null) putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
+                            action = ProTxtBgService.ACTION_OPEN_CHAT
+                            putExtra(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
+                            if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
                         }
                     )
                     if (a11yEnabled) finish()
@@ -270,7 +270,7 @@ class BubbleSuggestionActivity : Activity() {
             isEnabled = !isLoading
             setOnClickListener {
                 val text = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: casualText }
-                sendAction(ContextReplyBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra)
+                sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra)
                 finish()
             }
         }
@@ -337,7 +337,7 @@ class BubbleSuggestionActivity : Activity() {
                 setOnClickListener {
                     // Use the current (possibly updated) casual text, never the loading placeholder
                     val dismissText = textMap["casual"]?.takeIf { it.isNotEmpty() } ?: ""
-                    sendAction(ContextReplyBgService.ACTION_DISMISS, dismissText, null, notifId, convKey, null)
+                    sendAction(ProTxtBgService.ACTION_DISMISS, dismissText, null, notifId, convKey, null)
                     finish()
                 }
             })
@@ -392,7 +392,7 @@ class BubbleSuggestionActivity : Activity() {
         val enabled = Settings.Secure.getString(
             contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabled.contains("${packageName}/com.contextreply.app.ContextReplyAccessibilityService")
+        return enabled.contains("${packageName}/com.contextreply.app.ProTxtAccessibilityService")
     }
 
     private fun sendAction(
@@ -401,11 +401,11 @@ class BubbleSuggestionActivity : Activity() {
     ) {
         sendBroadcast(Intent(this, ReplySendReceiver::class.java).apply {
             this.action = action
-            if (replyText != null) putExtra(ContextReplyBgService.EXTRA_REPLY_TEXT, replyText)
-            if (remoteInputKey != null) putExtra(ContextReplyBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
-            putExtra(ContextReplyBgService.EXTRA_NOTIF_ID, notifId)
-            if (convKey != null) putExtra(ContextReplyBgService.EXTRA_CONV_KEY, convKey)
-            if (intentExtra != null) putExtra(ContextReplyBgService.EXTRA_INTENT, intentExtra)
+            if (replyText != null) putExtra(ProTxtBgService.EXTRA_REPLY_TEXT, replyText)
+            if (remoteInputKey != null) putExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
+            putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
+            if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
+            if (intentExtra != null) putExtra(ProTxtBgService.EXTRA_INTENT, intentExtra)
         })
     }
 }

@@ -23,7 +23,7 @@ import {
   View,
 } from 'react-native';
 
-const { ContextReplySettings } = NativeModules;
+const { ProTxtSettings } = NativeModules;
 
 // Lazy-load the Android-only native module to avoid a startup crash.
 type NotificationPayload = { bigText?: string; text?: string };
@@ -179,23 +179,23 @@ export default function App() {
       })();
     }
     // Use native module for accurate NLS check (expo module returns true if any NLS is listed)
-    if (Platform.OS === 'android' && ContextReplySettings) {
-      ContextReplySettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
-      ContextReplySettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
-      ContextReplySettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
+    if (Platform.OS === 'android' && ProTxtSettings) {
+      ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
+      ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
+      ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
       // Load all enrichment preferences so settings UI and fetchers have them ready
       (async () => {
         const prefs: Record<string, Record<string, string>> = {};
         for (const [enrichment, fields] of Object.entries(ENRICHMENT_PREFERENCES)) {
           prefs[enrichment] = {};
           for (const field of fields ?? []) {
-            const val = await ContextReplySettings.getEnrichmentPreference(enrichment, field.key).catch(() => null);
+            const val = await ProTxtSettings.getEnrichmentPreference(enrichment, field.key).catch(() => null);
             prefs[enrichment][field.key] = val ?? field.defaultValue;
           }
         }
         setEnrichmentPrefs(prefs);
       })();
-      ContextReplySettings.getSharedText().then((text: string | null) => {
+      ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
       // Drain the Kotlin-side StyleEditQueue into SQLite and rebuild the cached
@@ -207,8 +207,8 @@ export default function App() {
   // Re-check for share intents when the app comes back to the foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' || Platform.OS !== 'android' || !ContextReplySettings) return;
-      ContextReplySettings.getSharedText().then((text: string | null) => {
+      if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
+      ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
     });
@@ -415,7 +415,7 @@ export default function App() {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>ContextReply</Text>
+              <Text style={styles.title}>ProTxt</Text>
               <Text style={styles.subtitle}>Smart replies grounded in reality</Text>
             </View>
             <Pressable style={styles.gearBtn} onPress={() => setSettingsVisible(true)}>
@@ -440,7 +440,7 @@ export default function App() {
                   done: notifPermission,
                   subtitle: `Open App settings → ${bubbleLabel}`,
                   action: 'Open',
-                  onPress: () => ContextReplySettings?.openAppNotificationSettings?.(),
+                  onPress: () => ProTxtSettings?.openAppNotificationSettings?.(),
                 },
                 {
                   label: 'Google Calendar (optional)',
@@ -652,7 +652,7 @@ export default function App() {
                   <Text style={styles.setupAction}>Open</Text>
                 </Pressable>
                 <Pressable style={styles.settingRow} onPress={() => {
-                  if (Platform.OS === 'android') ContextReplySettings?.openAppNotificationSettings?.();
+                  if (Platform.OS === 'android') ProTxtSettings?.openAppNotificationSettings?.();
                 }}>
                   <View style={styles.settingLeft}>
                     <Text style={styles.setupDot}>·</Text>
@@ -673,7 +673,7 @@ export default function App() {
                   </View>
                   <Switch
                     value={skipGroupMessages}
-                    onValueChange={(v) => { setSkipGroupMessages(v); ContextReplySettings?.setSkipGroupMessages?.(v); }}
+                    onValueChange={(v) => { setSkipGroupMessages(v); ProTxtSettings?.setSkipGroupMessages?.(v); }}
                     trackColor={{ false: BORDER, true: PURPLE + '99' }}
                     thumbColor={skipGroupMessages ? PURPLE : MUTED}
                   />
@@ -826,7 +826,7 @@ export default function App() {
                                     ...prev,
                                     [enrichment]: { ...prev[enrichment], [field.key]: opt.value },
                                   }));
-                                  ContextReplySettings?.setEnrichmentPreference?.(enrichment, field.key, opt.value);
+                                  ProTxtSettings?.setEnrichmentPreference?.(enrichment, field.key, opt.value);
                                 }}
                               >
                                 <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
