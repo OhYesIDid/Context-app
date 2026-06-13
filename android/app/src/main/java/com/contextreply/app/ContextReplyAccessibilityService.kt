@@ -49,7 +49,9 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         onSuggestionReady = { pkg ->
-            if (activePackage == pkg) mainHandler.post { maybeShowOverlay(pkg) }
+            if (activePackage == pkg) mainHandler.post {
+                if (isInCorrectConversation(pkg)) maybeShowOverlay(pkg)
+            }
         }
     }
 
@@ -58,15 +60,13 @@ class ContextReplyAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
-                    // Dismiss the overlay on in-app navigation but keep the suggestion prefs:
-                    // the user may have just opened the relevant conversation (e.g. tapped the
-                    // bubble notification) and will see the overlay again on TYPE_VIEW_FOCUSED.
-                    // Prefs are cleared only when the user explicitly uses/dismisses the overlay
-                    // or when MAX_AGE_MS elapses.
-                    dismissOverlay()
+                if (pkg in ContextReplyBgService.TARGET_PACKAGES && overlayView != null) {
+                    // WhatsApp fires TYPE_WINDOW_STATE_CHANGED both when navigating away AND
+                    // when the conversation finishes loading (after TYPE_VIEW_FOCUSED already
+                    // showed the overlay). Only dismiss if we've actually left the correct
+                    // conversation — if the contact name is still in the action bar, keep it.
+                    if (!isInCorrectConversation(pkg)) dismissOverlay()
                 }
-                // Ignore IME/system packages — TYPE_WINDOWS_CHANGED handles "left the app".
             }
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                 if (activePackage == null) return
@@ -102,12 +102,54 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                     return
                 }
 
-                // Do NOT show overlay here. The overlay is shown only via onSuggestionReady
-                // (suggestion just arrived while user is in the app). Triggering it on any
-                // editable-field focus causes it to appear on search bars, wrong conversations,
-                // or any other WhatsApp text field that isn't the relevant reply box.
+                if (overlayView == null && isInCorrectConversation(pkg)) {
+                    maybeShowOverlay(pkg)
+                }
             }
         }
+    }
+
+    // Returns true if the contact name from the pending suggestion is visible in the
+    // action bar of the messaging app window — i.e. the user is in the right conversation.
+    // For group: / id: keys we can't verify so we allow the overlay through.
+    private fun isInCorrectConversation(packageName: String): Boolean {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return false
+        val contactRaw = convKey.substringAfter(":")
+        if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
+        val contact = contactRaw.lowercase()
+
+        // Find the application window for the messaging app
+        var root: AccessibilityNodeInfo? = null
+        for (w in windows ?: return false) {
+            if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+            val r = w.root ?: continue
+            if (r.packageName?.toString() == packageName) { root = r; break }
+            @Suppress("DEPRECATION") r.recycle()
+        }
+        root ?: return false
+
+        // Search only the action bar area (top 20% of screen) for the contact name
+        val topCutoff = (resources.displayMetrics.heightPixels * 0.20).toInt()
+        val found = findTextInTopBar(root, contact, topCutoff)
+        @Suppress("DEPRECATION") root.recycle()
+        return found
+    }
+
+    private fun findTextInTopBar(node: AccessibilityNodeInfo, target: String, topCutoff: Int): Boolean {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.top > topCutoff) return false  // Entire node is below the action bar
+        val text = node.text?.toString()?.lowercase() ?: ""
+        val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+        if (text.contains(target) || desc.contains(target)) return true
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findTextInTopBar(child, target, topCutoff)
+            @Suppress("DEPRECATION") child.recycle()
+            if (found) return true
+        }
+        return false
     }
 
     private fun maybeShowOverlay(packageName: String) {
