@@ -519,8 +519,17 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
+    // True when the message is clearly asking about a past event ("last week", "did you make it",
+    // "how was the concert last Friday"). False for future/availability questions.
+    private fun isPastTemporalQuery(message: String): Boolean = listOf(
+        Regex("""\blast\s+(week|month|friday|thursday|wednesday|tuesday|monday|weekend|night)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\byesterday\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(did you|were you|was it|how was|how did|did it go)\b""", RegexOption.IGNORE_CASE),
+    ).any { it.containsMatchIn(message) }
+
     private fun fetchCalendarData(message: String): JSONObject? {
         val keyword = extractEventKeyword(message)
+        val isPast = isPastTemporalQuery(message)
         return try {
             val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
             val token = GoogleAuthUtil.getToken(
@@ -529,7 +538,9 @@ class ProTxtBgService : NotificationListenerService() {
                 "oauth2:https://www.googleapis.com/auth/calendar.readonly"
             )
             val now = Instant.now()
-            val windowStart = if (keyword != null) now.minus(14, ChronoUnit.DAYS) else now
+            // Look back only when the message clearly refers to a past event.
+            // Default to now so "Friday" means the upcoming Friday, not last Friday.
+            val windowStart = if (isPast) now.minus(14, ChronoUnit.DAYS) else now
             val windowEnd = if (keyword != null) now.plus(90, ChronoUnit.DAYS) else now.plus(7, ChronoUnit.DAYS)
             val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(windowStart, ZoneOffset.UTC).toString(), "UTF-8")
             val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString(), "UTF-8")
@@ -556,7 +567,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
             JSONObject().apply {
                 put("events", events)
-                put("windowStart", OffsetDateTime.ofInstant(now, ZoneOffset.UTC).toString())
+                put("windowStart", OffsetDateTime.ofInstant(windowStart, ZoneOffset.UTC).toString())
                 put("windowEnd", OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString())
             }
         } catch (e: Exception) {
