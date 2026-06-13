@@ -210,6 +210,13 @@ class ProTxtBgService : NotificationListenerService() {
         // Extract the structured thread from this notification's bundle.
         val notifThread = extractConversationThread(extras)
 
+        // Gate 6: after a RemoteInput send, the app re-posts the notification with
+        // the sent message appended (sender=null). Don't suggest a reply to our own message.
+        if (notifThread.isNotEmpty() && notifThread.last().first == null) {
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "filtered: last message outbound (sender=null)")
+            return
+        }
+
         if (store.isEmpty(convKey)) {
             // First message from this conversation — seed store with full EXTRA_MESSAGES
             // context. WhatsApp/Telegram bundle recent history here, giving Claude
