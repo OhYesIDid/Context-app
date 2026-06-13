@@ -90,6 +90,7 @@ export default function App() {
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
   const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
+  const [serviceSettingsVisible, setServiceSettingsVisible] = useState(false);
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
@@ -274,48 +275,60 @@ export default function App() {
           <Text style={styles.subtitle}>Reply suggestions in the background</Text>
         </View>
 
-        {/* SERVICE */}
+        {/* SERVICE — collapsed when all active, expanded when action needed */}
         <Text style={styles.sectionLabel}>SERVICE</Text>
         <View style={styles.sectionCard}>
-          <Pressable
-            style={styles.settingRow}
-            onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
-              <View>
-                <Text style={styles.settingText}>Notification access</Text>
-                <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
+          {notifPermission && accessibilityEnabled ? (
+            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setServiceSettingsVisible(true)}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: '#4ade80' }]} />
+                <Text style={styles.settingText}>Service active</Text>
               </View>
-            </View>
-            {!notifPermission && <Text style={styles.setupAction}>Open</Text>}
-          </Pressable>
-          <Pressable
-            style={styles.settingRow}
-            onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
-              <View>
-                <Text style={styles.settingText}>Keyboard overlay</Text>
-                <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active — shows suggestions above keyboard' : 'Off — tap to enable'}</Text>
-              </View>
-            </View>
-            {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
-          </Pressable>
-          <Pressable
-            style={[styles.settingRow, { borderBottomWidth: 0 }]}
-            onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
-              <View>
-                <Text style={styles.settingText}>Suggestion bubbles</Text>
-                <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
-              </View>
-            </View>
-            <Text style={styles.setupAction}>Open</Text>
-          </Pressable>
+              <Text style={[styles.categoryValue, { fontSize: 12 }]}>Manage ›</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
+                  <View>
+                    <Text style={styles.settingText}>Notification access</Text>
+                    <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
+                  </View>
+                </View>
+                {!notifPermission && <Text style={styles.setupAction}>Open</Text>}
+              </Pressable>
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
+                  <View>
+                    <Text style={styles.settingText}>Keyboard overlay</Text>
+                    <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
+                  </View>
+                </View>
+                {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
+              </Pressable>
+              <Pressable
+                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
+                  <View>
+                    <Text style={styles.settingText}>Suggestion bubbles</Text>
+                    <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
+                  </View>
+                </View>
+                <Text style={styles.setupAction}>Open</Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* BEHAVIOUR */}
@@ -514,6 +527,58 @@ export default function App() {
               })()}
             </ScrollView>
             <Pressable style={styles.modalClose} onPress={() => { setContactsVisible(false); setContactSearch(''); }}>
+              <Text style={styles.modalCloseText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Service settings modal — only reachable when all services already active */}
+      <Modal visible={serviceSettingsVisible} transparent animationType="slide" onRequestClose={() => setServiceSettingsVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setServiceSettingsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Service</Text>
+            <Pressable
+              style={styles.settingRow}
+              onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
+                <View>
+                  <Text style={styles.settingText}>Notification access</Text>
+                  <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
+                </View>
+              </View>
+              <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
+            <Pressable
+              style={styles.settingRow}
+              onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
+                <View>
+                  <Text style={styles.settingText}>Keyboard overlay</Text>
+                  <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
+                </View>
+              </View>
+              <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.settingRow, { borderBottomWidth: 0 }]}
+              onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
+                <View>
+                  <Text style={styles.settingText}>Suggestion bubbles</Text>
+                  <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
+                </View>
+              </View>
+              <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
+            <Pressable style={styles.modalClose} onPress={() => setServiceSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </Pressable>
           </Pressable>
