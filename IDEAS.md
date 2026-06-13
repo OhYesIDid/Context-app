@@ -34,6 +34,46 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ---
 
+## Dual-User Mode (both parties have the app)
+
+When both users have the app installed, context becomes bidirectional — a major product differentiator.
+
+**What's unlocked:**
+- ETA uses User A's *actual* location as the destination (not a guessed one)
+- Availability checks *both* calendars and suggests mutual free slots
+- Live status: User A sees "User B is driving" without asking
+- Proximity detection: suggest meeting instead of texting when both are nearby
+- Smart scheduling: "When are you free?" cross-references both calendars
+
+**Privacy model — per-contact permissions:**
+First time a contact requests your context, a prompt appears:
+```
+[ Always Allow ]  [ Allow Once ]  [ Don't Allow ]
+```
+This is per-contact AND per-data-type (location / calendar / status).
+Examples:
+- Partner: location always, calendar always
+- Friend: location once, calendar free/busy only
+- Colleague: location never, calendar free/busy only
+- "Always" auto-expires after 30 days and re-prompts
+
+**Privacy architecture:**
+- Ephemeral only — data used once per reply, never stored
+- Fuzzy data — share "12 min away" not GPS coordinates; "busy until 3pm" not event names
+- Peer-to-peer relay — server is an encrypted relay only, never reads data
+- Access log — users can see who checked their context and when
+- One-tap revoke from notification shade
+
+**Open questions:**
+- How do we detect if both users have the app? (Hash phone numbers on-device, like Signal)
+- Should "Always" permissions have a time limit?
+- Should there be a "trusted contacts" group that gets broader access by default?
+
+**Marketing angle:**
+*"You decide who sees what. Your partner gets your live ETA. Your boss never sees your location."*
+
+---
+
 ## Notes
 
 _(add freeform notes here)_
