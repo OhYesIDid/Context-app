@@ -100,6 +100,8 @@ class ProTxtBgService : NotificationListenerService() {
     // Maps convKey → most recent WhatsApp/Telegram sbn.id for that conversation.
     // Stable per-conversation even when the notification title changes (e.g. "You" on outbound).
     val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
+    // Reverse map: "$packageName:$sbnId" → convKey, for resolving outbound notifications.
+    private val sbnKeyToConvKey = ConcurrentHashMap<String, String>()
     // Timestamp of the most recent outbound send, keyed by "$packageName:$sbnId".
     // Suppresses the notification update the messaging app posts after a RemoteInput reply.
     val recentlySentAt = ConcurrentHashMap<String, Long>()
@@ -227,11 +229,21 @@ class ProTxtBgService : NotificationListenerService() {
         if (withinCooldown || lastMsgOutbound) {
             if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
                 "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound sbnKey=$sbnKey)")
+            // Also dismiss the existing suggestion bubble — the user sent a reply directly
+            // through the messaging app rather than via the bubble.
+            val originalConvKey = sbnKeyToConvKey[sbnKey] ?: convKey
+            val notifId = originalConvKey.hashCode().and(0x7FFFFFFF)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            activeBubbles.remove(originalConvKey)
+            pendingJobs[originalConvKey]?.cancel(false)
+            pendingJobs.remove(originalConvKey)
             return
         }
 
-        // Record sbn.id → convKey so ReplySendReceiver can stamp the cooldown by sbn.id.
+        // Record mappings so ReplySendReceiver can stamp the cooldown by sbn.id, and so
+        // Gate 6 can resolve outbound notifications back to the original convKey.
         sbnIdByConvKey[convKey] = sbn.id
+        sbnKeyToConvKey[sbnKey] = convKey
 
         // Only buffer after all gates — prevents outbound text from polluting the next
         // real message's burst context.
@@ -344,20 +356,17 @@ class ProTxtBgService : NotificationListenerService() {
 
         val extras = sbn.notification?.extras ?: return
 
-        // T2-C: When the accessibility service is active the user is likely about to reply
-        // inside the app via the IME overlay. Cancel any visible bubble notification, but
-        // let the pending worker job continue — it will route the result to the overlay
-        // instead of posting a new bubble.
-        // Guard: only act if we have a live bubble or pending job for this conversation.
-        // REASON_APP_CANCEL fires for every notification the app silently dismisses
-        // (e.g. read receipts, group summaries) — without this guard we'd cancel bubbles
-        // for conversations we never processed.
-        if (isAccessibilityEnabled()) {
-            val convKey = buildConversationKey(sbn, extras)
-            if (activeBubbles.contains(convKey) || pendingJobs.containsKey(convKey)) {
-                val notifId = convKey.hashCode().and(0x7FFFFFFF)
-                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-            }
+        // Cancel our suggestion bubble whenever the messaging app dismisses the conversation
+        // notification (user opened the app, read the message, or replied directly).
+        // Guard: only act on conversations we're tracking to avoid reacting to read receipts,
+        // group summaries, or other notifications we never processed.
+        val convKey = buildConversationKey(sbn, extras)
+        if (activeBubbles.contains(convKey) || pendingJobs.containsKey(convKey)) {
+            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            activeBubbles.remove(convKey)
+            pendingJobs[convKey]?.cancel(false)
+            pendingJobs.remove(convKey)
         }
     }
 
