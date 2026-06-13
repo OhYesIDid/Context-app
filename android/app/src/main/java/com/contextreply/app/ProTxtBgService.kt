@@ -328,7 +328,8 @@ class ProTxtBgService : NotificationListenerService() {
                         postSuggestionNotification(
                             primary, formal, brief,
                             replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                            openChatIntent, latestMessage, detectedIntentsStr
+                            openChatIntent, latestMessage, detectedIntentsStr,
+                            suggestedAction = result.action
                         )
                     }
                     if (nowInApp) {
@@ -704,6 +705,7 @@ class ProTxtBgService : NotificationListenerService() {
         openChatIntent: PendingIntent? = null,
         message: String = "",
         detectedIntents: String = "",
+        suggestedAction: org.json.JSONObject? = null,
     ) {
         val preferredTone = preferredToneForContact(convKey)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -764,10 +766,36 @@ class ProTxtBgService : NotificationListenerService() {
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
+        // Action button (calendar, maps, etc.) when Claude detected a structured action
+        if (suggestedAction != null) {
+            val actionType  = suggestedAction.optString("type")
+            val actionLabel = suggestedAction.optString("label").ifEmpty { null }
+            val actionBroadcast = when (actionType) {
+                "calendar_add" -> ActionReceiver.ACTION_CALENDAR_ADD
+                "maps_open"    -> ActionReceiver.ACTION_MAPS_OPEN
+                else           -> null
+            }
+            if (actionBroadcast != null && actionLabel != null) {
+                val actionIntent = Intent(this, ActionReceiver::class.java).apply {
+                    this.action = actionBroadcast
+                    suggestedAction.optString("title").ifEmpty { null }?.let { putExtra(ActionReceiver.EXTRA_TITLE, it) }
+                    suggestedAction.optString("datetime").ifEmpty { null }?.let { putExtra(ActionReceiver.EXTRA_DATETIME, it) }
+                    putExtra(ActionReceiver.EXTRA_DURATION_MINUTES, suggestedAction.optInt("durationMinutes", 60))
+                    suggestedAction.optString("address").ifEmpty { null }?.let { putExtra(ActionReceiver.EXTRA_ADDRESS, it) }
+                }
+                val actionPi = PendingIntent.getBroadcast(
+                    this, notifId + 2, actionIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_agenda, actionLabel, actionPi
+                ).build())
+            }
+        }
+
         BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone)
 
-        nm.notify(notifId, builder.build()
-        )
+        nm.notify(notifId, builder.build())
     }
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?) {

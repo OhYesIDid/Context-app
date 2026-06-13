@@ -50,6 +50,15 @@
       </intent-filter>
     </receiver>
 
+    <receiver
+      android:name=".ActionReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.protxt.app.ACTION_CALENDAR_ADD"/>
+        <action android:name="com.protxt.app.ACTION_MAPS_OPEN"/>
+      </intent-filter>
+    </receiver>
+
     <service
       android:name="expo.modules.androidnotificationlistenerservice.ExpoNotificationListenerService"
       tools:node="remove"/>

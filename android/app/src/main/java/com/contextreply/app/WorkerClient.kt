@@ -7,7 +7,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?)
+data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?, val action: JSONObject? = null)
 
 object WorkerClient {
 
@@ -99,7 +99,8 @@ object WorkerClient {
             val replies = obj.optJSONObject("replies") ?: return null
             val intent = obj.optString("intent").ifEmpty { null }
             val contextUpdate = obj.optString("contextUpdate").ifEmpty { null }
-            WorkerResult(replies, intent, contextUpdate)
+            val action = obj.optJSONObject("action")
+            WorkerResult(replies, intent, contextUpdate, action)
         } finally {
             conn.disconnect()
         }
