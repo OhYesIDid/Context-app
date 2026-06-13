@@ -12,7 +12,6 @@ import {
   NativeModules,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -20,6 +19,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -246,10 +246,23 @@ export default function App() {
     setSetupComplete(true);
   };
 
-  if (setupComplete === null) return <View style={{ flex: 1, backgroundColor: BG }} />;
-  if (!setupComplete) return <SetupWizard onComplete={handleSetupComplete} />;
+  if (setupComplete === null) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: BG }} />
+      </SafeAreaProvider>
+    );
+  }
+  if (!setupComplete) {
+    return (
+      <SafeAreaProvider>
+        <SetupWizard onComplete={handleSetupComplete} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
@@ -574,6 +587,7 @@ export default function App() {
         </Pressable>
       </Modal>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
