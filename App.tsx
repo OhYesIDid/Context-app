@@ -11,7 +11,6 @@ import {
   Linking,
   Modal,
   NativeModules,
-  PermissionsAndroid,
   Platform,
   Pressable,
   SafeAreaView,
@@ -43,6 +42,7 @@ import { syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Contact, EnrichmentData, Intent, ReplyOptions, Relationship, SuggestReplyInput, Tone } from './src/types';
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, INTENT_ENRICHMENTS, detectIntents, requiredEnrichments, summariseEnrichments } from './src/utils/intentDetector';
+import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
 
 const INTENT_LABEL: Record<Intent, string> = {
   eta: '📍 ETA request',
@@ -84,6 +84,7 @@ const DEFAULT_TONE_KEY = 'default_tone';
 const GOOGLE_CONTACTS_COUNT_KEY = 'setup_google_contacts_count';
 const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
 const WHATSAPP_IMPORT_KEY = 'setup_whatsapp_messages';
+const SETUP_COMPLETE_KEY = 'setup_complete';
 
 export default function App() {
   const [message, setMessage] = useState('');
@@ -113,6 +114,7 @@ export default function App() {
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
   // Reset copied indicator when switching tones
   useEffect(() => { setCopied(false); }, [tone]);
@@ -131,6 +133,7 @@ export default function App() {
       GOOGLE_CONTACTS_COUNT_KEY,
       DEVICE_CONTACTS_COUNT_KEY,
       WHATSAPP_IMPORT_KEY,
+      SETUP_COMPLETE_KEY,
     ]).then((pairs) => {
       const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
       const saved = map[DEFAULT_TONE_KEY];
@@ -143,41 +146,10 @@ export default function App() {
       if (dc !== null) setDeviceContactsCount(Number(dc));
       const wa = map[WHATSAPP_IMPORT_KEY];
       if (wa !== null) setWhatsappMessages(Number(wa));
+      setSetupComplete(map[SETUP_COMPLETE_KEY] === 'true');
     });
     configureGoogleSignin();
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
-    // Android 13+ requires runtime grant for posting notifications
-    if (Platform.OS === 'android' && Platform.Version >= 33) {
-      PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
-    }
-    // Request location permissions for ETA features (background needed for NLS)
-    if (Platform.OS === 'android') {
-      (async () => {
-        try {
-          const bgKey = PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION;
-          const bgAlready = await PermissionsAndroid.check(bgKey);
-          if (!bgAlready) {
-            const fineAlready = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-            if (!fineAlready) {
-              await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
-                title: 'Location access',
-                message: 'Protxt uses your location to estimate your travel time when someone asks where you are.',
-                buttonPositive: 'Allow',
-                buttonNegative: 'Not now',
-              });
-            }
-            if (Platform.Version >= 29) {
-              await PermissionsAndroid.request(bgKey, {
-                title: 'Background location',
-                message: 'To estimate your ETA when a message arrives, Protxt needs location access even when the app is closed. Tap "Allow all the time" on the next screen.',
-                buttonPositive: 'Go to settings',
-                buttonNegative: 'Skip',
-              });
-            }
-          }
-        } catch {}
-      })();
-    }
     // Use native module for accurate NLS check (expo module returns true if any NLS is listed)
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
@@ -353,6 +325,15 @@ export default function App() {
     } finally { setSetupLoading(null); }
   };
 
+  const handleSetupComplete = (result: SetupResult) => {
+    setGoogleAuthed(result.googleAuthed);
+    setNotifPermission(result.notifPermission);
+    if (result.googleContactsCount !== null) setGoogleContactsCount(result.googleContactsCount);
+    if (result.deviceContactsCount !== null) setDeviceContactsCount(result.deviceContactsCount);
+    if (result.whatsappMessages !== null) setWhatsappMessages(result.whatsappMessages);
+    setSetupComplete(true);
+  };
+
   const handleSuggest = async () => {
     if (!message.trim()) return;
     setLoading(true);
@@ -406,6 +387,8 @@ export default function App() {
   const canSubmit = message.trim().length > 0 && !loading;
   const accentColor = TONE_COLOR[tone];
 
+  if (setupComplete === null) return <View style={{ flex: 1, backgroundColor: BG }} />;
+  if (!setupComplete) return <SetupWizard onComplete={handleSetupComplete} />;
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -422,57 +405,6 @@ export default function App() {
               <Text style={styles.gearIcon}>⚙</Text>
             </Pressable>
           </View>
-
-          {/* Setup card — shown until notification access + Google sign-in are both done */}
-          {Platform.OS === 'android' && (!notifPermission || !googleAuthed) ? (
-            <View style={styles.setupCard}>
-              <Text style={styles.setupCardTitle}>Get started</Text>
-              {[
-                {
-                  label: 'Notification access',
-                  done: notifPermission,
-                  subtitle: 'Required for automatic reply bubbles',
-                  action: 'Enable',
-                  onPress: () => { try { NotificationListener?.openNotificationListenerSettings(); } catch {} },
-                },
-                {
-                  label: 'Suggestion bubbles',
-                  done: notifPermission,
-                  subtitle: `Open App settings → ${bubbleLabel}`,
-                  action: 'Open',
-                  onPress: () => ProTxtSettings?.openAppNotificationSettings?.(),
-                },
-                {
-                  label: 'Google Calendar (optional)',
-                  done: googleAuthed,
-                  subtitle: 'Checks your calendar for availability questions',
-                  action: 'Sign in',
-                  onPress: async () => {
-                    try {
-                      await GoogleSignin.hasPlayServices();
-                      await GoogleSignin.signIn();
-                      setGoogleAuthed(true);
-                    } catch {}
-                  },
-                },
-              ].map((step) => (
-                <View key={step.label} style={styles.setupCardRow}>
-                  <Text style={[styles.setupCardDot, step.done && styles.setupCardDotDone]}>
-                    {step.done ? '✓' : '·'}
-                  </Text>
-                  <View style={styles.setupCardContent}>
-                    <Text style={styles.setupCardLabel}>{step.label}</Text>
-                    <Text style={styles.setupCardSub}>{step.subtitle}</Text>
-                  </View>
-                  {!step.done && (
-                    <Pressable onPress={step.onPress}>
-                      <Text style={styles.setupCardAction}>{step.action}</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
-            </View>
-          ) : null}
 
           {/* Google Auth */}
           <View style={styles.authRow}>
@@ -950,16 +882,6 @@ const styles = StyleSheet.create({
   authSignOut: { color: MUTED, fontSize: 13, textDecorationLine: 'underline' },
   authButton: { backgroundColor: '#1d4ed8', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 18 },
   authButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-
-  setupCard: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 20 },
-  setupCardTitle: { fontSize: 13, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
-  setupCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  setupCardDot: { fontSize: 18, color: MUTED, width: 18, textAlign: 'center', lineHeight: 22 },
-  setupCardDotDone: { color: '#4ade80' },
-  setupCardContent: { flex: 1 },
-  setupCardLabel: { fontSize: 14, color: TEXT, fontWeight: '500' },
-  setupCardSub: { fontSize: 12, color: MUTED, marginTop: 1 },
-  setupCardAction: { fontSize: 13, color: PURPLE, fontWeight: '600', paddingTop: 2 },
 
   modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },
