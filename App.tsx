@@ -88,6 +88,8 @@ export default function App() {
   const [contactSearch, setContactSearch] = useState('');
   const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
   const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
+  const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
@@ -352,38 +354,17 @@ export default function App() {
         {/* CONTACTS */}
         <Text style={styles.sectionLabel}>CONTACTS</Text>
         <View style={styles.sectionCard}>
-          <Pressable style={styles.settingRow} onPress={() => setContactsVisible(true)}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setContactsVisible(true)}>
             <View>
               <Text style={styles.settingText}>Manage contacts</Text>
               <Text style={styles.setupStatus}>
                 {contacts.length > 0
                   ? `${contacts.length} imported — set tone & relationship`
-                  : 'Set tone and relationship per contact'}
+                  : 'Import and configure contacts'}
               </Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
-          <SetupRow
-            label="Google Contacts"
-            status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
-            done={googleContactsCount !== null}
-            loading={setupLoading === 'google'}
-            onPress={handleImportGoogleContacts}
-          />
-          <SetupRow
-            label="Device Contacts"
-            status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
-            done={deviceContactsCount !== null}
-            loading={setupLoading === 'device'}
-            onPress={handleImportDeviceContacts}
-          />
-          <SetupRow
-            label="WhatsApp History"
-            status={whatsappMessages !== null ? `${whatsappMessages} messages` : 'Not imported'}
-            done={whatsappMessages !== null}
-            loading={setupLoading === 'whatsapp'}
-            onPress={handleImportWhatsApp}
-          />
         </View>
 
         {/* ENHANCEMENTS */}
@@ -414,52 +395,30 @@ export default function App() {
               </Pressable>
             )}
           </View>
-          <View style={styles.settingRow}>
+          <Pressable style={styles.settingRow} onPress={() => setGmailSettingsVisible(true)}>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingText}>Gmail Bookings</Text>
               <Text style={styles.setupStatus}>
                 {gmailConnected ? 'Connected — booking lookups on' : 'Connect to look up reservations'}
               </Text>
             </View>
-            {gmailConnected ? (
-              <Text style={[styles.setupStatus, { color: '#4ade80', fontWeight: '600' }]}>✓ On</Text>
-            ) : (
-              <Pressable style={styles.smallButton} onPress={async () => {
-                if (!googleAuthed) { Alert.alert('Sign in first', 'Please sign in with Google first.'); return; }
-                const ok = await requestGmailScope();
-                if (ok) setGmailConnected(true);
-                else Alert.alert('Permission denied', 'Gmail access is needed to look up your bookings.');
-              }}>
-                <Text style={styles.smallButtonText}>Connect</Text>
-              </Pressable>
-            )}
-          </View>
-          {(Object.entries(ENRICHMENT_PREFERENCES) as [string, typeof ENRICHMENT_PREFERENCES[keyof typeof ENRICHMENT_PREFERENCES]][]).map(([enrichment, fields]) => (
-            <React.Fragment key={enrichment}>
-              {(fields ?? []).map((field) => (
-                <View key={field.key} style={[styles.settingRow, { borderBottomWidth: 0, flexDirection: 'column', alignItems: 'flex-start', paddingBottom: 12 }]}>
-                  <Text style={styles.settingText}>{field.label}</Text>
-                  <View style={[styles.chipRow, { marginTop: 8 }]}>
-                    {field.options.map((opt) => {
-                      const active = (enrichmentPrefs[enrichment]?.[field.key] ?? field.defaultValue) === opt.value;
-                      return (
-                        <Pressable
-                          key={opt.value}
-                          style={[styles.chip, active && styles.chipActive]}
-                          onPress={() => {
-                            setEnrichmentPrefs((prev) => ({ ...prev, [enrichment]: { ...prev[enrichment], [field.key]: opt.value } }));
-                            ProTxtSettings?.setEnrichmentPreference?.(enrichment, field.key, opt.value);
-                          }}
-                        >
-                          <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </React.Fragment>
-          ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {gmailConnected && <Text style={[styles.setupStatus, { color: '#4ade80' }]}>✓</Text>}
+              <Text style={styles.chevron}>›</Text>
+            </View>
+          </Pressable>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setMapsSettingsVisible(true)}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingText}>ETA transport</Text>
+              <Text style={styles.setupStatus}>Mode used when someone asks where you are</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.categoryValue}>
+                {(enrichmentPrefs.maps?.transportMode ?? 'driving').charAt(0).toUpperCase() + (enrichmentPrefs.maps?.transportMode ?? 'driving').slice(1)}
+              </Text>
+              <Text style={styles.chevron}>›</Text>
+            </View>
+          </Pressable>
         </View>
 
       </ScrollView>
@@ -484,8 +443,31 @@ export default function App() {
                 onChangeText={setContactSearch}
                 autoCorrect={false}
               />
+              <Text style={styles.modalSection}>IMPORT</Text>
+              <SetupRow
+                label="Google Contacts"
+                status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
+                done={googleContactsCount !== null}
+                loading={setupLoading === 'google'}
+                onPress={handleImportGoogleContacts}
+              />
+              <SetupRow
+                label="Device Contacts"
+                status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
+                done={deviceContactsCount !== null}
+                loading={setupLoading === 'device'}
+                onPress={handleImportDeviceContacts}
+              />
+              <SetupRow
+                label="WhatsApp History"
+                status={whatsappMessages !== null ? `${whatsappMessages} messages` : 'Not imported'}
+                done={whatsappMessages !== null}
+                loading={setupLoading === 'whatsapp'}
+                onPress={handleImportWhatsApp}
+              />
+              {contacts.length > 0 && <Text style={[styles.modalSection, { marginTop: 16 }]}>PREFERENCES</Text>}
               {contacts.length === 0 ? (
-                <Text style={styles.setupHint}>No contacts imported yet. Use the import buttons above.</Text>
+                <Text style={styles.setupHint}>Import contacts above to configure preferences.</Text>
               ) : (() => {
                 const shown = contactSearch
                   ? contacts.filter((c) => c.displayName.toLowerCase().includes(contactSearch.toLowerCase()))
@@ -532,6 +514,78 @@ export default function App() {
               })()}
             </ScrollView>
             <Pressable style={styles.modalClose} onPress={() => { setContactsVisible(false); setContactSearch(''); }}>
+              <Text style={styles.modalCloseText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Gmail Bookings modal */}
+      <Modal visible={gmailSettingsVisible} transparent animationType="slide" onRequestClose={() => setGmailSettingsVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setGmailSettingsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Gmail Bookings</Text>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingText}>{gmailConnected ? 'Gmail connected' : 'Connect Gmail'}</Text>
+                <Text style={styles.setupStatus}>{gmailConnected ? 'Booking lookups enabled' : 'Required to look up reservations'}</Text>
+              </View>
+              {gmailConnected ? (
+                <Text style={[styles.setupStatus, { color: '#4ade80', fontWeight: '600' }]}>✓ On</Text>
+              ) : (
+                <Pressable style={styles.smallButton} onPress={async () => {
+                  if (!googleAuthed) { Alert.alert('Sign in first', 'Please sign in with Google Calendar first.'); return; }
+                  const ok = await requestGmailScope();
+                  if (ok) setGmailConnected(true);
+                  else Alert.alert('Permission denied', 'Gmail access is needed to look up your bookings.');
+                }}>
+                  <Text style={styles.smallButtonText}>Connect</Text>
+                </Pressable>
+              )}
+            </View>
+            <Text style={[styles.modalSection, { marginTop: 16 }]}>LOOKBACK PERIOD</Text>
+            <View style={styles.chipRow}>
+              {(ENRICHMENT_PREFERENCES.bookings ?? []).flatMap((f) => f.options).map((opt) => {
+                const active = (enrichmentPrefs.bookings?.lookbackDays ?? '30') === opt.value;
+                return (
+                  <Pressable key={opt.value} style={[styles.chip, active && styles.chipActive]} onPress={() => {
+                    setEnrichmentPrefs((prev) => ({ ...prev, bookings: { ...prev.bookings, lookbackDays: opt.value } }));
+                    ProTxtSettings?.setEnrichmentPreference?.('bookings', 'lookbackDays', opt.value);
+                  }}>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable style={styles.modalClose} onPress={() => setGmailSettingsVisible(false)}>
+              <Text style={styles.modalCloseText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ETA transport modal */}
+      <Modal visible={mapsSettingsVisible} transparent animationType="slide" onRequestClose={() => setMapsSettingsVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setMapsSettingsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>ETA Transport</Text>
+            <Text style={[styles.setupStatus, { marginBottom: 16 }]}>Mode used when calculating your estimated arrival time</Text>
+            <View style={styles.chipRow}>
+              {(ENRICHMENT_PREFERENCES.maps ?? []).flatMap((f) => f.options).map((opt) => {
+                const active = (enrichmentPrefs.maps?.transportMode ?? 'driving') === opt.value;
+                return (
+                  <Pressable key={opt.value} style={[styles.chip, active && styles.chipActive]} onPress={() => {
+                    setEnrichmentPrefs((prev) => ({ ...prev, maps: { ...prev.maps, transportMode: opt.value } }));
+                    ProTxtSettings?.setEnrichmentPreference?.('maps', 'transportMode', opt.value);
+                  }}>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable style={styles.modalClose} onPress={() => setMapsSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </Pressable>
           </Pressable>
@@ -625,6 +679,7 @@ const styles = StyleSheet.create({
   setupDotDone: { color: '#4ade80' },
 
   chevron: { fontSize: 20, color: MUTED, lineHeight: 22 },
+  categoryValue: { fontSize: 14, color: MUTED },
 
   smallButton: { backgroundColor: PURPLE, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
   smallButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
