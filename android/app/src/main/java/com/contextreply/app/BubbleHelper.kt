@@ -38,6 +38,7 @@ object BubbleHelper {
         message: String = "",
         detectedIntents: String = "",
         preferredTone: String? = null,
+        actionJson: String? = null,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
@@ -71,6 +72,7 @@ object BubbleHelper {
             if (message.isNotEmpty()) putExtra(ProTxtBgService.EXTRA_MESSAGE, message)
             if (detectedIntents.isNotEmpty()) putExtra(ProTxtBgService.EXTRA_INTENTS, detectedIntents)
             if (preferredTone != null) putExtra(ProTxtBgService.EXTRA_PREFERRED_TONE, preferredTone)
+            if (actionJson != null) putExtra(ProTxtBgService.EXTRA_ACTION_JSON, actionJson)
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,

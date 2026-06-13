@@ -5,7 +5,9 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
+import android.provider.CalendarContract
 import android.provider.Settings
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -15,6 +17,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 class BubbleSuggestionActivity : Activity() {
 
@@ -260,6 +264,63 @@ class BubbleSuggestionActivity : Activity() {
 
         root.addView(intentBar)
         if (unusedIntents.isNotEmpty()) root.addView(addContextRow)
+
+        // ── Suggested action button (calendar, maps) ─────────────────────────
+        val actionJson = intent.getStringExtra(ProTxtBgService.EXTRA_ACTION_JSON)
+        val suggestedAction = if (actionJson != null && !isLoading) {
+            try { JSONObject(actionJson) } catch (_: Exception) { null }
+        } else null
+
+        if (suggestedAction != null) {
+            val actionType  = suggestedAction.optString("type")
+            val actionLabel = suggestedAction.optString("label").ifEmpty { null }
+            if (actionLabel != null) {
+                root.addView(TextView(this).apply {
+                    text = actionLabel
+                    setTextColor(Color.parseColor("#22c55e"))
+                    textSize = 13f
+                    gravity = Gravity.CENTER
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#22c55e1a"))
+                        cornerRadius = dp(8).toFloat()
+                        setStroke(1, Color.parseColor("#22c55e44"))
+                    }
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    lp.bottomMargin = dp(10)
+                    layoutParams = lp
+                    setOnClickListener {
+                        when (actionType) {
+                            "calendar_add" -> {
+                                val title = suggestedAction.optString("title").ifEmpty { "Event" }
+                                val datetimeStr = suggestedAction.optString("datetime").ifEmpty { null }
+                                val duration = suggestedAction.optInt("durationMinutes", 60)
+                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                                    data = CalendarContract.Events.CONTENT_URI
+                                    putExtra(CalendarContract.Events.TITLE, title)
+                                    if (datetimeStr != null) {
+                                        try {
+                                            val startMs = LocalDateTime.parse(datetimeStr)
+                                                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                                            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMs + duration * 60_000L)
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                                try { startActivity(calIntent) } catch (_: Exception) {}
+                            }
+                            "maps_open" -> {
+                                val address = suggestedAction.optString("address").ifEmpty { null } ?: return@setOnClickListener
+                                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))) } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                })
+            }
+        }
 
         // ── Action row: Dismiss · ↺ · Send ──────────────────────────────────
         val sendBtn = TextView(this@BubbleSuggestionActivity).apply {

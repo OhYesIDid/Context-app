@@ -53,6 +53,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val EXTRA_PREFERRED_TONE = "reply_preferred_tone"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
         const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
+        const val EXTRA_ACTION_JSON = "action_json"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
         // Sentinel placed in EXTRA_REPLY_TEXT while the worker is in-flight.
         // BubbleSuggestionActivity detects this and shows a loading state.
@@ -804,7 +805,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone)
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString())
 
         nm.notify(notifId, builder.build())
     }
