@@ -43,6 +43,7 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     // Tone state for the currently shown overlay
     private var tones = mapOf<String, String>()   // key → text
     private var selectedTone = "casual"
+    private var currentContact = ""
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -58,13 +59,11 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg in ContextReplyBgService.TARGET_PACKAGES) {
-                    // Clear cached suggestion on any in-app navigation so the next
-                    // conversation doesn't inherit a stale reply from a different chat.
-                    // Do NOT set activePackage here — TYPE_WINDOW_STATE_CHANGED fires
-                    // for background WhatsApp events (sync, etc.) that don't mean the
-                    // user is in the app. activePackage is set only in TYPE_VIEW_FOCUSED
-                    // when an editable field is focused (keyboard is up).
-                    clearSuggestionPrefs(pkg)
+                    // Dismiss the overlay on in-app navigation but keep the suggestion prefs:
+                    // the user may have just opened the relevant conversation (e.g. tapped the
+                    // bubble notification) and will see the overlay again on TYPE_VIEW_FOCUSED.
+                    // Prefs are cleared only when the user explicitly uses/dismisses the overlay
+                    // or when MAX_AGE_MS elapses.
                     dismissOverlay()
                 }
                 // Ignore IME/system packages — TYPE_WINDOWS_CHANGED handles "left the app".
@@ -103,7 +102,10 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                     return
                 }
 
-                if (overlayView == null) maybeShowOverlay(pkg)
+                // Do NOT show overlay here. The overlay is shown only via onSuggestionReady
+                // (suggestion just arrived while user is in the app). Triggering it on any
+                // editable-field focus causes it to appear on search bars, wrong conversations,
+                // or any other WhatsApp text field that isn't the relevant reply box.
             }
         }
     }
@@ -114,6 +116,15 @@ class ContextReplyAccessibilityService : AccessibilityService() {
             ?: return
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
         if (age > MAX_AGE_MS) return
+
+        val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: ""
+        currentContact = convKey.substringAfter(":").let { key ->
+            when {
+                key.startsWith("group:") -> "Group chat"
+                key.startsWith("id:") -> ""
+                else -> key.take(40)
+            }
+        }
 
         val formal = prefs.getString("last_suggestion_formal_$packageName", null)?.takeIf { it.isNotEmpty() }
         val brief  = prefs.getString("last_suggestion_brief_$packageName", null)?.takeIf { it.isNotEmpty() }
@@ -143,6 +154,17 @@ class ContextReplyAccessibilityService : AccessibilityService() {
             setBackgroundColor(BG)
             elevation = dp(6).toFloat()
             setPadding(dp(16), dp(10), dp(16), dp(10))
+        }
+
+        // Contact name header — shows who the suggestion is for, important when
+        // the user is in a different conversation than the one that triggered the suggestion.
+        if (currentContact.isNotEmpty()) {
+            root.addView(TextView(this).apply {
+                text = "↩ $currentContact"
+                setTextColor(MUTED)
+                textSize = 11f
+                setPadding(0, 0, 0, dp(4))
+            })
         }
 
         // Reply text

@@ -179,8 +179,8 @@ class BubbleSuggestionActivity : Activity() {
         // ── Intent context bar ───────────────────────────────────────────────
         val GREEN    = Color.parseColor("#22c55e")
         val GREEN_BG = Color.parseColor("#22c55e22")
-        val intentLabels = mapOf("eta" to "ETA", "availability" to "Calendar", "booking" to "Bookings")
-        val allKnownIntents = listOf("eta", "availability", "booking")
+        val intentLabels = mapOf("eta" to "ETA", "availability" to "Calendar")
+        val allKnownIntents = listOf("eta", "availability")
         val activeIntents = detectedIntents.filter { it != "other" }
         val unusedIntents = allKnownIntents.filter { it !in detectedIntents }
 
@@ -211,11 +211,8 @@ class BubbleSuggestionActivity : Activity() {
         }
 
         if (activeIntents.isEmpty()) {
-            intentBar.addView(TextView(this).apply {
-                text = "No context"
-                setTextColor(MUTED)
-                textSize = 11f
-            })
+            // No enriched context for this message — leave the bar empty rather than
+            // showing "No context" which reads as an error state.
         } else {
             activeIntents.forEach { i -> intentBar.addView(makeChip(intentLabels[i] ?: i)) }
         }

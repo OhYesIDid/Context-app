@@ -604,10 +604,17 @@ class ContextReplyBgService : NotificationListenerService() {
             this, notifId + 1, dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val contactLabel = convKey.substringAfter(":").let { key ->
+            when {
+                key.startsWith("group:") -> "Group chat"
+                key.startsWith("id:") -> null
+                else -> key.take(30)
+            }
+        }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Drafting reply…")
-            .setContentText("Thinking…")
+            .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Drafting reply…")
+            .setContentText("Drafting reply…")
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setGroup("contextreply_suggestions")
@@ -684,9 +691,16 @@ class ContextReplyBgService : NotificationListenerService() {
             android.R.drawable.ic_menu_send, "Send", sendPi
         ).build()
 
+        val contactLabel = convKey.substringAfter(":").let { key ->
+            when {
+                key.startsWith("group:") -> "Group chat"
+                key.startsWith("id:") -> null
+                else -> key.take(30)
+            }
+        }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Suggested reply")
+            .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Suggested reply")
             .setContentText(replyText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(replyText))
             .addAction(sendAction)
