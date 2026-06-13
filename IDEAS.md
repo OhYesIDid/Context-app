@@ -7,26 +7,13 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ## Open Questions
 
-- What should the app be called? Leading candidates: **Protxt**, **Veritxt**, **Witxt**, **Copy That**
 - Should the domain be `.app` or `.io`?
 - Free tier vs paid from day one?
 - Should the Cloudflare Worker proxy require auth (API key per user) or be open?
 
 ---
 
-## Ideas to Explore
-
-- Tone memory: remember a user's preferred tone per contact (e.g. always "casual" with Mom)
-- Reply history: swipe back through past AI replies for a conversation
-- Siri Shortcut integration: "Hey Siri, suggest a reply"
-- iMessage app extension (appears in the app strip inside iMessage)
-- Apple Watch complication: tap to copy latest suggested reply
-- Android Wear OS companion
-- Web app version for desktop texting (iMessage on Mac, WhatsApp Web)
-
----
-
-## Design Ideas
+## Design
 
 - Logo direction: **Thread Bars** and **Reply Arc** are the most distinctive — explore further
 - App icon should work at 60x60px — test all concepts at small size
@@ -34,7 +21,91 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ---
 
-## Dual-User Mode (both parties have the app)
+## Shipped
+
+Features already live in the codebase — kept here for context.
+
+- **Style learning** — suggestion → what was actually sent recorded; recency decay (14-day half-life); per-intent and per-contact grouping; native sync without app-open
+- **Per-contact tone & relationship** — contacts table with preferred tone and relationship tag; pre-selects bubble tab
+- **Conversation history context** — notification thread tracked in `ProTxtBgService`; last N messages sent as context to worker
+- **Intent detection** — ETA, availability, booking, general; drives which enrichments are fetched
+- **ETA enrichment** — Google Maps live ETA injected into reply
+- **Calendar enrichment** — Google Calendar free/busy checked for availability replies
+- **Gmail bookings** — reservation lookup for travel/restaurant questions
+
+---
+
+## Planned
+
+High confidence, clear implementation path.
+
+### Notification-shade suggestion
+Show the reply text inside the notification itself — not just the bubble. User reads and copies directly from the shade without tapping anything. Zero-friction path for people who don't want bubbles. Use `BigTextStyle` or a custom notification layout.
+
+### Regenerate action on the bubble
+Add a `🔄 Try again` notification action button alongside Send / Dismiss. Currently a bad suggestion means the user has to ignore it. A retry fires a new worker call without opening the app.
+
+### Quick-reply templates
+One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.
+
+### Proactive follow-up
+If a message arrived and the user hasn't replied in X hours, surface a reminder notification with a pre-generated reply ready to send. Opt-in per contact. High value for people who read and forget.
+
+### Screenshot OCR
+Take a screenshot of any message → app reads it and suggests a reply. Eliminates copy-paste entirely for apps not covered by the notification listener. Biggest UX jump for platform coverage.
+
+---
+
+## Someday
+
+Worth building eventually; needs more thought or platform maturity.
+
+### Android Auto
+Already on Android, already have ETA context. Suggest and send replies through the car dashboard. Natural fit with driving mode and ETA suggestions.
+
+### IME keyboard extension
+A proper Android Input Method (keyboard replacement) that shows suggestions inline in the keyboard suggestion bar. More reliable than an accessibility overlay — works in every app without the overlay permission complexity. Significant engineering effort but eliminates the biggest setup friction.
+
+### Mac menu bar app
+Highlight any text anywhere → get a reply suggestion. Biggest desktop unlock. Covers iMessage on Mac, WhatsApp Web, any browser-based messaging.
+
+### Driving auto-mode
+Detect motion via accelerometer / Android Auto → automatically switch to short deferral replies. Fully passive, zero friction.
+
+### Boundary mode
+After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus mode integration.
+
+### Wellbeing
+- **Toxic message detection** — flag aggressive or manipulative messages, suggest whether to reply at all
+- **Reply check** — warn if the suggested reply might read as passive-aggressive
+- **Focus mode integration** — when Focus is on, only suggest short deferral replies
+
+### Platform expansion
+- Email plugin — Gmail / Outlook plugin for suggested email replies
+- Slack / Teams — reply suggestions in work chat
+- Instagram / LinkedIn DMs — via Share Extension
+- Web app for desktop texting
+
+### UX shortcuts
+- Voice input — speak the incoming message instead of typing it
+- Lock screen widget (iOS 16+) — see and copy latest suggestion without unlocking
+- Dynamic Island — show reply status while processing
+- Home screen widget — paste a message, get a reply on the home screen
+- Apple Watch — tap to copy top suggestion to clipboard
+
+### Personalisation
+- **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")
+- **Language matching** — detect incoming message language, reply in the same one
+- **Emoji matching** — mirror the sender's emoji usage style
+
+### Business / Team
+- **Team style guides** — company sets a tone guide, all employee replies follow it
+- **Out-of-office handling** — auto-generate OOO replies with real context
+- **Enterprise API** — developers embed ProTxt's context engine into their own products
+
+---
+
+## Dual-User Mode
 
 When both users have the app installed, context becomes bidirectional — a major product differentiator.
 
@@ -74,62 +145,6 @@ Examples:
 
 ---
 
-## Product Improvements (beyond dual-user mode)
-
-### Context Sources
-- **Weather** — *"It's raining, might be a few mins late"* auto-added to ETA replies
-- **Battery level** — *"Phone's dying, will call when I'm there"*
-- **Driving mode** — auto-detect motion → auto-reply *"driving, back in 20"*
-- **Apple Health / activity** — detect if working out, sleeping, in focus mode
-- **Conversation history** — read last 10 messages for richer context, not just the latest message
-- **Email** — extend beyond SMS/messaging to Gmail, Outlook
-
-### Reply Intelligence
-- **Style cloning** — analyse past texts to match the user's actual writing voice (punctuation, emoji frequency, sentence length). Replies sound like *them*, not AI.
-- **Sentiment detection** — if incoming message is upset or urgent, tone adapts automatically
-- **Per-contact tone memory** — always reply casually to Tom, formally to the manager
-- **Feedback loop** — track which suggestions are used vs regenerated, improve over time
-- **Group chat mode** — message from multiple people, reply that addresses all of them
-
-### Platform Expansion
-- **Mac menu bar app** — highlight any text anywhere → get a reply suggestion (biggest desktop unlock)
-- **Email plugin** — Gmail / Outlook plugin for suggested email replies
-- **Slack / Teams** — reply suggestions in work chat
-- **Instagram / LinkedIn DMs** — via Share Extension
-- **Screenshot OCR** — take a screenshot of any message, app reads it and suggests a reply (eliminates copy-paste entirely — biggest UX jump)
-
-### UX Shortcuts
-- **Voice input** — speak the incoming message instead of typing it
-- **Lock screen widget** (iOS 16+) — see and copy the latest suggestion without unlocking
-- **Dynamic Island** — show reply status while processing
-- **Home screen widget** — paste a message, get a reply on the home screen
-- **Apple Watch** — tap to copy top suggestion to clipboard
-
-### Personalisation
-- **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")
-- **Language matching** — detect incoming message language, reply in the same one
-- **Emoji matching** — mirror the sender's emoji usage style
-- **Boundary mode** — *"After 9pm, suggest polite defer replies only"*
-
-### Wellbeing / Safety
-- **Toxic message detection** — flag aggressive or manipulative messages, suggest whether to reply at all
-- **Reply check** — warn if the suggested reply might read badly (*"this might come across as passive-aggressive"*)
-- **Focus mode integration** — when iPhone Focus is on, only suggest short deferral replies
-
-### Business / Team
-- **Team style guides** — company sets a tone guide, all employee replies follow it
-- **Out-of-office handling** — auto-generate OOO replies with real context
-- **Enterprise API** — developers embed ProTxt's context engine into their own products
-
-### Priority ranking (by impact)
-1. Screenshot OCR — eliminates copy-paste, biggest UX jump
-2. Style cloning — makes replies feel personal not AI-generated
-3. Mac menu bar — expands to desktop where a lot of messaging happens
-4. Conversation history context — dramatically improves reply quality
-5. Driving auto-mode — fully passive, zero friction
-
----
-
 ## Zero-Knowledge Location (advanced privacy)
 
 True ZKP lets two users compute their distance **without either revealing their exact coordinates** to each other or to any server.
@@ -148,12 +163,6 @@ GPS: [secret]                                       GPS: [secret]
 ```
 Server sees only encrypted blobs. Computation is split across both devices using a garbled circuit protocol.
 
-### Real apps that already do this
-- **Apple FindMy** — encrypted location beacons, Apple can't read them
-- **COVID Exposure Apps** (Apple/Google GAEN) — anonymous token matching happens locally
-- **Signal** — private contact discovery without uploading address book
-- **iMessage** — checks if contacts have iMessage without Apple learning your contact list
-
 ### Practical options (simplest → most private)
 
 **Option 1 — Grid Cells (MVP, easiest)**
@@ -163,7 +172,6 @@ Divide world into 1km² squares. Share cell ID, not coordinates. App checks if c
 
 **Option 2 — Trusted Execution Environment**
 Both coordinates sent to a server running inside a hardware enclave (Intel SGX / Apple Secure Enclave). Even server operator can't read inputs. Returns only the result.
-- More practical than full MPC, similar guarantees
 
 **Option 3 — Commit-then-Reveal**
 1. Both users commit to their location (send a hash, not location)
@@ -186,4 +194,3 @@ Use **Grid Cells** for MVP (fast, private, explainable), upgrade to **TEE** for 
 ## Notes
 
 _(add freeform notes here)_
-
