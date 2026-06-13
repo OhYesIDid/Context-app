@@ -97,6 +97,10 @@ class ProTxtBgService : NotificationListenerService() {
     // Tracks convKeys that currently have a live bubble so we don't stack duplicates.
     // Cleared by ReplySendReceiver on send or dismiss.
     val activeBubbles = ConcurrentHashMap.newKeySet<String>()
+    // Timestamp of the most recent outbound send per convKey. Suppresses notification
+    // updates that the messaging app posts immediately after a RemoteInput reply.
+    val recentlySentAt = ConcurrentHashMap<String, Long>()
+    private val SENT_COOLDOWN_MS = 5_000L
     private val lastOpenedTimestamp = ConcurrentHashMap<String, Long>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val workerPool = Executors.newFixedThreadPool(3)
@@ -203,19 +207,26 @@ class ProTxtBgService : NotificationListenerService() {
         val convKey = buildConversationKey(sbn, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
 
-        // Track each notification's text so the debounce callback sees the full burst
-        arrivalBuffer.getOrPut(convKey) { mutableListOf() }.add(text)
-
         // ── Accumulate messages in local store ───────────────────────────────
         // Extract the structured thread from this notification's bundle.
         val notifThread = extractConversationThread(extras)
 
-        // Gate 6: after a RemoteInput send, the app re-posts the notification with
-        // the sent message appended (sender=null). Don't suggest a reply to our own message.
-        if (notifThread.isNotEmpty() && notifThread.last().first == null) {
-            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "filtered: last message outbound (sender=null)")
+        // Gate 6: suppress notification updates posted by the messaging app right after
+        // a RemoteInput send. Two checks — apps vary in whether they null the sender:
+        //   6a) sender=null on the last EXTRA_MESSAGES entry (standard Android convention)
+        //   6b) cooldown: ReplySendReceiver stamps recentlySentAt; block for 5 s after any send
+        val sentAt = recentlySentAt[convKey]
+        val withinCooldown = sentAt != null && System.currentTimeMillis() - sentAt < SENT_COOLDOWN_MS
+        val lastMsgOutbound = notifThread.isNotEmpty() && notifThread.last().first == null
+        if (withinCooldown || lastMsgOutbound) {
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
+                "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound)")
             return
         }
+
+        // Only buffer after all gates — prevents outbound text from polluting the next
+        // real message's burst context.
+        arrivalBuffer.getOrPut(convKey) { mutableListOf() }.add(text)
 
         if (store.isEmpty(convKey)) {
             // First message from this conversation — seed store with full EXTRA_MESSAGES

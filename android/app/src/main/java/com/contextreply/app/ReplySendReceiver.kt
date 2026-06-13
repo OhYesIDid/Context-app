@@ -62,6 +62,9 @@ class ReplySendReceiver : BroadcastReceiver() {
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
+            // Stamp send time so onNotificationPosted can suppress the immediate
+            // notification update the messaging app posts after receiving our reply.
+            ProTxtBgService.getInstance()?.recentlySentAt?.put(convKey, System.currentTimeMillis())
         }
 
         if (intent.action == ProTxtBgService.ACTION_DISMISS) {
