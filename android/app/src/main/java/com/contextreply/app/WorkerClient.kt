@@ -23,8 +23,14 @@ object WorkerClient {
         contactMemory: String? = null,
         lastSentReply: String? = null,
     ): WorkerResult? {
-        val styleProfile = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
-            .getString("style_profile", null)
+        val prefs = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val styleProfile      = prefs.getString("style_profile", null)
+        val nativeRecentEdits = prefs.getString("native_recent_edits", null)
+        // Merge JS-built profile with edits not yet synced (written by NativeStyleSync after each send)
+        val fullStyleContext = listOfNotNull(
+            styleProfile,
+            nativeRecentEdits?.let { "Most recent edits (not yet reflected in full profile):\n$it" }
+        ).joinToString("\n\n").ifEmpty { null }
 
         val body = JSONObject().apply {
             put("message", message)
@@ -38,7 +44,7 @@ object WorkerClient {
                     }
                 })
             }
-            if (styleProfile != null) put("styleContext", styleProfile)
+            if (fullStyleContext != null) put("styleContext", fullStyleContext)
             if (enrichments.length() > 0) put("enrichments", enrichments)
             if (regenerate) put("regenerate", true)
             if (contactMemory != null) put("contactMemory", contactMemory)

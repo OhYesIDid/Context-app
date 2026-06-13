@@ -97,6 +97,9 @@ class ReplySendReceiver : BroadcastReceiver() {
         // Sprint 3 will bridge this SharedPreferences queue into the SQLite style_edits table.
         if (originalSuggestion != null && convKey != null) {
             StyleEditQueue.enqueue(context, originalSuggestion, replyText, convKey, intentType)
+            // Immediately update the native "recent edits" cache so the next background
+            // suggestion reflects this edit without waiting for the app to open.
+            NativeStyleSync.syncFromQueue(context)
         }
 
         // Persist the outgoing reply so the next worker call for this contact knows
