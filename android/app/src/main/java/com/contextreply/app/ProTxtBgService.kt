@@ -97,8 +97,11 @@ class ProTxtBgService : NotificationListenerService() {
     // Tracks convKeys that currently have a live bubble so we don't stack duplicates.
     // Cleared by ReplySendReceiver on send or dismiss.
     val activeBubbles = ConcurrentHashMap.newKeySet<String>()
-    // Timestamp of the most recent outbound send per convKey. Suppresses notification
-    // updates that the messaging app posts immediately after a RemoteInput reply.
+    // Maps convKey → most recent WhatsApp/Telegram sbn.id for that conversation.
+    // Stable per-conversation even when the notification title changes (e.g. "You" on outbound).
+    val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
+    // Timestamp of the most recent outbound send, keyed by "$packageName:$sbnId".
+    // Suppresses the notification update the messaging app posts after a RemoteInput reply.
     val recentlySentAt = ConcurrentHashMap<String, Long>()
     private val SENT_COOLDOWN_MS = 5_000L
     private val lastOpenedTimestamp = ConcurrentHashMap<String, Long>()
@@ -214,15 +217,21 @@ class ProTxtBgService : NotificationListenerService() {
         // Gate 6: suppress notification updates posted by the messaging app right after
         // a RemoteInput send. Two checks — apps vary in whether they null the sender:
         //   6a) sender=null on the last EXTRA_MESSAGES entry (standard Android convention)
-        //   6b) cooldown: ReplySendReceiver stamps recentlySentAt; block for 5 s after any send
-        val sentAt = recentlySentAt[convKey]
+        //   6b) cooldown keyed by "$packageName:sbnId" — stable across title changes (e.g.
+        //       WhatsApp flips title to "You" on the outbound update, producing a different
+        //       convKey, so we key on sbn.id which stays constant for the same thread.
+        val sbnKey = "${sbn.packageName}:${sbn.id}"
+        val sentAt = recentlySentAt[sbnKey]
         val withinCooldown = sentAt != null && System.currentTimeMillis() - sentAt < SENT_COOLDOWN_MS
         val lastMsgOutbound = notifThread.isNotEmpty() && notifThread.last().first == null
         if (withinCooldown || lastMsgOutbound) {
             if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
-                "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound)")
+                "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound sbnKey=$sbnKey)")
             return
         }
+
+        // Record sbn.id → convKey so ReplySendReceiver can stamp the cooldown by sbn.id.
+        sbnIdByConvKey[convKey] = sbn.id
 
         // Only buffer after all gates — prevents outbound text from polluting the next
         // real message's burst context.

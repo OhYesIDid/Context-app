@@ -62,9 +62,14 @@ class ReplySendReceiver : BroadcastReceiver() {
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
-            // Stamp send time so onNotificationPosted can suppress the immediate
-            // notification update the messaging app posts after receiving our reply.
-            ProTxtBgService.getInstance()?.recentlySentAt?.put(convKey, System.currentTimeMillis())
+            // Stamp send time keyed by "$packageName:sbnId" — the messaging app's sbn.id
+            // stays constant for a conversation even when the title changes to "You" on
+            // the outbound update, which would otherwise produce a different convKey.
+            val pkg = convKey.substringBefore(":")
+            val sbnId = ProTxtBgService.getInstance()?.sbnIdByConvKey?.get(convKey)
+            if (sbnId != null) {
+                ProTxtBgService.getInstance()?.recentlySentAt?.put("$pkg:$sbnId", System.currentTimeMillis())
+            }
         }
 
         if (intent.action == ProTxtBgService.ACTION_DISMISS) {
