@@ -153,7 +153,7 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - casual: relaxed, warm, conversational, 1–2 sentences
 - brief: one short sentence, direct
 - contextUpdate: optional — a single sentence (max 20 words) summarising any new fact worth remembering about this contact: plans, events, commitments, preferences. Only include when the message reveals something notable. Omit the field entirely if nothing new is learned.
-- action: optional — include ONLY when the message clearly proposes a specific meeting/event or shares a specific address/place to navigate to. For a meeting: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local e.g. 2026-06-15T14:00:00, or null if no time]","durationMinutes":60}. For a location/address: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}. Omit the action field entirely if there is no clear actionable event or specific location in the message.`;
+- action: optional — include when the message proposes or invites the user to a specific meeting/event (even if phrased as a question), or shares a specific address/place. For a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local resolved from today's date, e.g. 2026-06-20T19:00:00, or null if truly no time given]","durationMinutes":60}. For a location/address: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}. Use today's date (provided below) to resolve relative days like "Friday" or "next week" into absolute datetimes. Omit the action field only if there is no event or specific location at all.`;
 
 function buildPrompt(body: SuggestRequest): string {
   const enrichments = body.enrichments ?? {};
@@ -171,11 +171,16 @@ function buildPrompt(body: SuggestRequest): string {
   if (body.contactMemory) memoryParts.push(`Past context about this contact: ${body.contactMemory}`);
   if (body.lastSentReply) memoryParts.push(`Your last reply to them was: "${body.lastSentReply}"`);
 
+  const today = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
   return [
     messageBlock,
     memoryParts.length > 0 && `\n<context>\n${memoryParts.join('\n')}\n</context>`,
     contextParts.length > 0 && `\nContext:\n${contextParts.join('\n')}`,
     body.styleContext && `\n${body.styleContext}`,
+    `\nToday is ${today}.`,
     '\nWrite the reply JSON for the user.',
   ].filter(Boolean).join('');
 }
