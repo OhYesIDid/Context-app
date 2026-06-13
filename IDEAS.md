@@ -183,6 +183,77 @@ Use **Grid Cells** for MVP (fast, private, explainable), upgrade to **TEE** for 
 
 ---
 
+## Cross-Platform Contact Linking
+
+The same person messages across WhatsApp, Instagram, Telegram, iMessage etc. The app currently treats each platform identity as a separate person — so tone, permissions, and context don't carry across. Linking solves this.
+
+### The Problem
+```
+WhatsApp:   "Tom Work"         → tone: professional
+Instagram:  @tomsmith           → tone: unknown
+Telegram:   @tommyg             → tone: unknown
+iMessage:   +44 7911 123456    → tone: casual
+```
+Same person. Four separate profiles. Every setting has to be re-established per platform.
+
+### Suggestion UI
+When a message arrives from an unrecognised platform contact, show a non-intrusive chip:
+```
+┌─────────────────────────────────────────────┐
+│ 💬 New message from @tomsmith on Instagram  │
+│                                             │
+│ 💡 Is this Tom Smith from WhatsApp?         │
+│    [ Yes, link them ]  [ No ]  [ Not now ]  │
+└─────────────────────────────────────────────┘
+```
+- **Yes** → linked permanently, all settings carry across
+- **No** → never suggest this pair again
+- **Not now** → ask again after 3 more messages
+
+Everything runs on-device. No server involvement.
+
+### On-Device Matching Signals
+| Signal | How it helps |
+|---|---|
+| Display name similarity | "Tom Smith" ↔ "@tomsmith" ↔ "Tom" |
+| Profile picture hash | Same photo across platforms |
+| Message timing patterns | Same timezone, similar activity hours |
+| Username patterns | @tomsmith, @tom.smith, @tommyg |
+| Mutual confirmation | Both have the app → direct link request |
+
+Each signal produces a confidence score. Above threshold → suggest. Below → stay silent.
+
+### What Linking Unlocks
+- **Unified tone** — always casual with Tom regardless of platform
+- **Unified permissions** — Tom can see your location on any platform he messages from
+- **Cross-platform context** — *"Tom messaged you on WhatsApp 2 hours ago saying he's running late"* visible when he messages on Instagram
+- **Unified reply history** — one timeline across all platforms
+
+### Dual-User Flow (both have the app)
+Cleaner than guessing — send a direct link request through ProTxt's own channel:
+```
+You get a message from @tomsmith on Instagram
+App detects he has ProTxt
+→ Sends a link request
+→ Tom sees: "Tommy wants to link your Instagram to their
+   contacts so ProTxt can recognise you across platforms."
+→ Tom confirms → both apps link instantly, no ambiguity
+```
+
+### Privacy Rules
+- Matching is 100% on-device — no contact lists or message metadata leave the phone
+- User must confirm every link explicitly
+- Any link can be undone in settings at any time
+- Platform separation is respected — never assume Instagram = WhatsApp = same context
+
+### Open Questions
+- What if two different people have the same name and similar usernames?
+- Should there be a "keep separate" option (e.g. someone who uses LinkedIn professionally but Telegram personally)?
+- How do we handle shared/family devices?
+- Should unverified suggestions still influence tone slightly, or only after confirmation?
+
+---
+
 ## Notes
 
 _(add freeform notes here)_
