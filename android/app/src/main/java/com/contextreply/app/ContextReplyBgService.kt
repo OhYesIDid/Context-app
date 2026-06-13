@@ -104,7 +104,11 @@ class ContextReplyBgService : NotificationListenerService() {
 
     @Volatile private var lastLocation: Location? = null
     private val locationListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) { lastLocation = loc }
+        override fun onLocationChanged(loc: Location) {
+            // Reject fixes older than 2 minutes — the network provider sometimes delivers
+            // a stale cached location immediately on registration (e.g. last known home fix).
+            if (System.currentTimeMillis() - loc.time <= 2 * 60 * 1_000L) lastLocation = loc
+        }
         @Deprecated("Deprecated in Java") override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
     }
 
@@ -356,8 +360,9 @@ class ContextReplyBgService : NotificationListenerService() {
         val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return emptyList()
         return messages.mapNotNull { msg ->
             if (msg !is Bundle) return@mapNotNull null
-            val text = msg.getCharSequence("android.text")?.toString() ?: return@mapNotNull null
-            val sender = msg.getCharSequence("android.sender")?.toString()
+            // MessagingStyle.Message bundles use "text" / "sender" as keys (not "android.text")
+            val text = msg.getCharSequence("text")?.toString() ?: return@mapNotNull null
+            val sender = msg.getCharSequence("sender")?.toString()
             Pair(sender, text)
         }
     }
@@ -416,12 +421,25 @@ class ContextReplyBgService : NotificationListenerService() {
         val enrichments = JSONObject()
         for (key in requiredEnrichments(message)) {
             when (key) {
-                "maps" -> fetchEtaData(message)?.let { eta ->
-                    enrichments.put("maps", JSONObject().apply {
-                        put("duration", eta.duration)
-                        put("distance", eta.distance)
-                        put("routeSummary", eta.routeSummary)
-                    })
+                "maps" -> {
+                    val eta = fetchEtaData(message)
+                    if (eta != null) {
+                        enrichments.put("maps", JSONObject().apply {
+                            put("duration", eta.duration)
+                            put("distance", eta.distance)
+                            put("routeSummary", eta.routeSummary)
+                        })
+                    } else {
+                        // No extractable destination — pass current location name so Claude
+                        // can at least say where the user is rather than guessing.
+                        getCurrentLocation()?.let { loc ->
+                            reverseGeocode(loc.latitude, loc.longitude)?.let { area ->
+                                enrichments.put("maps", JSONObject().apply {
+                                    put("currentLocation", area)
+                                })
+                            }
+                        }
+                    }
                 }
                 "calendar" -> fetchCalendarData(message)?.let { cal ->
                     enrichments.put("calendar", cal)
@@ -511,6 +529,14 @@ class ContextReplyBgService : NotificationListenerService() {
     }
 
     private fun isEtaIntent(message: String): Boolean = ETA_PATTERNS.any { it.containsMatchIn(message) }
+
+    private fun reverseGeocode(lat: Double, lng: Double): String? = try {
+        val geocoder = android.location.Geocoder(this, java.util.Locale.getDefault())
+        @Suppress("DEPRECATION")
+        geocoder.getFromLocation(lat, lng, 1)
+            ?.firstOrNull()
+            ?.let { it.subLocality ?: it.locality ?: it.thoroughfare }
+    } catch (_: Exception) { null }
 
     // Returns the live location from continuous updates, or null if not yet available.
     // Never falls back to getLastKnownLocation() — stale cache produces wrong ETA data.

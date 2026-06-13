@@ -3,14 +3,17 @@ package com.contextreply.app
 import android.accessibilityservice.AccessibilityService
 import android.app.NotificationManager
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -19,6 +22,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.color.DynamicColors
+import com.google.android.material.color.MaterialColors
 
 class ContextReplyAccessibilityService : AccessibilityService() {
 
@@ -56,24 +61,16 @@ class ContextReplyAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        val pkg = event.packageName?.toString() ?: return
-
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg in ContextReplyBgService.TARGET_PACKAGES && overlayView != null) {
-                    // WhatsApp fires TYPE_WINDOW_STATE_CHANGED both when navigating away AND
-                    // when the conversation finishes loading (after TYPE_VIEW_FOCUSED already
-                    // showed the overlay). Only dismiss if we've actually left the correct
-                    // conversation — if the contact name is still in the action bar, keep it.
-                    if (!isInCorrectConversation(pkg)) dismissOverlay()
-                }
-            }
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                if (activePackage == null) return
+        // TYPE_WINDOWS_CHANGED fires with a null packageName (it's a global window-list event),
+        // so it must be handled before the pkg-null guard below.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            val apkg = activePackage
+            if (apkg != null) {
+                // Already tracking a messaging app — check if still on screen
                 val targetVisible = windows?.any { w ->
                     val root = w.root
                     val match = w.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
-                            root?.packageName?.toString() == activePackage
+                            root?.packageName?.toString() == apkg
                     @Suppress("DEPRECATION") root?.recycle()
                     match
                 } == true
@@ -81,8 +78,36 @@ class ContextReplyAccessibilityService : AccessibilityService() {
                     activePackage = null
                     dismissOverlay()
                 } else if (overlayView != null) {
-                    // Keyboard may have appeared/resized — update overlay Y position
                     updateOverlayPosition()
+                }
+            } else {
+                // Not currently tracking — dismiss any stale overlay then check if the user
+                // just gesture-switched back to a messaging app conversation.
+                if (overlayView != null) { dismissOverlay(); return }
+                val returnedPkg = ContextReplyBgService.TARGET_PACKAGES.firstOrNull { pkg ->
+                    windows?.any { w ->
+                        val root = w.root
+                        val match = w.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
+                                root?.packageName?.toString() == pkg
+                        @Suppress("DEPRECATION") root?.recycle()
+                        match
+                    } == true
+                } ?: return
+                scheduleReshow(returnedPkg)
+            }
+            return
+        }
+
+        val pkg = event.packageName?.toString() ?: return
+
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                if (pkg !in ContextReplyBgService.TARGET_PACKAGES) return
+                if (overlayView != null) {
+                    // Dismiss if user navigated away from the correct conversation
+                    if (!isInCorrectConversation(pkg)) dismissOverlay()
+                } else {
+                    scheduleReshow(pkg)
                 }
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
@@ -180,16 +205,59 @@ class ContextReplyAccessibilityService : AccessibilityService() {
         showOverlay(packageName)
     }
 
+    // Schedules an attempt to show the overlay for `pkg`. Uses `isInCorrectConversation` as
+    // the sole gate — deliberately does NOT guard on `activePackage` because intermediate
+    // TYPE_WINDOWS_CHANGED events during a gesture transition can clear it before the callback fires.
+    // Retries once after +500 ms in case the accessibility tree isn't populated yet.
+    private fun scheduleReshow(pkg: String) {
+        activePackage = pkg
+        mainHandler.postDelayed({
+            if (overlayView != null) return@postDelayed
+            if (isInCorrectConversation(pkg)) {
+                activePackage = pkg
+                maybeShowOverlay(pkg)
+            } else {
+                mainHandler.postDelayed({
+                    if (overlayView == null && isInCorrectConversation(pkg)) {
+                        activePackage = pkg
+                        maybeShowOverlay(pkg)
+                    }
+                }, 500)
+            }
+        }, 300)
+    }
+
+    private data class OverlayColors(
+        val bg: Int, val text: Int, val muted: Int, val accent: Int, val accentBg: Int
+    )
+
+    private fun resolveColors(): OverlayColors {
+        val isNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        val baseTheme = if (isNight)
+            com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar
+        else
+            com.google.android.material.R.style.Theme_Material3_Light_NoActionBar
+        // DynamicColors.wrapContextIfAvailable applies wallpaper-derived colors on API 31+;
+        // on older versions it returns the context unchanged (Material3 defaults apply).
+        val ctx = DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(this, baseTheme))
+        fun attr(a: Int) = MaterialColors.getColor(ctx, a, 0)
+        val accent = attr(com.google.android.material.R.attr.colorPrimary)
+        return OverlayColors(
+            bg       = attr(com.google.android.material.R.attr.colorSurface),
+            text     = attr(com.google.android.material.R.attr.colorOnSurface),
+            muted    = attr(com.google.android.material.R.attr.colorOnSurfaceVariant),
+            accent   = accent,
+            accentBg = Color.argb(0x22, Color.red(accent), Color.green(accent), Color.blue(accent))
+        )
+    }
+
     private fun showOverlay(packageName: String) {
         dismissOverlay()
         val d = resources.displayMetrics.density
         fun dp(n: Int) = (n * d).toInt()
 
-        val PURPLE    = Color.parseColor("#6366f1")
-        val PURPLE_BG = Color.parseColor("#6366f122")
-        val TEXT      = Color.parseColor("#f4f4f5")
-        val MUTED     = Color.parseColor("#71717a")
-        val BG        = Color.parseColor("#1e1e22")
+        val (BG, TEXT, MUTED, PURPLE, PURPLE_BG) = resolveColors()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

@@ -46,10 +46,10 @@ object WorkerClient {
         }.toString()
 
         var lastException: Exception? = null
-        for (attempt in 0..MAX_RETRIES) {
-            if (attempt > 0) Thread.sleep(RETRY_DELAY_MS)
+        for (retry in 0..MAX_RETRIES) {
+            if (retry > 0) Thread.sleep(RETRY_DELAY_MS)
             try {
-                val result = attempt(body)
+                val result = makeRequest(body)
                 if (result != null) return result
                 // null means a 4xx — don't retry
                 return null
@@ -67,7 +67,7 @@ object WorkerClient {
 
     private class RetryableException(message: String) : Exception(message)
 
-    private fun attempt(body: String): WorkerResult? {
+    private fun makeRequest(body: String): WorkerResult? {
         val conn = URL("${BuildConfig.WORKER_URL}/suggest").openConnection() as HttpURLConnection
         return try {
             conn.requestMethod = "POST"

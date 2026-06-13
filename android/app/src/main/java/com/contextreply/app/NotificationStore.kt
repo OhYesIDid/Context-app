@@ -29,8 +29,8 @@ class NotificationStore private constructor(context: Context) {
             put("s", sender ?: JSONObject.NULL)
             put("t", text)
         })
-        // Cap at 50 messages — enough context without unbounded growth
-        val start = maxOf(0, arr.length() - 50)
+        // Cap at 20 messages — enough context for a reply without excess token cost
+        val start = maxOf(0, arr.length() - 20)
         if (start > 0) {
             val trimmed = JSONArray()
             for (i in start until arr.length()) trimmed.put(arr.get(i))

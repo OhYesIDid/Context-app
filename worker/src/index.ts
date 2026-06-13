@@ -23,7 +23,7 @@ interface BookingItem {
 }
 
 interface EnrichmentData {
-  maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string };
+  maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string; currentLocation?: string };
   calendar?: { events: CalendarEvent[]; windowStart: string; windowEnd: string };
   bookings?: { items: BookingItem[]; windowStart: string; windowEnd: string };
 }
@@ -108,6 +108,9 @@ const TYPE_LABEL: Record<string, string> = {
 const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => string> = {
   maps: (data) => {
     const d = data as EnrichmentData['maps']!;
+    if (d.currentLocation) {
+      return `User's current location: ${d.currentLocation}. No specific destination was found — mention where the user currently is.`;
+    }
     return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}.`;
   },
   calendar: (data) => {
@@ -150,7 +153,7 @@ function buildPrompt(body: SuggestRequest): string {
 
   const thread = body.conversationThread;
   const messageBlock = thread && thread.length > 1
-    ? `<conversation>\n${thread.map((m) => `${m.sender ?? 'Me'}: ${m.text}`).join('\n')}\n</conversation>\nReply to the last message in the conversation.`
+    ? `<conversation>\n${thread.map((m) => `${m.sender ?? 'Me'}: ${m.text}`).join('\n')}\n</conversation>\nWrite a reply that naturally addresses all unanswered messages from the other person.`
     : `<message>${body.message}</message>`;
 
   const memoryParts: string[] = [];
