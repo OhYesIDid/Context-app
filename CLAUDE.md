@@ -1,5 +1,7 @@
 # Context App — Project Brief
 
+> See also: `IDEAS.md` — running list of ideas, open questions, and design notes.
+
 ## What this app does
 A mobile app (React Native + Expo) that suggests context-aware AI replies to incoming messages. It detects message intent (ETA, availability, general) and uses the Claude API + Google Calendar + Google Maps to generate smart replies.
 
