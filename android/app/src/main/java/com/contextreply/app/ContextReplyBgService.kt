@@ -119,12 +119,13 @@ class ContextReplyBgService : NotificationListenerService() {
         super.onListenerConnected()
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("nls_connected", true).apply()
-        // Keep location warm so ETA requests are instant
+        // Keep location live — short interval so lastLocation is always current.
+        // No fallback to getLastKnownLocation(); stale cache is worse than no data.
         val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
         listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
             try {
                 if (lm.isProviderEnabled(provider))
-                    lm.requestLocationUpdates(provider, 60_000L, 100f, locationListener, mainLooper)
+                    lm.requestLocationUpdates(provider, 15_000L, 10f, locationListener, mainLooper)
             } catch (_: SecurityException) {}
         }
     }
@@ -511,17 +512,9 @@ class ContextReplyBgService : NotificationListenerService() {
 
     private fun isEtaIntent(message: String): Boolean = ETA_PATTERNS.any { it.containsMatchIn(message) }
 
-    private fun getCurrentLocation(): Location? {
-        if (lastLocation != null) return lastLocation
-        val lm = getSystemService(LOCATION_SERVICE) as LocationManager
-        return try {
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.FUSED_PROVIDER)
-                .mapNotNull { provider ->
-                    try { lm.getLastKnownLocation(provider) } catch (_: SecurityException) { null }
-                }
-                .maxByOrNull { it.time }
-        } catch (_: Exception) { null }
-    }
+    // Returns the live location from continuous updates, or null if not yet available.
+    // Never falls back to getLastKnownLocation() — stale cache produces wrong ETA data.
+    private fun getCurrentLocation(): Location? = lastLocation
 
     private fun extractDestination(message: String): String? {
         val patterns = listOf(
