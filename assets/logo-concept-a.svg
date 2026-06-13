@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ProTxt Logo — Concept A: Double Bubble + Sparkle -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="replyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- App icon background -->
+  <rect width="1024" height="1024" rx="220" fill="#0c0c0e"/>
+
+  <!-- Incoming message bubble (gray, upper-left) -->
+  <rect x="72" y="120" width="530" height="195" rx="68" fill="#1e1e22"/>
+  <!-- Text lines inside (simulates message content) -->
+  <rect x="138" y="168" width="300" height="20" rx="10" fill="#3f3f46"/>
+  <rect x="138" y="206" width="230" height="20" rx="10" fill="#3f3f46"/>
+  <rect x="138" y="244" width="350" height="20" rx="10" fill="#3f3f46"/>
+  <!-- Tail pointing bottom-left -->
+  <path d="M 118 315 L 56 408 L 218 315 Z" fill="#1e1e22"/>
+
+  <!-- Outgoing AI reply bubble (indigo, lower-right) -->
+  <rect x="200" y="410" width="752" height="260" rx="68" fill="url(#replyGrad)"/>
+  <!-- Tail pointing bottom-right -->
+  <path d="M 884 670 L 968 762 L 776 670 Z" fill="#6366f1"/>
+
+  <!-- 4-pointed sparkle (AI symbol) centered in reply bubble -->
+  <!-- Bubble center: x=576, y=540 -->
+  <path d="M 576 448
+           L 604 514
+           L 672 540
+           L 604 566
+           L 576 632
+           L 548 566
+           L 480 540
+           L 548 514 Z"
+        fill="white"/>
+
+  <!-- Small dots suggesting "thinking" in incoming bubble area -->
+  <circle cx="630" cy="207" r="10" fill="#52525b"/>
+  <circle cx="662" cy="207" r="10" fill="#52525b"/>
+  <circle cx="694" cy="207" r="10" fill="#52525b"/>
+</svg>

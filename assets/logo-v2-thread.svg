@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ProTxt — V2 Thread Bars (conversation stack) -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#120c28"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <linearGradient id="bar3Grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="55%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <!-- Glow for the AI reply bar -->
+    <filter id="barGlow" x="-8%" y="-40%" width="116%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="sparkGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shimmer on AI bar -->
+    <linearGradient id="shimmer" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Bar 1: incoming message (short, dark) -->
+  <rect x="116" y="274" width="440" height="68" rx="34" fill="#27272a"/>
+
+  <!-- Bar 2: mid context (medium, slightly lighter) -->
+  <rect x="116" y="390" width="596" height="68" rx="34" fill="#3f3f46"/>
+
+  <!-- Bar 3: AI reply (longest, indigo gradient, glowing) -->
+  <rect x="116" y="506" width="784" height="88" rx="44"
+        fill="url(#bar3Grad)" filter="url(#barGlow)"/>
+
+  <!-- Shimmer on AI bar -->
+  <rect x="116" y="506" width="784" height="44" rx="44"
+        fill="url(#shimmer)"/>
+
+  <!-- Thin top border on AI bar (glass edge) -->
+  <rect x="117" y="507" width="782" height="86" rx="43"
+        fill="none" stroke="white" stroke-width="1" stroke-opacity="0.2"/>
+
+  <!-- Sparkle at end of AI bar: center near right end -->
+  <!-- Bar3 right end: x = 116+784 = 900, center y = 506+44 = 550 -->
+  <!-- Sparkle center: (860, 550), outer r=36, inner r=14 -->
+  <!-- outer: top(860,514) right(896,550) bottom(860,586) left(824,550) -->
+  <!-- inner 45° r=14 → offset=10: (870,540) (870,560) (850,560) (850,540) -->
+  <path d="M 860 514 L 870 540 L 896 550 L 870 560 L 860 586 L 850 560 L 824 550 L 850 540 Z"
+        fill="white" filter="url(#sparkGlow)"/>
+
+  <!-- Avatar dot on bar 1 (simulates sender avatar) -->
+  <circle cx="838" cy="308" r="26" fill="#52525b"/>
+  <circle cx="838" cy="308" r="24" fill="#3f3f46"/>
+
+  <!-- Avatar dot on bar 3 (AI, indigo) -->
+  <circle cx="186" cy="550" r="26" fill="#4f46e5"/>
+  <!-- AI spark in avatar -->
+  <path d="M 186 538 L 189 546 L 198 550 L 189 554 L 186 562 L 183 554 L 174 550 L 183 546 Z"
+        fill="white" opacity="0.9"/>
+</svg>
