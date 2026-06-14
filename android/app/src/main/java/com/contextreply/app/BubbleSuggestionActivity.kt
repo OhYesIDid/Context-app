@@ -1,7 +1,9 @@
 package com.contextreply.app
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -15,6 +17,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
@@ -332,6 +335,7 @@ class BubbleSuggestionActivity : Activity() {
             setOnClickListener {
                 val text = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: casualText }
                 sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra)
+                if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId)
                 finish()
             }
         }
@@ -431,6 +435,52 @@ class BubbleSuggestionActivity : Activity() {
         super.onDestroy()
         // Prevent a stale callback from running after the Activity is gone
         onReplyReady = null
+    }
+
+    private fun postActionFollowUp(action: JSONObject, convKey: String?, notifId: Int) {
+        val actionType  = action.optString("type")
+        val actionLabel = action.optString("label").ifEmpty { null } ?: return
+
+        val actionIntent = when (actionType) {
+            "calendar_add" -> {
+                val title       = action.optString("title").ifEmpty { "Event" }
+                val datetimeStr = action.optString("datetime").ifEmpty { null }
+                val duration    = action.optInt("durationMinutes", 60)
+                Intent(Intent.ACTION_INSERT).apply {
+                    data = CalendarContract.Events.CONTENT_URI
+                    putExtra(CalendarContract.Events.TITLE, title)
+                    if (datetimeStr != null) {
+                        try {
+                            val startMs = LocalDateTime.parse(datetimeStr)
+                                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMs + duration * 60_000L)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            "maps_open" -> {
+                val address = action.optString("address").ifEmpty { null } ?: return
+                Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))
+            }
+            else -> return
+        }
+
+        val followUpId = "${convKey}_action".hashCode().and(0x7FFFFFFF)
+        val pi = PendingIntent.getActivity(
+            this, followUpId, actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(this, ProTxtBgService.CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher_round)
+            .setContentTitle(actionLabel)
+            .setContentText("Tap to open")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setTimeoutAfter(5 * 60 * 1000L)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(followUpId, notification)
     }
 
     private fun logCorrection(from: List<String>, to: List<String>, message: String) {
