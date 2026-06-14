@@ -230,7 +230,7 @@ class ProTxtBgService : NotificationListenerService() {
         if (withinCooldown || lastMsgOutbound) {
             if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
                 "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound sbnKey=$sbnKey)")
-            // Also dismiss the existing suggestion bubble — the user sent a reply directly
+            // Dismiss the existing suggestion bubble — the user sent a reply directly
             // through the messaging app rather than via the bubble.
             val originalConvKey = sbnKeyToConvKey[sbnKey] ?: convKey
             val notifId = originalConvKey.hashCode().and(0x7FFFFFFF)
@@ -238,6 +238,14 @@ class ProTxtBgService : NotificationListenerService() {
             activeBubbles.remove(originalConvKey)
             pendingJobs[originalConvKey]?.cancel(false)
             pendingJobs.remove(originalConvKey)
+            // Clear the cached thread so the next incoming message starts a fresh context
+            // rather than appending to a thread that predates the user's outbound reply.
+            NotificationStore.getInstance(this).markReplied(originalConvKey)
+            // Capture what the user sent so the next suggestion knows their last reply.
+            if (lastMsgOutbound) {
+                val outboundText = notifThread.last().second
+                ContactMemory.saveLastSent(this, originalConvKey, outboundText)
+            }
             return
         }
 
