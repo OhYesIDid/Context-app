@@ -26,6 +26,7 @@ interface EnrichmentData {
   maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string; currentLocation?: string };
   calendar?: { events: CalendarEvent[]; windowStart: string; windowEnd: string };
   bookings?: { items: BookingItem[]; windowStart: string; windowEnd: string };
+  location_coords?: { lat: number; lon: number };
 }
 
 interface SuggestRequest {
@@ -107,6 +108,10 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => string> = {
+  location_coords: (data) => {
+    const d = data as EnrichmentData['location_coords']!;
+    return `User's current GPS coordinates: ${d.lat.toFixed(5)},${d.lon.toFixed(5)}. They can share a Google Maps link: https://maps.google.com/?q=${d.lat.toFixed(5)},${d.lon.toFixed(5)}`;
+  },
   maps: (data) => {
     const d = data as EnrichmentData['maps']!;
     if (d.currentLocation) {
@@ -153,7 +158,7 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - casual: relaxed, warm, conversational, 1–2 sentences
 - brief: one short sentence, direct
 - contextUpdate: optional — a single sentence (max 20 words) summarising any new fact worth remembering about this contact: plans, events, commitments, preferences. Only include when the message reveals something notable. Omit the field entirely if nothing new is learned.
-- action: optional — include when the message proposes or invites the user to a specific meeting/event (even if phrased as a question), or shares a specific address/place. For a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local resolved from today's date, e.g. 2026-06-20T19:00:00, or null if truly no time given]","durationMinutes":60}. For a location/address: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}. Use today's date (provided below) to resolve relative days like "Friday" or "next week" into absolute datetimes. Omit the action field only if there is no event or specific location at all.`;
+- action: optional — include for three cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
 
 function buildPrompt(body: SuggestRequest): string {
   const enrichments = body.enrichments ?? {};

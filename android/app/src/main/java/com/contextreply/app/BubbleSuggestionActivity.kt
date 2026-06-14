@@ -322,6 +322,18 @@ class BubbleSuggestionActivity : Activity() {
                                 val address = suggestedAction.optString("address").ifEmpty { null } ?: return@setOnClickListener
                                 try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))) } catch (_: Exception) {}
                             }
+                            "share_location" -> {
+                                val loc = ProTxtBgService.getInstance()?.getLastLocation()
+                                if (loc != null) {
+                                    val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+                                    sendAction(ProTxtBgService.ACTION_SEND, url, remoteInputKey, notifId, convKey, intentExtra)
+                                    if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId)
+                                    finish()
+                                } else {
+                                    android.widget.Toast.makeText(this@BubbleSuggestionActivity, "Location not available yet", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                                return@setOnClickListener
+                            }
                         }
                     }
                 })
@@ -359,6 +371,19 @@ class BubbleSuggestionActivity : Activity() {
                     addActionBtn.text = "Noted"
                     addActionBtn.setTextColor(GREEN)
                     addActionRow.visibility = View.GONE
+                }
+            })
+            addActionRow.addView(makeChip("+ Location", false).apply {
+                setOnClickListener {
+                    logActionFeedback("requested_share_location", "share_location", convKey)
+                    val loc = ProTxtBgService.getInstance()?.getLastLocation()
+                    if (loc != null) {
+                        val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+                        sendAction(ProTxtBgService.ACTION_SEND, url, remoteInputKey, notifId, convKey, intentExtra)
+                        finish()
+                    } else {
+                        android.widget.Toast.makeText(this@BubbleSuggestionActivity, "Location not available yet", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             })
             addActionBtn.setOnClickListener {

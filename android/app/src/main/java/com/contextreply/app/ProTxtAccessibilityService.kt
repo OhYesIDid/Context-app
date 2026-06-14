@@ -177,6 +177,8 @@ class ProTxtAccessibilityService : AccessibilityService() {
         return false
     }
 
+    private var pendingAction: org.json.JSONObject? = null
+
     private fun maybeShowOverlay(packageName: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
@@ -195,6 +197,8 @@ class ProTxtAccessibilityService : AccessibilityService() {
 
         val formal = prefs.getString("last_suggestion_formal_$packageName", null)?.takeIf { it.isNotEmpty() }
         val brief  = prefs.getString("last_suggestion_brief_$packageName", null)?.takeIf { it.isNotEmpty() }
+        val actionJson = prefs.getString("last_suggestion_action_$packageName", null)?.takeIf { it.isNotEmpty() }
+        pendingAction = actionJson?.let { try { org.json.JSONObject(it) } catch (_: Exception) { null } }
 
         tones = buildMap {
             put("casual", casual)
@@ -330,6 +334,31 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 // Spacer pushes actions to right
                 addView(View(this@ProTxtAccessibilityService).apply {
                     layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+                })
+            }
+
+            // Share Location button — only shown when the suggested action is share_location
+            if (pendingAction?.optString("type") == "share_location") {
+                addView(TextView(this@ProTxtAccessibilityService).apply {
+                    text = "📍 Location"
+                    setTextColor(Color.parseColor("#22c55e"))
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding(dp(12), 0, dp(4), 0)
+                    setOnClickListener {
+                        val loc = ProTxtBgService.getInstance()?.getLastLocation()
+                        if (loc != null) {
+                            val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+                            injectText(url)
+                            recordOverlaySend(packageName, url, "share_location")
+                            clearAndDismiss(packageName)
+                        } else {
+                            android.widget.Toast.makeText(
+                                this@ProTxtAccessibilityService, "Location not available yet",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 })
             }
 

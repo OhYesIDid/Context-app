@@ -366,7 +366,7 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                     if (nowInApp) {
                         // Also cache for the overlay when user is currently in the app
-                        cacheSuggestion(packageName, convKey, primary, formal, brief)
+                        cacheSuggestion(packageName, convKey, primary, formal, brief, result.action?.toString())
                     }
                     // Notify the IME overlay — shows/refreshes strip if the app is in focus
                     ProTxtAccessibilityService.onSuggestionReady?.invoke(packageName)
@@ -470,16 +470,25 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
     )
 
+    private val LOCATION_SHARE_PATTERNS = listOf(
+        Regex("""(share|send|drop).{0,20}(your |a )?(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
+        Regex("""(your |a )(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
+        Regex("""share where (you are|you're)""", RegexOption.IGNORE_CASE),
+        Regex("""(location|pin) (please|pls)\b""", RegexOption.IGNORE_CASE),
+    )
+
     private val INTENT_ENRICHMENTS = mapOf(
-        "eta"          to listOf("maps"),
-        "availability" to listOf("calendar"),
-        "other"        to listOf<String>(),
+        "eta"            to listOf("maps"),
+        "availability"   to listOf("calendar"),
+        "location_share" to listOf("location_coords"),
+        "other"          to listOf<String>(),
     )
 
     private fun detectIntents(message: String): List<String> {
         val intents = mutableListOf<String>()
         if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
         if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
+        if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
         return intents.ifEmpty { listOf("other") }
     }
 
@@ -513,10 +522,18 @@ class ProTxtBgService : NotificationListenerService() {
                 "calendar" -> fetchCalendarData(message)?.let { cal ->
                     enrichments.put("calendar", cal)
                 }
+                "location_coords" -> getCurrentLocation()?.let { loc ->
+                    enrichments.put("location_coords", JSONObject().apply {
+                        put("lat", loc.latitude)
+                        put("lon", loc.longitude)
+                    })
+                }
             }
         }
         return enrichments
     }
+
+    fun getLastLocation(): android.location.Location? = lastLocation
 
     private fun extractEventKeyword(message: String): String? {
         val patterns = listOf(
@@ -841,13 +858,14 @@ class ProTxtBgService : NotificationListenerService() {
         nm.notify(notifId, builder.build())
     }
 
-    private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?) {
+    private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putString("last_suggestion_$packageName", casual)
             .putString("last_suggestion_formal_$packageName", formal ?: "")
             .putString("last_suggestion_brief_$packageName", brief ?: "")
             .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
             .putString("last_suggestion_conv_$packageName", convKey)
+            .putString("last_suggestion_action_$packageName", actionJson ?: "")
             .apply()
     }
 
