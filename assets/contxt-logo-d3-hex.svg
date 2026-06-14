@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#130828"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <!-- Per-node radial gradients -->
+    <radialGradient id="nLoc"  cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </radialGradient>
+    <radialGradient id="nCal"  cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </radialGradient>
+    <radialGradient id="nMsg"  cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="100%" stop-color="#be123c"/>
+    </radialGradient>
+    <radialGradient id="nWthr" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </radialGradient>
+    <radialGradient id="nBat"  cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#6ee7b7"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </radialGradient>
+    <radialGradient id="nHist" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </radialGradient>
+
+    <!-- Central orb glow: white core fading out -->
+    <radialGradient id="orbGlow" cx="50%" cy="42%" r="50%">
+      <stop offset="0%"   stop-color="white"/>
+      <stop offset="55%"  stop-color="white" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+
+    <!--
+      Hexagon, r=240 from (512,512):
+        Top          (512, 272)
+        Top-right    (720, 392)
+        Bottom-right (720, 632)
+        Bottom       (512, 752)
+        Bottom-left  (304, 632)
+        Top-left     (304, 392)
+      Line colour: node colour → white at center
+    -->
+    <linearGradient id="lnTop" x1="512" y1="272" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="lnTR" x1="720" y1="392" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="lnBR" x1="720" y1="632" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ffe4e6" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="lnBot" x1="512" y1="752" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#dbeafe" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="lnBL" x1="304" y1="632" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#d1fae5" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="lnTL" x1="304" y1="392" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ede9fe" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="50"/>
+    </filter>
+    <filter id="nodeGlowCyan"   x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlowAmber"  x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlowRose"   x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlowBlue"   x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlowGreen"  x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlowViolet" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="lineGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="orbHalo" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Faint per-colour ambient clouds at center (prismatic blend) -->
+  <circle cx="512" cy="460" r="200" fill="#06b6d4" opacity="0.04" filter="url(#ambGlow)"/>
+  <circle cx="580" cy="530" r="180" fill="#f59e0b" opacity="0.04" filter="url(#ambGlow)"/>
+  <circle cx="560" cy="600" r="180" fill="#f43f5e" opacity="0.04" filter="url(#ambGlow)"/>
+  <circle cx="512" cy="560" r="200" fill="#3b82f6" opacity="0.04" filter="url(#ambGlow)"/>
+  <circle cx="444" cy="600" r="180" fill="#10b981" opacity="0.04" filter="url(#ambGlow)"/>
+  <circle cx="444" cy="530" r="180" fill="#8b5cf6" opacity="0.05" filter="url(#ambGlow)"/>
+
+  <!-- Connection lines: glow pass -->
+  <line x1="512" y1="272" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="720" y1="392" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="720" y1="632" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="512" y1="752" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="304" y1="632" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="304" y1="392" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="7" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <!-- Crisp pass -->
+  <line x1="512" y1="272" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="720" y1="392" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="720" y1="632" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="512" y1="752" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="304" y1="632" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="304" y1="392" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Data-flow particles (colour-matched, 65% + 35% from node) -->
+  <!-- Top/cyan -->
+  <circle cx="512" cy="428" r="4" fill="#22d3ee" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="356" r="2.5" fill="#06b6d4" opacity="0.45"/>
+  <!-- TR/amber -->
+  <circle cx="576" cy="470" r="4" fill="#fbbf24" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="648" cy="434" r="2.5" fill="#f59e0b" opacity="0.45"/>
+  <!-- BR/rose -->
+  <circle cx="576" cy="554" r="4" fill="#fb7185" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="648" cy="590" r="2.5" fill="#f43f5e" opacity="0.45"/>
+  <!-- Bot/blue -->
+  <circle cx="512" cy="596" r="4" fill="#93c5fd" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="668" r="2.5" fill="#3b82f6" opacity="0.45"/>
+  <!-- BL/emerald -->
+  <circle cx="448" cy="554" r="4" fill="#34d399" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="376" cy="590" r="2.5" fill="#10b981" opacity="0.45"/>
+  <!-- TL/violet -->
+  <circle cx="448" cy="470" r="4" fill="#c4b5fd" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="376" cy="434" r="2.5" fill="#8b5cf6" opacity="0.45"/>
+
+  <!-- ========================= NODES ========================= -->
+  <!-- Nodes: glow r=62, dark ring r=44, fill r=34 -->
+
+  <!-- LOCATION — top (512,272) — cyan -->
+  <circle cx="512" cy="272" r="62" fill="#06b6d4" opacity="0.18" filter="url(#nodeGlowCyan)"/>
+  <circle cx="512" cy="272" r="44" fill="#081c24"/>
+  <circle cx="512" cy="272" r="34" fill="url(#nLoc)"/>
+  <!-- Pin: head (512,262) r=11, tip (512,290) -->
+  <path d="M 501 262 A 11 11 0 1 1 523 262 L 512 290 Z" fill="white"/>
+  <circle cx="512" cy="262" r="5" fill="#0e7490"/>
+
+  <!-- CALENDAR — top-right (720,392) — amber -->
+  <circle cx="720" cy="392" r="62" fill="#f59e0b" opacity="0.18" filter="url(#nodeGlowAmber)"/>
+  <circle cx="720" cy="392" r="44" fill="#231a08"/>
+  <circle cx="720" cy="392" r="34" fill="url(#nCal)"/>
+  <!-- Calendar: 32x28 rect centered (720,392) -->
+  <rect x="704" y="378" width="32" height="28" rx="4" fill="none" stroke="white" stroke-width="2.5"/>
+  <rect x="704" y="378" width="32" height="9"  rx="4" fill="white" opacity="0.28"/>
+  <circle cx="713" cy="396" r="2.5" fill="white"/>
+  <circle cx="720" cy="396" r="2.5" fill="white"/>
+  <circle cx="727" cy="396" r="2.5" fill="white"/>
+  <circle cx="713" cy="403" r="2.5" fill="white"/>
+  <circle cx="720" cy="403" r="2.5" fill="white"/>
+
+  <!-- MESSAGE — bottom-right (720,632) — rose -->
+  <circle cx="720" cy="632" r="62" fill="#f43f5e" opacity="0.18" filter="url(#nodeGlowRose)"/>
+  <circle cx="720" cy="632" r="44" fill="#230810"/>
+  <circle cx="720" cy="632" r="34" fill="url(#nMsg)"/>
+  <!-- Speech bubble centered (720,632) -->
+  <path d="M 703 622 Q 703 615 710 615 L 733 615 Q 740 615 740 622
+           L 740 641 Q 740 648 733 648 L 719 648 L 713 657 L 715 648
+           Q 703 648 703 641 Z" fill="white"/>
+  <circle cx="713" cy="632" r="2.5" fill="#be123c"/>
+  <circle cx="721" cy="632" r="2.5" fill="#be123c"/>
+  <circle cx="729" cy="632" r="2.5" fill="#be123c"/>
+
+  <!-- WEATHER — bottom (512,752) — blue -->
+  <circle cx="512" cy="752" r="62" fill="#3b82f6" opacity="0.18" filter="url(#nodeGlowBlue)"/>
+  <circle cx="512" cy="752" r="44" fill="#080f23"/>
+  <circle cx="512" cy="752" r="34" fill="url(#nWthr)"/>
+  <!-- Cloud + rain -->
+  <circle cx="504" cy="747" r="9"  fill="white"/>
+  <circle cx="514" cy="741" r="12" fill="white"/>
+  <circle cx="523" cy="747" r="8"  fill="white"/>
+  <rect   x="495" y="747" width="36" height="10" fill="white"/>
+  <circle cx="505" cy="763" r="2.5" fill="white" opacity="0.8"/>
+  <circle cx="513" cy="767" r="2.5" fill="white" opacity="0.8"/>
+  <circle cx="521" cy="763" r="2.5" fill="white" opacity="0.8"/>
+
+  <!-- BATTERY — bottom-left (304,632) — emerald -->
+  <circle cx="304" cy="632" r="62" fill="#10b981" opacity="0.18" filter="url(#nodeGlowGreen)"/>
+  <circle cx="304" cy="632" r="44" fill="#081c14"/>
+  <circle cx="304" cy="632" r="34" fill="url(#nBat)"/>
+  <!-- Battery: 26x16 body centered (304,632) -->
+  <rect x="290" y="624" width="26" height="16" rx="3.5" fill="none" stroke="white" stroke-width="2.5"/>
+  <rect x="316" y="629" width="5"  height="6"  rx="2"   fill="white"/>
+  <rect x="292" y="626" width="16" height="12" rx="2"   fill="white"/>
+
+  <!-- HISTORY — top-left (304,392) — violet -->
+  <circle cx="304" cy="392" r="62" fill="#8b5cf6" opacity="0.18" filter="url(#nodeGlowViolet)"/>
+  <circle cx="304" cy="392" r="44" fill="#130e23"/>
+  <circle cx="304" cy="392" r="34" fill="url(#nHist)"/>
+  <!-- Three chat-thread bars -->
+  <rect x="291" y="382" width="26" height="4" rx="2" fill="white"/>
+  <rect x="291" y="390" width="18" height="4" rx="2" fill="white" opacity="0.72"/>
+  <rect x="291" y="398" width="22" height="4" rx="2" fill="white" opacity="0.50"/>
+
+  <!-- ====================== CENTRAL ELEMENT ====================== -->
+  <!--
+    "Iris" — a bright white orb with two concentric rings.
+    Reads as an eye / lens / intelligence focal point.
+    Inner core, mid frosted ring, outer dashed orbit.
+  -->
+  <!-- Outer soft white halo -->
+  <circle cx="512" cy="512" r="80" fill="white" opacity="0.06" filter="url(#orbHalo)"/>
+  <!-- Outer dashed orbit ring -->
+  <circle cx="512" cy="512" r="64" fill="none"
+          stroke="white" stroke-width="1" stroke-opacity="0.20"
+          stroke-dasharray="6 5"/>
+  <!-- Mid frosted ring (solid stroke) -->
+  <circle cx="512" cy="512" r="48" fill="none"
+          stroke="white" stroke-width="2" stroke-opacity="0.35"/>
+  <!-- Inner orb glow -->
+  <circle cx="512" cy="512" r="38" fill="url(#orbGlow)" opacity="0.9" filter="url(#orbHalo)"/>
+  <!-- Core -->
+  <circle cx="512" cy="512" r="22" fill="white"/>
+</svg>
