@@ -349,6 +349,18 @@ class ProTxtBgService : NotificationListenerService() {
                         activeBubbles.remove(convKey)
                         return@submit
                     }
+                    // Enrich share_location action with coordinates + area name so the
+                    // bubble/overlay can compose the full reply without geocoding at tap time.
+                    val finalAction = result.action?.also { action ->
+                        if (action.optString("type") == "share_location") {
+                            getCurrentLocation()?.let { loc ->
+                                action.put("lat", loc.latitude)
+                                action.put("lon", loc.longitude)
+                                reverseGeocode(loc.latitude, loc.longitude)
+                                    ?.let { area -> action.put("area", area) }
+                            }
+                        }
+                    }
                     val nowInApp = ProTxtAccessibilityService.activePackage == packageName
                     // If we posted a loading bubble (!userInApp), we must always update it
                     // with the real reply — even if the user entered the app while the worker
@@ -361,12 +373,12 @@ class ProTxtBgService : NotificationListenerService() {
                             primary, formal, brief,
                             replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
                             openChatIntent, latestMessage, detectedIntentsStr,
-                            suggestedAction = result.action
+                            suggestedAction = finalAction
                         )
                     }
                     if (nowInApp) {
                         // Also cache for the overlay when user is currently in the app
-                        cacheSuggestion(packageName, convKey, primary, formal, brief, result.action?.toString())
+                        cacheSuggestion(packageName, convKey, primary, formal, brief, finalAction?.toString())
                     }
                     // Notify the IME overlay — shows/refreshes strip if the app is in focus
                     ProTxtAccessibilityService.onSuggestionReady?.invoke(packageName)

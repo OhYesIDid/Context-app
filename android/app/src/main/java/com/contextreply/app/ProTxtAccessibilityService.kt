@@ -346,11 +346,14 @@ class ProTxtAccessibilityService : AccessibilityService() {
                     setTypeface(null, Typeface.BOLD)
                     setPadding(dp(12), 0, dp(4), 0)
                     setOnClickListener {
-                        val loc = ProTxtBgService.getInstance()?.getLastLocation()
-                        if (loc != null) {
-                            val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
-                            injectText(url)
-                            recordOverlaySend(packageName, url, "share_location")
+                        val lat = pendingAction?.optDouble("lat", Double.NaN) ?: Double.NaN
+                        val lon = pendingAction?.optDouble("lon", Double.NaN) ?: Double.NaN
+                        if (!lat.isNaN() && !lon.isNaN()) {
+                            val area = pendingAction?.optString("area")?.ifEmpty { null }
+                            val mapsUrl = "https://maps.google.com/?q=$lat,$lon"
+                            val msg = if (area != null) "I'm currently in $area: $mapsUrl" else mapsUrl
+                            injectText(msg)
+                            recordOverlaySend(packageName, msg, "share_location")
                             clearAndDismiss(packageName)
                         } else {
                             android.widget.Toast.makeText(

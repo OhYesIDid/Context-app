@@ -323,16 +323,17 @@ class BubbleSuggestionActivity : Activity() {
                                 try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))) } catch (_: Exception) {}
                             }
                             "share_location" -> {
-                                val loc = ProTxtBgService.getInstance()?.getLastLocation()
-                                if (loc != null) {
-                                    val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
-                                    sendAction(ProTxtBgService.ACTION_SEND, url, remoteInputKey, notifId, convKey, intentExtra)
-                                    if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId)
+                                val lat = suggestedAction.optDouble("lat", Double.NaN)
+                                val lon = suggestedAction.optDouble("lon", Double.NaN)
+                                if (!lat.isNaN() && !lon.isNaN()) {
+                                    val area = suggestedAction.optString("area").ifEmpty { null }
+                                    val mapsUrl = "https://maps.google.com/?q=$lat,$lon"
+                                    val msg = if (area != null) "I'm currently in $area: $mapsUrl" else mapsUrl
+                                    sendAction(ProTxtBgService.ACTION_SEND, msg, remoteInputKey, notifId, convKey, intentExtra)
                                     finish()
                                 } else {
                                     android.widget.Toast.makeText(this@BubbleSuggestionActivity, "Location not available yet", android.widget.Toast.LENGTH_SHORT).show()
                                 }
-                                return@setOnClickListener
                             }
                         }
                     }
@@ -378,9 +379,20 @@ class BubbleSuggestionActivity : Activity() {
                     logActionFeedback("requested_share_location", "share_location", convKey)
                     val loc = ProTxtBgService.getInstance()?.getLastLocation()
                     if (loc != null) {
-                        val url = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
-                        sendAction(ProTxtBgService.ACTION_SEND, url, remoteInputKey, notifId, convKey, intentExtra)
-                        finish()
+                        addActionBtn.text = "Noted"
+                        addActionBtn.setTextColor(GREEN)
+                        addActionRow.visibility = View.GONE
+                        Thread {
+                            val geocoder = android.location.Geocoder(this@BubbleSuggestionActivity, java.util.Locale.getDefault())
+                            @Suppress("DEPRECATION")
+                            val area = try {
+                                geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
+                                    ?.firstOrNull()?.let { it.subLocality ?: it.locality ?: it.thoroughfare }
+                            } catch (_: Exception) { null }
+                            val mapsUrl = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+                            val msg = if (area != null) "I'm currently in $area: $mapsUrl" else mapsUrl
+                            runOnUiThread { sendAction(ProTxtBgService.ACTION_SEND, msg, remoteInputKey, notifId, convKey, intentExtra); finish() }
+                        }.start()
                     } else {
                         android.widget.Toast.makeText(this@BubbleSuggestionActivity, "Location not available yet", android.widget.Toast.LENGTH_SHORT).show()
                     }
