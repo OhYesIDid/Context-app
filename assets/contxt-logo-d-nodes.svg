@@ -1,11 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  ConTxt — Concept D: "Constellation"
-  Three nodes (context sources) connected by gradient lines, converging
-  on a bright central point (the AI reply). Abstract, techy, unique.
-  Research basis: AI app icon trend (network/constellation motifs),
-  minimal but meaningful, scales well, no text needed.
--->
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="bg" cx="50%" cy="50%" r="55%">
@@ -13,128 +6,151 @@
       <stop offset="100%" stop-color="#09090b"/>
     </radialGradient>
 
-    <!-- Connection line gradient (node → center) -->
-    <linearGradient id="line1" x1="214" y1="298" x2="512" y2="512"
+    <radialGradient id="nodeFill" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </radialGradient>
+
+    <radialGradient id="centerPulse" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ddd6fe"/>
+      <stop offset="60%"  stop-color="#7c3aed" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#4c1d95" stop-opacity="0"/>
+    </radialGradient>
+
+    <!--
+      Equilateral triangle, r=258 from (512,512):
+        Top          (512, 254)   angle -90 deg
+        Bottom-right (735, 641)   angle  30 deg
+        Bottom-left  (289, 641)   angle 150 deg
+    -->
+    <linearGradient id="lineTop" x1="512" y1="254" x2="512" y2="512"
                     gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#6366f1" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.9"/>
+      <stop offset="0%"   stop-color="#818cf8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#c4b5fd" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="line2" x1="810" y1="298" x2="512" y2="512"
+    <linearGradient id="lineRight" x1="735" y1="641" x2="512" y2="512"
                     gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#6366f1" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.9"/>
+      <stop offset="0%"   stop-color="#818cf8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#c4b5fd" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="line3" x1="512" y1="780" x2="512" y2="512"
+    <linearGradient id="lineLeft" x1="289" y1="641" x2="512" y2="512"
                     gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#6366f1" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.9"/>
+      <stop offset="0%"   stop-color="#818cf8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#c4b5fd" stop-opacity="0.9"/>
     </linearGradient>
 
-    <!-- Ambient field -->
-    <filter id="ambGlow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="50"/>
+    <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="55"/>
     </filter>
-
-    <!-- Node glow -->
-    <filter id="nodeGlow" x="-120%" y="-120%" width="340%" height="340%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="nodeGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-
-    <!-- Central spark glow -->
-    <filter id="centerGlow" x="-80%" y="-80%" width="260%" height="260%">
+    <filter id="lineGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="centerGlow" x="-120%" y="-120%" width="340%" height="340%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-
-    <!-- Line glow -->
-    <filter id="lineGlow" x="-10%" y="-10%" width="120%" height="120%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
   <!-- Background -->
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
 
-  <!-- Ambient central glow -->
-  <circle cx="512" cy="512" r="220" fill="#6d28d9" opacity="0.14"
+  <!-- Ambient center glow -->
+  <circle cx="512" cy="512" r="270" fill="#6d28d9" opacity="0.20"
           filter="url(#ambGlow)"/>
 
-  <!--
-    Three outer nodes (context sources):
-    Top-left:    (214, 298) — location / maps
-    Top-right:   (810, 298) — calendar / time
-    Bottom:      (512, 780) — conversation / message
-    Center:      (512, 512) — the AI reply spark
-  -->
-
-  <!-- Connection lines (drawn before nodes) -->
-  <line x1="214" y1="298" x2="512" y2="512"
-        stroke="url(#line1)" stroke-width="3.5" stroke-linecap="round"
-        filter="url(#lineGlow)"/>
-  <line x1="810" y1="298" x2="512" y2="512"
-        stroke="url(#line2)" stroke-width="3.5" stroke-linecap="round"
-        filter="url(#lineGlow)"/>
-  <line x1="512" y1="780" x2="512" y2="512"
-        stroke="url(#line3)" stroke-width="3.5" stroke-linecap="round"
-        filter="url(#lineGlow)"/>
-
-  <!-- Outer node: top-left (location) -->
-  <circle cx="214" cy="298" r="44" fill="#4338ca" opacity="0.3"
-          filter="url(#nodeGlow)"/>
-  <circle cx="214" cy="298" r="32" fill="#1e1b4b"/>
-  <circle cx="214" cy="298" r="22" fill="#6366f1"/>
-  <!-- Location pin dot inside -->
-  <circle cx="214" cy="294" r="7" fill="white" opacity="0.9"/>
-  <circle cx="214" cy="308" r="4" fill="white" opacity="0.5"/>
-
-  <!-- Outer node: top-right (calendar) -->
-  <circle cx="810" cy="298" r="44" fill="#4338ca" opacity="0.3"
-          filter="url(#nodeGlow)"/>
-  <circle cx="810" cy="298" r="32" fill="#1e1b4b"/>
-  <circle cx="810" cy="298" r="22" fill="#6366f1"/>
-  <!-- Calendar grid dots inside -->
-  <circle cx="804" cy="293" r="4" fill="white" opacity="0.9"/>
-  <circle cx="816" cy="293" r="4" fill="white" opacity="0.9"/>
-  <circle cx="804" cy="305" r="4" fill="white" opacity="0.6"/>
-  <circle cx="816" cy="305" r="4" fill="white" opacity="0.6"/>
-
-  <!-- Outer node: bottom (message) -->
-  <circle cx="512" cy="780" r="44" fill="#4338ca" opacity="0.3"
-          filter="url(#nodeGlow)"/>
-  <circle cx="512" cy="780" r="32" fill="#1e1b4b"/>
-  <circle cx="512" cy="780" r="22" fill="#6366f1"/>
-  <!-- Speech bubble dot inside -->
-  <circle cx="506" cy="777" r="4" fill="white" opacity="0.9"/>
-  <circle cx="518" cy="777" r="4" fill="white" opacity="0.9"/>
-  <circle cx="512" cy="787" r="4" fill="white" opacity="0.6"/>
+  <!-- Connection lines: glow pass -->
+  <line x1="512" y1="254" x2="512" y2="512"
+        stroke="url(#lineTop)" stroke-width="8" stroke-linecap="round"
+        opacity="0.35" filter="url(#lineGlow)"/>
+  <line x1="735" y1="641" x2="512" y2="512"
+        stroke="url(#lineRight)" stroke-width="8" stroke-linecap="round"
+        opacity="0.35" filter="url(#lineGlow)"/>
+  <line x1="289" y1="641" x2="512" y2="512"
+        stroke="url(#lineLeft)" stroke-width="8" stroke-linecap="round"
+        opacity="0.35" filter="url(#lineGlow)"/>
+  <!-- Connection lines: crisp pass -->
+  <line x1="512" y1="254" x2="512" y2="512"
+        stroke="url(#lineTop)" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="735" y1="641" x2="512" y2="512"
+        stroke="url(#lineRight)" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="289" y1="641" x2="512" y2="512"
+        stroke="url(#lineLeft)" stroke-width="1.5" stroke-linecap="round"/>
 
   <!--
-    Central spark: the AI reply output
-    4-pointed star, outer r=72, inner r=28
-    Outer: top(512,440) right(584,512) bottom(512,584) left(440,512)
-    Inner (45°, r=28→offset=20): (532,492)(532,532)(492,532)(492,492)
+    Data-flow particles (two per line, travelling toward center)
+    Top   (512,254)→(512,512): 35%=(512,344)  65%=(512,421)
+    Right (735,641)→(512,512): 35%=(657,593)  65%=(587,554)
+    Left  (289,641)→(512,512): 35%=(367,593)  65%=(437,554)
   -->
-  <!-- Outer glow -->
-  <path d="M 512 440 L 532 492 L 584 512
-           L 532 532 L 512 584
-           L 492 532 L 440 512
-           L 492 492 Z"
-        fill="#a78bfa" opacity="0.35" filter="url(#centerGlow)"/>
-  <!-- Main star -->
-  <path d="M 512 440 L 532 492 L 584 512
-           L 532 532 L 512 584
-           L 492 532 L 440 512
-           L 492 492 Z"
+  <circle cx="512" cy="421" r="4"   fill="#c4b5fd" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="344" r="2.5" fill="#818cf8"  opacity="0.5"/>
+  <circle cx="587" cy="554" r="4"   fill="#c4b5fd" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="657" cy="593" r="2.5" fill="#818cf8"  opacity="0.5"/>
+  <circle cx="437" cy="554" r="4"   fill="#c4b5fd" opacity="0.9" filter="url(#dotGlow)"/>
+  <circle cx="367" cy="593" r="2.5" fill="#818cf8"  opacity="0.5"/>
+
+  <!-- NODE: Location (top, 512, 254) -->
+  <circle cx="512" cy="254" r="58" fill="#6366f1" opacity="0.14" filter="url(#nodeGlow)"/>
+  <circle cx="512" cy="254" r="40" fill="#1a1740"/>
+  <circle cx="512" cy="254" r="31" fill="url(#nodeFill)"/>
+  <!-- Location-pin: teardrop body + inner hole -->
+  <path d="M 501 247 A 11 11 0 1 1 523 247 L 512 275 Z" fill="white"/>
+  <circle cx="512" cy="247" r="5" fill="#4338ca"/>
+
+  <!-- NODE: Calendar (bottom-right, 735, 641) -->
+  <circle cx="735" cy="641" r="58" fill="#6366f1" opacity="0.14" filter="url(#nodeGlow)"/>
+  <circle cx="735" cy="641" r="40" fill="#1a1740"/>
+  <circle cx="735" cy="641" r="31" fill="url(#nodeFill)"/>
+  <!-- Calendar icon -->
+  <rect x="720" y="628" width="30" height="28" rx="4"
+        fill="none" stroke="white" stroke-width="2.5"/>
+  <rect x="720" y="628" width="30" height="9" rx="4" fill="white" opacity="0.3"/>
+  <circle cx="728" cy="645" r="2.5" fill="white"/>
+  <circle cx="735" cy="645" r="2.5" fill="white"/>
+  <circle cx="742" cy="645" r="2.5" fill="white"/>
+  <circle cx="728" cy="652" r="2.5" fill="white"/>
+  <circle cx="735" cy="652" r="2.5" fill="white"/>
+
+  <!-- NODE: Message (bottom-left, 289, 641) -->
+  <circle cx="289" cy="641" r="58" fill="#6366f1" opacity="0.14" filter="url(#nodeGlow)"/>
+  <circle cx="289" cy="641" r="40" fill="#1a1740"/>
+  <circle cx="289" cy="641" r="31" fill="url(#nodeFill)"/>
+  <!-- Speech bubble + typing dots -->
+  <path d="M 272 630 Q 272 624 278 624 L 306 624 Q 312 624 312 630
+           L 312 650 Q 312 656 306 656 L 284 656 L 277 665 L 279 656
+           Q 272 656 272 650 Z"
+        fill="white"/>
+  <circle cx="284" cy="640" r="2.5" fill="#4338ca"/>
+  <circle cx="292" cy="640" r="2.5" fill="#4338ca"/>
+  <circle cx="300" cy="640" r="2.5" fill="#4338ca"/>
+
+  <!-- CENTER: AI spark -->
+  <circle cx="512" cy="512" r="96"  fill="url(#centerPulse)" opacity="0.55"/>
+  <circle cx="512" cy="512" r="68"
+          fill="none" stroke="#a78bfa" stroke-width="1"
+          stroke-opacity="0.28" stroke-dasharray="7 5"/>
+  <!--
+    4-pointed star: outer r=52, inner r=21 at 45 deg
+    Outer: (512,460) (564,512) (512,564) (460,512)
+    Inner: (527,497) (527,527) (497,527) (497,497)
+  -->
+  <path d="M 512 460 L 527 497 L 564 512
+           L 527 527 L 512 564
+           L 497 527 L 460 512
+           L 497 497 Z"
+        fill="white" opacity="0.35" filter="url(#centerGlow)"/>
+  <path d="M 512 460 L 527 497 L 564 512
+           L 527 527 L 512 564
+           L 497 527 L 460 512
+           L 497 497 Z"
         fill="white"/>
 </svg>
