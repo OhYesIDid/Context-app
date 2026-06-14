@@ -296,6 +296,7 @@ class BubbleSuggestionActivity : Activity() {
                     lp.bottomMargin = dp(10)
                     layoutParams = lp
                     setOnClickListener {
+                        logActionFeedback("tapped", actionType, convKey)
                         when (actionType) {
                             "calendar_add" -> {
                                 val title = suggestedAction.optString("title").ifEmpty { "Event" }
@@ -323,6 +324,30 @@ class BubbleSuggestionActivity : Activity() {
                     }
                 })
             }
+        } else if (!isLoading) {
+            // No action detected — offer generic calendar/maps shortcuts and log if used
+            val shortcutRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                lp.bottomMargin = dp(10)
+                layoutParams = lp
+            }
+            shortcutRow.addView(makeChip("+ Calendar", false).apply {
+                setOnClickListener {
+                    logActionFeedback("requested_calendar", "calendar_add", convKey)
+                    try { startActivity(Intent(Intent.ACTION_INSERT).apply { data = CalendarContract.Events.CONTENT_URI }) } catch (_: Exception) {}
+                }
+            })
+            shortcutRow.addView(makeChip("+ Maps", false).apply {
+                setOnClickListener {
+                    logActionFeedback("requested_maps", "maps_open", convKey)
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))) } catch (_: Exception) {}
+                }
+            })
+            root.addView(shortcutRow)
         }
 
         // ── Action row: Dismiss · ↺ · Send ──────────────────────────────────
@@ -481,6 +506,22 @@ class BubbleSuggestionActivity : Activity() {
             .build()
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .notify(followUpId, notification)
+    }
+
+    private fun logActionFeedback(event: String, actionType: String, convKey: String?) {
+        val prefs = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+        val existing = prefs.getString("action_feedback", "[]")
+        val arr = try { JSONArray(existing) } catch (_: Exception) { JSONArray() }
+        arr.put(JSONObject().apply {
+            put("ts", System.currentTimeMillis())
+            put("event", event)
+            put("actionType", actionType)
+            if (convKey != null) put("convKey", convKey)
+        })
+        val trimmed = if (arr.length() > 100) {
+            JSONArray().also { a -> for (i in (arr.length() - 100) until arr.length()) a.put(arr.get(i)) }
+        } else arr
+        prefs.edit().putString("action_feedback", trimmed.toString()).apply()
     }
 
     private fun logCorrection(from: List<String>, to: List<String>, message: String) {
