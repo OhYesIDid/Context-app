@@ -327,29 +327,57 @@ class BubbleSuggestionActivity : Activity() {
                 })
             }
         } else if (!isLoading) {
-            // No action detected — offer generic calendar/maps shortcuts and log if used
-            val shortcutRow = LinearLayout(this).apply {
+            // No action detected — mirrors "+ Context" pattern: collapsed by default
+            val addActionBtn = TextView(this).apply {
+                text = "+ Action"
+                setTextColor(MUTED)
+                textSize = 11f
+            }
+            val addActionExpanded = booleanArrayOf(false)
+            val addActionRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                visibility = View.GONE
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
                 )
                 lp.bottomMargin = dp(10)
                 layoutParams = lp
             }
-            shortcutRow.addView(makeChip("+ Calendar", false).apply {
+            addActionRow.addView(makeChip("+ Calendar", false).apply {
                 setOnClickListener {
                     logActionFeedback("requested_calendar", "calendar_add", convKey)
                     try { startActivity(Intent(Intent.ACTION_INSERT).apply { data = CalendarContract.Events.CONTENT_URI }) } catch (_: Exception) {}
+                    addActionBtn.text = "Noted"
+                    addActionBtn.setTextColor(GREEN)
+                    addActionRow.visibility = View.GONE
                 }
             })
-            shortcutRow.addView(makeChip("+ Maps", false).apply {
+            addActionRow.addView(makeChip("+ Maps", false).apply {
                 setOnClickListener {
                     logActionFeedback("requested_maps", "maps_open", convKey)
                     try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))) } catch (_: Exception) {}
+                    addActionBtn.text = "Noted"
+                    addActionBtn.setTextColor(GREEN)
+                    addActionRow.visibility = View.GONE
                 }
             })
-            root.addView(shortcutRow)
+            addActionBtn.setOnClickListener {
+                addActionExpanded[0] = !addActionExpanded[0]
+                addActionRow.visibility = if (addActionExpanded[0]) View.VISIBLE else View.GONE
+            }
+            val addActionBar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                lp.bottomMargin = dp(6)
+                layoutParams = lp
+            }
+            addActionBar.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
+            addActionBar.addView(addActionBtn)
+            root.addView(addActionBar)
+            root.addView(addActionRow)
         }
 
         // ── Action row: Dismiss · ↺ · Send ──────────────────────────────────
