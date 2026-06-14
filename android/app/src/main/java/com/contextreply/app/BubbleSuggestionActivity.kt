@@ -22,6 +22,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 class BubbleSuggestionActivity : Activity() {
 
@@ -466,11 +468,13 @@ class BubbleSuggestionActivity : Activity() {
         val actionType  = action.optString("type")
         val actionLabel = action.optString("label").ifEmpty { null } ?: return
 
+        var bodyText = ""
         val actionIntent = when (actionType) {
             "calendar_add" -> {
                 val title       = action.optString("title").ifEmpty { "Event" }
                 val datetimeStr = action.optString("datetime").ifEmpty { null }
                 val duration    = action.optInt("durationMinutes", 60)
+                bodyText = buildCalendarBody(title, datetimeStr, duration)
                 Intent(Intent.ACTION_INSERT).apply {
                     data = CalendarContract.Events.CONTENT_URI
                     putExtra(CalendarContract.Events.TITLE, title)
@@ -486,6 +490,7 @@ class BubbleSuggestionActivity : Activity() {
             }
             "maps_open" -> {
                 val address = action.optString("address").ifEmpty { null } ?: return
+                bodyText = address
                 Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))
             }
             else -> return
@@ -499,13 +504,41 @@ class BubbleSuggestionActivity : Activity() {
         val notification = NotificationCompat.Builder(this, ProTxtBgService.CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle(actionLabel)
-            .setContentText("Tap to open")
+            .setContentText(bodyText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setTimeoutAfter(5 * 60 * 1000L)
             .build()
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .notify(followUpId, notification)
+    }
+
+    private fun buildCalendarBody(title: String, datetimeStr: String?, durationMinutes: Int): String {
+        if (datetimeStr == null) return title
+        return try {
+            val dt = LocalDateTime.parse(datetimeStr)
+            val datePart = dt.toLocalDate().let { d ->
+                val dow = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                val month = d.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                "$dow ${d.dayOfMonth} $month"
+            }
+            val timePart = dt.toLocalTime().let { t ->
+                val h = if (t.hour % 12 == 0) 12 else t.hour % 12
+                val m = t.minute.toString().padStart(2, '0')
+                val ampm = if (t.hour < 12) "AM" else "PM"
+                "$h:$m $ampm"
+            }
+            val durationPart = when {
+                durationMinutes < 60  -> "${durationMinutes}min"
+                durationMinutes == 60 -> "1 hour"
+                durationMinutes % 60 == 0 -> "${durationMinutes / 60} hours"
+                else -> "${durationMinutes / 60}h ${durationMinutes % 60}min"
+            }
+            "$title · $datePart · $timePart · $durationPart"
+        } catch (_: Exception) {
+            title
+        }
     }
 
     private fun logActionFeedback(event: String, actionType: String, convKey: String?) {
