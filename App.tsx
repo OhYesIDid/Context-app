@@ -83,6 +83,7 @@ export default function App() {
   const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const [skipGroupMessages, setSkipGroupMessages] = useState(false);
+  const [suggestAllMessages, setSuggestAllMessagesState] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsVisible, setContactsVisible] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
@@ -127,6 +128,7 @@ export default function App() {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
+      ProTxtSettings.getSuggestAllMessages().then((all: boolean) => setSuggestAllMessagesState(all)).catch(() => {});
       ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
       (async () => {
         const prefs: Record<string, Record<string, string>> = {};
@@ -350,7 +352,7 @@ export default function App() {
               ))}
             </View>
           </View>
-          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+          <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 16 }}>
               <Text style={styles.settingText}>Skip group messages</Text>
               <Text style={styles.setupStatus}>Only suggest replies for 1-to-1 chats</Text>
@@ -360,6 +362,18 @@ export default function App() {
               onValueChange={(v) => { setSkipGroupMessages(v); ProTxtSettings?.setSkipGroupMessages?.(v); }}
               trackColor={{ false: BORDER, true: PURPLE + '99' }}
               thumbColor={skipGroupMessages ? PURPLE : MUTED}
+            />
+          </View>
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <View style={{ flex: 1, marginRight: 16 }}>
+              <Text style={styles.settingText}>Suggest replies for all messages</Text>
+              <Text style={styles.setupStatus}>Off: only when ETA, availability, or plans detected</Text>
+            </View>
+            <Switch
+              value={suggestAllMessages}
+              onValueChange={(v) => { setSuggestAllMessagesState(v); ProTxtSettings?.setSuggestAllMessages?.(v); }}
+              trackColor={{ false: BORDER, true: PURPLE + '99' }}
+              thumbColor={suggestAllMessages ? PURPLE : MUTED}
             />
           </View>
         </View>

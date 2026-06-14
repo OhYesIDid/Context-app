@@ -33,6 +33,22 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun setSuggestAllMessages(all: Boolean) {
+        reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("suggest_all_messages", all)
+            .apply()
+    }
+
+    @ReactMethod
+    fun getSuggestAllMessages(promise: Promise) {
+        val all = reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .getBoolean("suggest_all_messages", false)
+        promise.resolve(all)
+    }
+
+    @ReactMethod
     fun isNlsConnected(promise: Promise) {
         val listeners = Settings.Secure.getString(
             reactApplicationContext.contentResolver,

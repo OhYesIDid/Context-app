@@ -301,7 +301,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>✅</Text>
             <Text style={s.stepTitle}>You're all set!</Text>
-            <Text style={s.stepDesc}>ProTxt runs in the background. Suggestions will appear when messages arrive.</Text>
+            <Text style={s.stepDesc}>ProTxt runs in the background. Suggestions appear when someone asks about your ETA, availability, or plans — when your context makes a real difference.</Text>
           </>
         );
       default:

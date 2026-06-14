@@ -287,6 +287,9 @@ class ProTxtBgService : NotificationListenerService() {
 
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
+            val suggestAll = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+                .getBoolean("suggest_all_messages", false)
+            if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // Only show loading bubble when the user is not already in the messaging app.
             // When they are in the app, the IME overlay handles the suggestion instead.
