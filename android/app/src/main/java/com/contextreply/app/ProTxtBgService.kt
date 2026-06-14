@@ -263,15 +263,19 @@ class ProTxtBgService : NotificationListenerService() {
         // direct reply rather than posting an update, so Gate 6 never fires. The NEXT inbound
         // notification carries the full updated EXTRA_MESSAGES bundle including the user's reply
         // with sender=null in the middle of the thread. We detect this case here and reseed from
-        // that reply onward so Claude doesn't see stale pre-reply messages as unresolved questions.
+        // after that reply so Claude only sees post-reply context.
+        // Guard: lastOutboundIdx > 0 — if the first message has null sender the app likely doesn't
+        // set sender at all (non-MessagingStyle format); don't treat that as an outbound reply.
         val lastOutboundIdx = notifThread.indexOfLast { (sender, _) -> sender == null }
-        if (lastOutboundIdx >= 0) {
-            // User replied directly since our last cached snapshot — record what they sent and
-            // reseed the store from their reply onward.
+        if (lastOutboundIdx > 0) {
+            // User replied directly since our last cached snapshot — record what they sent, clear
+            // the store, and reseed with only the inbound messages that came after their reply.
+            // The outbound text is captured in ContactMemory (sent as lastSentReply to the worker)
+            // so it doesn't need to be in the thread itself.
             val outboundText = notifThread[lastOutboundIdx].second
             ContactMemory.saveLastSent(this, convKey, outboundText)
             store.markReplied(convKey)
-            notifThread.drop(lastOutboundIdx).forEach { (sender, msgText) ->
+            notifThread.drop(lastOutboundIdx + 1).forEach { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
         } else if (store.isEmpty(convKey)) {

@@ -179,7 +179,7 @@ function buildPrompt(body: SuggestRequest): string {
     messageBlock,
     memoryParts.length > 0 && `\n<context>\n${memoryParts.join('\n')}\n</context>`,
     contextParts.length > 0 && `\nContext:\n${contextParts.join('\n')}`,
-    body.styleContext && `\n${body.styleContext}`,
+    body.styleContext && `\nWriting style reference (examples of how this user edits AI suggestions — for voice/tone matching only, not conversation context):\n${body.styleContext}`,
     `\nToday is ${today}.`,
     '\nWrite the reply JSON for the user.',
   ].filter(Boolean).join('');
