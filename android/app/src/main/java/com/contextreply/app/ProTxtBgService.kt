@@ -258,16 +258,32 @@ class ProTxtBgService : NotificationListenerService() {
         // real message's burst context.
         arrivalBuffer.getOrPut(convKey) { mutableListOf() }.add(text)
 
-        if (store.isEmpty(convKey)) {
-            // First message from this conversation — seed store with full EXTRA_MESSAGES
-            // context. WhatsApp/Telegram bundle recent history here, giving Claude
-            // background on the thread from the very first notification.
+        // Check for a mid-thread outbound message — this happens when the user replies directly
+        // inside the messaging app (not via the bubble). WhatsApp cancels the notification on
+        // direct reply rather than posting an update, so Gate 6 never fires. The NEXT inbound
+        // notification carries the full updated EXTRA_MESSAGES bundle including the user's reply
+        // with sender=null in the middle of the thread. We detect this case here and reseed from
+        // that reply onward so Claude doesn't see stale pre-reply messages as unresolved questions.
+        val lastOutboundIdx = notifThread.indexOfLast { (sender, _) -> sender == null }
+        if (lastOutboundIdx >= 0) {
+            // User replied directly since our last cached snapshot — record what they sent and
+            // reseed the store from their reply onward.
+            val outboundText = notifThread[lastOutboundIdx].second
+            ContactMemory.saveLastSent(this, convKey, outboundText)
+            store.markReplied(convKey)
+            notifThread.drop(lastOutboundIdx).forEach { (sender, msgText) ->
+                store.appendMessage(convKey, sender, msgText)
+            }
+        } else if (store.isEmpty(convKey)) {
+            // No outbound in thread, first message from this conversation — seed store with
+            // full EXTRA_MESSAGES context. WhatsApp/Telegram bundle recent history here,
+            // giving Claude background on the thread from the very first notification.
             notifThread.forEach { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
         } else {
-            // Conversation already cached — append only the new trigger message
-            // to avoid duplicating the history already in the store.
+            // Ongoing conversation, no direct reply detected — append only the new trigger
+            // message to avoid duplicating the history already in the store.
             notifThread.lastOrNull()?.let { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
