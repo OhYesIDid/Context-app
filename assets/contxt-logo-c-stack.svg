@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ConTxt — Concept C: "The Stack"
+  Two ultra-clean message bars — received (dark, shorter) above,
+  AI reply (gradient indigo, wider, glowing) below. Thread visualisation.
+  Research basis: single strong symbol, ultra-minimal, instant read at 60px,
+  no text needed to communicate messaging + AI.
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="48%" r="58%">
+      <stop offset="0%" stop-color="#110c28"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <!-- AI reply bar gradient -->
+    <linearGradient id="replyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#818cf8"/>
+      <stop offset="55%"  stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <!-- Shimmer on top of reply bar -->
+    <linearGradient id="shimmer" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="white" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Received bar gradient (subtle) -->
+    <linearGradient id="recvGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27272a"/>
+      <stop offset="100%" stop-color="#3f3f46"/>
+    </linearGradient>
+
+    <!-- Ambient glow behind reply bar -->
+    <filter id="ambGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="44"/>
+    </filter>
+
+    <!-- Bar glow -->
+    <filter id="barGlow" x="-6%" y="-35%" width="112%" height="170%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Sparkle glow -->
+    <filter id="sparkGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Ambient glow behind reply bar -->
+  <rect x="104" y="520" width="808" height="136" rx="68"
+        fill="#6366f1" opacity="0.18" filter="url(#ambGlow)"/>
+
+  <!-- Received message bar (shorter, dark) -->
+  <rect x="104" y="330" width="530" height="136" rx="68"
+        fill="url(#recvGrad)"/>
+  <!-- Subtle top highlight on received bar -->
+  <rect x="104" y="330" width="530" height="68" rx="68"
+        fill="white" opacity="0.05"/>
+  <!-- Thin border -->
+  <rect x="105" y="331" width="528" height="134" rx="67"
+        fill="none" stroke="white" stroke-width="1" stroke-opacity="0.12"/>
+
+  <!-- AI reply bar (wider, indigo gradient, glowing) -->
+  <rect x="104" y="530" width="808" height="164" rx="82"
+        fill="url(#replyGrad)" filter="url(#barGlow)"/>
+
+  <!-- Shimmer on reply bar -->
+  <rect x="104" y="530" width="808" height="82" rx="82"
+        fill="url(#shimmer)"/>
+
+  <!-- Glass border on reply bar -->
+  <rect x="105" y="531" width="806" height="162" rx="81"
+        fill="none" stroke="white" stroke-width="1.5" stroke-opacity="0.22"/>
+
+  <!--
+    4-pointed sparkle inside reply bar, right-of-center
+    Bar center: y = 530+82 = 612, x ≈ 780
+    Sparkle outer r=38, inner r=15 (offset=11)
+  -->
+  <path d="M 780 574 L 791 601 L 818 612
+           L 791 623 L 780 650
+           L 769 623 L 742 612
+           L 769 601 Z"
+        fill="white" filter="url(#sparkGlow)"/>
+
+  <!-- Avatar circle on reply bar left (AI indicator) -->
+  <circle cx="162" cy="612" r="38" fill="#4338ca"/>
+  <circle cx="162" cy="612" r="36" fill="#4f46e5"/>
+  <!-- Mini sparkle inside avatar -->
+  <path d="M 162 596 L 166 607 L 178 612
+           L 166 617 L 162 628
+           L 158 617 L 146 612
+           L 158 607 Z"
+        fill="white" opacity="0.9"/>
+</svg>

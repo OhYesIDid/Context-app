@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ConTxt — Concept A: "The Arc"
+  A bold geometric C arc — doubles as the letter C and a connection arc between two people.
+  Research basis: single hero element, radial gradient, works at 60px, Raycast/Linear approach.
+  Safe zone: main element sits within 15% padding (154–870px).
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="44%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#160d30"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <!-- Arc stroke: light lavender at top → deep indigo at bottom -->
+    <linearGradient id="arcGrad" x1="721" y1="303" x2="512" y2="807"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#e0d7ff"/>
+      <stop offset="40%"  stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+
+    <!-- Soft ambient glow (behind arc) -->
+    <filter id="ambGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="52"/>
+    </filter>
+
+    <!-- Arc edge glow -->
+    <filter id="arcGlow" x="-12%" y="-12%" width="124%" height="124%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Dot glow (endpoint markers) -->
+    <filter id="dotGlow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Ambient purple cloud behind the arc -->
+  <ellipse cx="450" cy="512" rx="290" ry="260"
+           fill="#7c3aed" opacity="0.16" filter="url(#ambGlow)"/>
+
+  <!--
+    C arc: center (512,512), radius 295
+    Start (upper-right): x=512+295·cos(-45°)=721, y=512+295·sin(-45°)=303
+    End   (lower-right): x=721, y=721
+    Large arc, counterclockwise = the C shape opening to the right
+  -->
+
+  <!-- Outer glow pass (thicker, blurred) -->
+  <path d="M 721 303 A 295 295 0 1 0 721 721"
+        fill="none"
+        stroke="#8b5cf6" stroke-width="130" stroke-linecap="round"
+        opacity="0.18" filter="url(#ambGlow)"/>
+
+  <!-- Main arc -->
+  <path d="M 721 303 A 295 295 0 1 0 721 721"
+        fill="none"
+        stroke="url(#arcGrad)" stroke-width="96" stroke-linecap="round"
+        filter="url(#arcGlow)"/>
+
+  <!-- Upper endpoint dot (contact / incoming) -->
+  <circle cx="721" cy="303" r="18" fill="#c4b5fd" opacity="0.7"
+          filter="url(#dotGlow)"/>
+  <circle cx="721" cy="303" r="11" fill="#ede9fe"/>
+
+  <!-- Lower endpoint dot (you / AI reply) — brighter -->
+  <circle cx="721" cy="721" r="26" fill="#a78bfa" opacity="0.5"
+          filter="url(#dotGlow)"/>
+  <circle cx="721" cy="721" r="16" fill="white"/>
+</svg>
