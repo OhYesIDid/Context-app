@@ -97,7 +97,6 @@
   <!-- ========================= NODES (glow r=150, dark r=110, fill r=88) ========================= -->
 
   <!-- LOCATION — top (512,217) — cyan -->
-  <circle cx="512" cy="217" r="150" fill="#06b6d4" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="512" cy="217" r="110" fill="#071c24"/>
   <circle cx="512" cy="217" r="88"  fill="url(#nLoc)"/>
   <!-- Location pin: solid circle head + triangle tail -->
@@ -106,7 +105,6 @@
   <circle cx="512" cy="200" r="10" fill="#0e7490"/>
 
   <!-- CALENDAR — top-right (768,365) — amber -->
-  <circle cx="768" cy="365" r="150" fill="#f59e0b" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="768" cy="365" r="110" fill="#231a07"/>
   <circle cx="768" cy="365" r="88"  fill="url(#nCal)"/>
   <!-- Calendar: body + header band + day grid -->
@@ -128,7 +126,6 @@
   <circle cx="785" cy="381" r="4" fill="#b45309"/>
 
   <!-- MESSAGE — bottom-right (768,660) — rose -->
-  <circle cx="768" cy="660" r="150" fill="#f43f5e" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="768" cy="660" r="110" fill="#23070f"/>
   <circle cx="768" cy="660" r="88"  fill="url(#nMsg)"/>
   <!-- Message bubble: plain bubble + two text lines (no dots — center has typing indicator) -->
@@ -140,7 +137,6 @@
   <rect x="745" y="659" width="40" height="7" rx="3.5" fill="#be123c" opacity="0.35"/>
 
   <!-- WEATHER — bottom (512,807) — blue -->
-  <circle cx="512" cy="807" r="150" fill="#3b82f6" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="512" cy="807" r="110" fill="#07101f"/>
   <circle cx="512" cy="807" r="88"  fill="url(#nWthr)"/>
   <!-- Cloud: 5 overlapping circles, no rect — natural rounded shape -->
@@ -156,7 +152,6 @@
   <ellipse cx="527" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
 
   <!-- BATTERY — bottom-left (256,660) — emerald -->
-  <circle cx="256" cy="660" r="150" fill="#10b981" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="256" cy="660" r="110" fill="#071c13"/>
   <circle cx="256" cy="660" r="88"  fill="url(#nBat)"/>
   <!-- Battery: body (56x32) + terminal nub + charge fill -->
@@ -168,7 +163,6 @@
   <rect x="231" y="648" width="36" height="24" rx="5" fill="white"/>
 
   <!-- HISTORY — top-left (256,365) — violet -->
-  <circle cx="256" cy="365" r="150" fill="#8b5cf6" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="256" cy="365" r="110" fill="#130e23"/>
   <circle cx="256" cy="365" r="88"  fill="url(#nHist)"/>
   <!-- Clock icon: circle face + hour/minute hands = "history" -->
@@ -193,12 +187,12 @@
   <ellipse cx="512" cy="510" rx="145" ry="120" fill="#4338ca" opacity="0.18" filter="url(#orbHalo)"/>
   <!-- Bubble: dark fill -->
   <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
-           L 607 552 Q 607 580 579 580 L 546 580 L 530 618 L 514 580
+           L 607 552 Q 607 580 579 580 L 579 580 L 564 618 L 549 580
            L 445 580 Q 417 580 417 552 Z"
         fill="#0d0a1e"/>
   <!-- White glow border -->
   <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
-           L 607 552 Q 607 580 579 580 L 546 580 L 530 618 L 514 580
+           L 607 552 Q 607 580 579 580 L 579 580 L 564 618 L 549 580
            L 445 580 Q 417 580 417 552 Z"
         fill="none" stroke="white" stroke-width="3" stroke-opacity="0.45"/>
   <!-- Top-left glass shimmer -->
