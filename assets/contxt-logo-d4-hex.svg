@@ -122,77 +122,108 @@
   <circle cx="512" cy="217" r="150" fill="#06b6d4" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="512" cy="217" r="110" fill="#071c24"/>
   <circle cx="512" cy="217" r="88"  fill="url(#nLoc)"/>
-  <!-- Pin: head cx=512 cy=200 r=22, tip at (512,252) -->
-  <path d="M 490 200 A 22 22 0 1 1 534 200 L 512 252 Z" fill="white"/>
+  <!-- Location pin: solid circle head + triangle tail -->
+  <circle cx="512" cy="200" r="24" fill="white"/>
+  <polygon points="488,215 536,215 512,256" fill="white"/>
   <circle cx="512" cy="200" r="10" fill="#0e7490"/>
 
   <!-- CALENDAR — top-right (768,365) — amber -->
   <circle cx="768" cy="365" r="150" fill="#f59e0b" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="768" cy="365" r="110" fill="#231a07"/>
   <circle cx="768" cy="365" r="88"  fill="url(#nCal)"/>
-  <!-- 62x54 rect centered (768,365): x=737 y=338 -->
-  <rect x="737" y="338" width="62" height="54" rx="9" fill="none" stroke="white" stroke-width="4"/>
-  <rect x="737" y="338" width="62" height="17" rx="9" fill="white" opacity="0.28"/>
-  <circle cx="751" cy="369" r="5" fill="white"/>
-  <circle cx="768" cy="369" r="5" fill="white"/>
-  <circle cx="785" cy="369" r="5" fill="white"/>
-  <circle cx="751" cy="382" r="5" fill="white"/>
-  <circle cx="768" cy="382" r="5" fill="white"/>
+  <!-- Calendar: body + header band + day grid -->
+  <rect x="737" y="338" width="62" height="54" rx="9" fill="white" opacity="0.15"/>
+  <rect x="737" y="338" width="62" height="54" rx="9" fill="none" stroke="white" stroke-width="3.5"/>
+  <!-- Header band -->
+  <rect x="737" y="338" width="62" height="18" rx="9" fill="white" opacity="0.5"/>
+  <rect x="737" y="347" width="62" height="9"  fill="white" opacity="0.5"/>
+  <!-- Separator line -->
+  <line x1="737" y1="356" x2="799" y2="356" stroke="white" stroke-width="2" opacity="0.4"/>
+  <!-- Day dots: 3×2 grid -->
+  <circle cx="751" cy="367" r="5.5" fill="white"/>
+  <circle cx="768" cy="367" r="5.5" fill="white"/>
+  <circle cx="785" cy="367" r="5.5" fill="white"/>
+  <circle cx="751" cy="381" r="5.5" fill="white"/>
+  <circle cx="768" cy="381" r="5.5" fill="white"/>
+  <!-- Highlighted "today" dot -->
+  <circle cx="785" cy="381" r="7" fill="white"/>
+  <circle cx="785" cy="381" r="4" fill="#b45309"/>
 
   <!-- MESSAGE — bottom-right (768,660) — rose -->
   <circle cx="768" cy="660" r="150" fill="#f43f5e" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="768" cy="660" r="110" fill="#23070f"/>
   <circle cx="768" cy="660" r="88"  fill="url(#nMsg)"/>
-  <!-- 64x44 bubble centered ~(768,658): x=736 y=636 -->
-  <path d="M 736 643 Q 736 636 744 636 L 794 636 Q 802 636 802 643
-           L 802 668 Q 802 676 794 676 L 756 676 L 748 687 L 751 676
-           Q 736 676 736 668 Z" fill="white"/>
-  <circle cx="756" cy="658" r="5" fill="#be123c"/>
-  <circle cx="769" cy="658" r="5" fill="#be123c"/>
-  <circle cx="782" cy="658" r="5" fill="#be123c"/>
+  <!-- Message bubble: plain bubble + two text lines (no dots — center has typing indicator) -->
+  <path d="M 733 642 Q 733 632 743 632 L 805 632 Q 815 632 815 642
+           L 815 672 Q 815 682 805 682 L 757 682 L 747 695 L 751 682
+           Q 733 682 733 672 Z" fill="white"/>
+  <!-- Text lines inside bubble -->
+  <rect x="745" y="646" width="56" height="7" rx="3.5" fill="#be123c" opacity="0.5"/>
+  <rect x="745" y="659" width="40" height="7" rx="3.5" fill="#be123c" opacity="0.35"/>
 
   <!-- WEATHER — bottom (512,807) — blue -->
   <circle cx="512" cy="807" r="150" fill="#3b82f6" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="512" cy="807" r="110" fill="#07101f"/>
   <circle cx="512" cy="807" r="88"  fill="url(#nWthr)"/>
-  <!-- Cloud + rain -->
-  <circle cx="498" cy="800" r="18" fill="white"/>
-  <circle cx="513" cy="791" r="24" fill="white"/>
-  <circle cx="527" cy="800" r="16" fill="white"/>
-  <rect x="480" y="800" width="65" height="18" fill="white"/>
-  <circle cx="497" cy="827" r="5" fill="white" opacity="0.8"/>
-  <circle cx="512" cy="832" r="5" fill="white" opacity="0.8"/>
-  <circle cx="527" cy="827" r="5" fill="white" opacity="0.8"/>
+  <!-- Cloud: 5 overlapping circles, no rect — natural rounded shape -->
+  <circle cx="496" cy="810" r="19" fill="white"/>
+  <circle cx="510" cy="800" r="23" fill="white"/>
+  <circle cx="526" cy="808" r="17" fill="white"/>
+  <!-- Two fill circles to close concave gaps at base -->
+  <circle cx="503" cy="817" r="14" fill="white"/>
+  <circle cx="519" cy="817" r="14" fill="white"/>
+  <!-- Rain: slim ellipses, not dots -->
+  <ellipse cx="499" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
+  <ellipse cx="513" cy="844" rx="3.5" ry="8" fill="white" opacity="0.85"/>
+  <ellipse cx="527" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
 
   <!-- BATTERY — bottom-left (256,660) — emerald -->
   <circle cx="256" cy="660" r="150" fill="#10b981" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="256" cy="660" r="110" fill="#071c13"/>
   <circle cx="256" cy="660" r="88"  fill="url(#nBat)"/>
-  <!-- 48x30 body centered (256,660): x=232 y=645 -->
-  <rect x="232" y="645" width="48" height="30" rx="7" fill="none" stroke="white" stroke-width="4"/>
-  <rect x="280" y="653" width="9"  height="14" rx="4" fill="white"/>
-  <rect x="235" y="648" width="30" height="24" rx="5" fill="white"/>
+  <!-- Battery: body (56x32) + terminal nub + charge fill -->
+  <rect x="227" y="644" width="56" height="32" rx="8" fill="white" opacity="0.15"/>
+  <rect x="227" y="644" width="56" height="32" rx="8" fill="none" stroke="white" stroke-width="3.5"/>
+  <!-- Terminal nub -->
+  <rect x="283" y="652" width="9" height="16" rx="4" fill="white"/>
+  <!-- Charge fill (≈70%) — rounded inside the body -->
+  <rect x="231" y="648" width="36" height="24" rx="5" fill="white"/>
 
   <!-- HISTORY — top-left (256,365) — violet -->
   <circle cx="256" cy="365" r="150" fill="#8b5cf6" opacity="0.15" filter="url(#nodeGlow)"/>
   <circle cx="256" cy="365" r="110" fill="#130e23"/>
   <circle cx="256" cy="365" r="88"  fill="url(#nHist)"/>
-  <!-- Three stacked bars — conversation thread -->
-  <rect x="216" y="350" width="80" height="10" rx="5" fill="white"/>
-  <rect x="216" y="364" width="56" height="10" rx="5" fill="white" opacity="0.72"/>
-  <rect x="216" y="378" width="72" height="10" rx="5" fill="white" opacity="0.50"/>
+  <!-- Clock icon: circle face + hour/minute hands = "history" -->
+  <circle cx="256" cy="365" r="32" fill="none" stroke="white" stroke-width="4"/>
+  <circle cx="256" cy="365" r="4"  fill="white"/>
+  <!-- Minute hand: pointing to 12 (up) -->
+  <line x1="256" y1="365" x2="256" y2="339" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <!-- Hour hand: pointing to ~10 -->
+  <line x1="256" y1="365" x2="239" y2="352" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <!-- Counter-clockwise arc hint (history = going back in time) -->
+  <path d="M 246 337 A 20 20 0 0 0 236 345" fill="none"
+        stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <polygon points="242,333 246,342 252,336" fill="white"/>
 
-  <!-- ====================== CENTRAL IRIS ====================== -->
-  <!-- Outer halo -->
-  <circle cx="512" cy="512" r="170" fill="white" opacity="0.05" filter="url(#orbHalo)"/>
-  <!-- Dashed outer orbit -->
-  <circle cx="512" cy="512" r="135" fill="none"
-          stroke="white" stroke-width="2" stroke-opacity="0.18" stroke-dasharray="10 8"/>
-  <!-- Mid solid ring -->
-  <circle cx="512" cy="512" r="108" fill="none"
-          stroke="white" stroke-width="4" stroke-opacity="0.32"/>
-  <!-- Inner orb glow -->
-  <circle cx="512" cy="512" r="88"  fill="url(#orbGlow)" opacity="0.85" filter="url(#orbHalo)"/>
-  <!-- Core -->
-  <circle cx="512" cy="512" r="55"  fill="white"/>
+  <!-- ====================== CENTRAL: TYPING INDICATOR ====================== -->
+  <!--
+    Bubble body: 230x120, centered at (512,500)
+    x=397 y=442 → corners at rx≈28 via quadratic bezier
+    Tail: bottom-left, pointing down — "AI is composing a reply"
+  -->
+  <!-- Soft ambient glow -->
+  <circle cx="512" cy="498" r="160" fill="white" opacity="0.06" filter="url(#orbHalo)"/>
+  <!-- Bubble -->
+  <path d="M 397 470 Q 397 442 425 442 L 599 442 Q 627 442 627 470
+           L 627 534 Q 627 562 599 562 L 444 562 L 428 598 L 435 562
+           Q 397 562 397 534 Z"
+        fill="white" filter="url(#orbHalo)"/>
+  <!-- Top shimmer -->
+  <path d="M 397 470 Q 397 442 425 442 L 599 442 Q 627 442 627 470
+           L 627 478 Q 397 478 397 470 Z"
+        fill="white" opacity="0.22"/>
+  <!-- Three dots: y=502, spaced 44px, r=15 -->
+  <circle cx="468" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
+  <circle cx="556" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
 </svg>
