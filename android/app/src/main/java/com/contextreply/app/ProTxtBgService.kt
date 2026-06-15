@@ -45,6 +45,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val CHANNEL_ID = "contextreply_suggestions"
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
+        const val ACTION_MARK_READ = "com.contxt.app.ACTION_MARK_READ"
         const val EXTRA_REPLY_TEXT = "reply_text"
         const val EXTRA_REPLY_FORMAL = "reply_formal"
         const val EXTRA_REPLY_BRIEF = "reply_brief"
@@ -80,6 +81,7 @@ class ProTxtBgService : NotificationListenerService() {
             val message: String,
             val detectedIntents: String,
             val suggestedActionJson: String?,
+            val markAsReadPendingIntent: PendingIntent?,
         )
         val pendingBubbles = ConcurrentHashMap<String, PendingBubble>()
 
@@ -176,6 +178,7 @@ class ProTxtBgService : NotificationListenerService() {
                 postLoadingNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
+                    b.markAsReadPendingIntent,
                 )
             } else {
                 val sa = b.suggestedActionJson?.let { try { JSONObject(it) } catch (_: Exception) { null } }
@@ -183,6 +186,7 @@ class ProTxtBgService : NotificationListenerService() {
                     b.replyText, b.formalText, b.briefText,
                     b.replyPendingIntent, b.remoteInputKey, b.notifId, b.convKey,
                     b.intent, b.openChatIntent, b.message, b.detectedIntents, sa,
+                    markAsReadPendingIntent = b.markAsReadPendingIntent,
                 )
             }
         }
@@ -239,6 +243,7 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        android.util.Log.d("ProTxt", "onNotificationPosted pkg=${sbn.packageName}")
         if (sbn.packageName !in TARGET_PACKAGES) return
 
         val notification = sbn.notification ?: return
@@ -269,13 +274,15 @@ class ProTxtBgService : NotificationListenerService() {
         val remoteInputKey = replyAction.remoteInputs?.firstOrNull()?.resultKey ?: return
         val replyPendingIntent = replyAction.actionIntent ?: return
         val openChatIntent = notification.contentIntent
+        val markAsReadPendingIntent = notification.actions?.firstOrNull { action ->
+            action?.remoteInputs.isNullOrEmpty() &&
+            action?.title?.toString()?.lowercase()?.contains("read") == true
+        }?.actionIntent
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
             ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
             ?: return
-
-        if (text.length < 8) return
 
         // Gate 3: no-reply content patterns
         if (NO_REPLY_TEXT_PATTERNS.any { it.containsMatchIn(text) || it.containsMatchIn(title) }) return
@@ -385,6 +392,7 @@ class ProTxtBgService : NotificationListenerService() {
         // clear the active state so the fresh debounce generates a new one.
         activeBubbles.remove(convKey)
         pendingJobs[convKey] = scheduler.schedule({
+            android.util.Log.d("ProTxt", "debounce fired convKey=$convKey")
             pendingJobs.remove(convKey)
             val fullThread = store.getThread(convKey)
             // Drain the arrival buffer — all texts that came in during the debounce window.
@@ -401,13 +409,19 @@ class ProTxtBgService : NotificationListenerService() {
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
             val suggestAll = Prefs.main(this)
                 .getBoolean("suggest_all_messages", false)
+            android.util.Log.d("ProTxt", "intent=$detectedIntentsStr suggestAll=$suggestAll")
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // Only show loading bubble when the user is not already in the messaging app.
             // When they are in the app, the IME overlay handles the suggestion instead.
             val userInApp = ProTxtAccessibilityService.activePackage == packageName
+            android.util.Log.d("ProTxt", "userInApp=$userInApp activePackage=${ProTxtAccessibilityService.activePackage} pkg=$packageName")
             if (!userInApp) {
-                postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr)
+                try {
+                    postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
+                } catch (e: Exception) {
+                    android.util.Log.e("ProTxt", "postLoadingNotification threw: ${e.javaClass.simpleName}: ${e.message}")
+                }
             }
             val contactMemory = ContactMemory.getMemory(this, convKey)
             val lastSent = ContactMemory.getLastSent(this, convKey)
@@ -419,6 +433,7 @@ class ProTxtBgService : NotificationListenerService() {
                         contactMemory = contactMemory,
                         lastSentReply = lastSent,
                     ) ?: run {
+                        android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                         activeBubbles.remove(convKey)
                         return@submit
                     }
@@ -446,6 +461,7 @@ class ProTxtBgService : NotificationListenerService() {
                         }
                     }
                     val nowInApp = ProTxtAccessibilityService.activePackage == packageName
+                    android.util.Log.d("ProTxt", "worker done: userInApp=$userInApp nowInApp=$nowInApp posting=${!userInApp || !nowInApp}")
                     // If we posted a loading bubble (!userInApp), we must always update it
                     // with the real reply — even if the user entered the app while the worker
                     // was running. Skipping postSuggestionNotification leaves the bubble
@@ -457,7 +473,7 @@ class ProTxtBgService : NotificationListenerService() {
                             primary, formal, brief,
                             replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
                             openChatIntent, latestMessage, detectedIntentsStr,
-                            suggestedAction = finalAction
+                            suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent
                         )
                     }
                     if (nowInApp) {
@@ -470,7 +486,8 @@ class ProTxtBgService : NotificationListenerService() {
                     // The Activity nulls onReplyReady itself in its callback; we don't null
                     // it here to avoid a race where we null it before the Activity registers.
                     BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief, finalAction)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
                     activeBubbles.remove(convKey)
                 }
             }
@@ -820,8 +837,10 @@ class ProTxtBgService : NotificationListenerService() {
         openChatIntent: PendingIntent?,
         message: String,
         detectedIntents: String,
+        markAsReadPendingIntent: PendingIntent? = null,
     ) {
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
+        if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
             action = ACTION_DISMISS
@@ -855,12 +874,15 @@ class ProTxtBgService : NotificationListenerService() {
             preferredToneForContact(convKey),
             contactMatchJson = contactMatchJson(convKey),
         )
+        android.util.Log.d("ProTxt", "nm.notify id=$notifId")
         nm.notify(notifId, builder.build())
+        android.util.Log.d("ProTxt", "nm.notify done")
         // Store so the bubble can be re-promoted after screen unlock or call end.
         // postSuggestionNotification will overwrite this entry when the reply is ready.
         pendingBubbles[convKey] = PendingBubble(
             LOADING_PLACEHOLDER, null, null, replyPendingIntent, remoteInputKey,
             notifId, convKey, null, openChatIntent, message, detectedIntents, null,
+            markAsReadPendingIntent,
         )
     }
 
@@ -918,6 +940,7 @@ class ProTxtBgService : NotificationListenerService() {
         message: String = "",
         detectedIntents: String = "",
         suggestedAction: org.json.JSONObject? = null,
+        markAsReadPendingIntent: PendingIntent? = null,
     ) {
         val preferredTone = preferredToneForContact(convKey)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -934,6 +957,7 @@ class ProTxtBgService : NotificationListenerService() {
         val sendPi = PendingIntent.getBroadcast(this, notifId, sendIntent, flags)
 
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
+        if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
 
         val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
             action = ACTION_DISMISS
@@ -1013,7 +1037,7 @@ class ProTxtBgService : NotificationListenerService() {
         pendingBubbles[convKey] = PendingBubble(
             replyText, formalText, briefText, replyPendingIntent, remoteInputKey,
             notifId, convKey, intent, openChatIntent, message, detectedIntents,
-            suggestedAction?.toString(),
+            suggestedAction?.toString(), markAsReadPendingIntent,
         )
     }
 

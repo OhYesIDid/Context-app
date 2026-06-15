@@ -17,6 +17,7 @@ class ReplySendReceiver : BroadcastReceiver() {
 
     companion object {
         val pendingReplyIntents = ConcurrentHashMap<Int, PendingIntent>()
+        val pendingMarkReadIntents = ConcurrentHashMap<Int, PendingIntent>()
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -80,6 +81,15 @@ class ReplySendReceiver : BroadcastReceiver() {
         Handler(Looper.getMainLooper()).postDelayed({
             ProTxtBgService.getInstance()?.repostPendingBubbles()
         }, 500L)
+
+        if (intent.action == ProTxtBgService.ACTION_MARK_READ) {
+            if (convKey != null) ContactMemory.clearLastSent(context, convKey)
+            val markReadPi = if (notifId != -1) pendingMarkReadIntents.remove(notifId) else null
+            if (markReadPi != null) {
+                try { markReadPi.send() } catch (_: PendingIntent.CanceledException) {}
+            }
+            return
+        }
 
         if (intent.action == ProTxtBgService.ACTION_DISMISS) {
             if (convKey != null) ContactMemory.clearLastSent(context, convKey)

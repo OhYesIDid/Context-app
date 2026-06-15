@@ -722,16 +722,15 @@ class BubbleSuggestionActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
 
             addView(TextView(this@BubbleSuggestionActivity).apply {
-                text = "No reply"
+                text = "Mark as read"
                 setTextColor(MUTED)
                 textSize = 13f
                 setPadding(0, 0, dp(14), 0)
                 setOnClickListener {
                     sendBroadcast(Intent(this@BubbleSuggestionActivity, ReplySendReceiver::class.java).apply {
-                        action = ProTxtBgService.ACTION_DISMISS
+                        action = ProTxtBgService.ACTION_MARK_READ
                         putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
                         if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
-                        putExtra(ProTxtBgService.EXTRA_NO_REPLY, true)
                     })
                     finish()
                 }

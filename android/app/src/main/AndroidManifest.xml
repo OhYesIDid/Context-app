@@ -46,6 +46,7 @@
       <intent-filter>
         <action android:name="com.contxt.app.ACTION_SEND_REPLY"/>
         <action android:name="com.contxt.app.ACTION_DISMISS_REPLY"/>
+        <action android:name="com.contxt.app.ACTION_MARK_READ"/>
         <action android:name="com.contxt.app.ACTION_OPEN_CHAT"/>
       </intent-filter>
     </receiver>

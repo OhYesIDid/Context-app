@@ -91,7 +91,8 @@ object WorkerClient {
                 throw RetryableException("HTTP $code")
             }
             if (code != 200) {
-                conn.errorStream?.use { it.readBytes() }
+                val errorBody = conn.errorStream?.use { it.bufferedReader().readText() } ?: ""
+                android.util.Log.e("WorkerClient", "HTTP $code: $errorBody")
                 return null
             }
             val response = conn.inputStream.bufferedReader().use { it.readText() }

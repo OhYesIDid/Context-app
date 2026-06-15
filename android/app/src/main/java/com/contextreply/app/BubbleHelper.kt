@@ -88,7 +88,7 @@ object BubbleHelper {
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
         builder.setShortcutId(shortcutId)
@@ -99,7 +99,7 @@ object BubbleHelper {
             )
             .setDesiredHeight(520)
             .setAutoExpandBubble(false)
-            .setSuppressNotification(true)
+            .setSuppressNotification(false)
             .build()
         )
 
@@ -141,7 +141,8 @@ object BubbleHelper {
             }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("BubbleHelper", "appIcon failed: ${e.javaClass.simpleName}: ${e.message}")
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }
@@ -182,7 +183,8 @@ object BubbleHelper {
             }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("BubbleHelper", "compositeIcon failed: ${e.javaClass.simpleName}: ${e.message}")
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }
@@ -219,7 +221,8 @@ object BubbleHelper {
             }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("BubbleHelper", "contactIcon failed: ${e.javaClass.simpleName}: ${e.message}")
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }

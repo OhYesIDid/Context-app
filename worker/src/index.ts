@@ -146,7 +146,7 @@ interface ActionSuggestion {
   address?: string;
 }
 
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 1100;
 
 const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of the user. Rules:
