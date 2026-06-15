@@ -211,13 +211,19 @@
   <circle cx="558" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
 
   <!--
-    Data particles — drawn last so they appear above nodes and central bubble.
-    One per line, staggered: Top 55%, TR 40%, BR 70%, Bot 30%, BL 60%, TL 45%
+    Data particles — placed in clear space between node edge and bubble edge.
+    Bubble occupies x=417-607, y=430-580. Node dark rings end at ~t=0.37.
+    Top  t=0.55 → (512, 379)  — above bubble          clear ✓
+    TR   t=0.50 → (640, 439)  — right of bubble        clear ✓
+    BR   t=0.45 → (653, 593)  — below-right of bubble  clear ✓
+    Bot  t=0.50 → (512, 659)  — below bubble           clear ✓
+    BL   t=0.45 → (371, 593)  — below-left of bubble   clear ✓
+    TL   t=0.50 → (384, 439)  — left of bubble         clear ✓
   -->
   <circle cx="512" cy="379" r="11" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="666" cy="424" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="589" cy="556" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="718" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="410" cy="571" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="371" cy="431" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="640" cy="439" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="653" cy="593" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="659" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="371" cy="593" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="384" cy="439" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
