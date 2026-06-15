@@ -95,7 +95,7 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 
 ### Personalisation
 - **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")
-- **Language matching** — detect incoming message language, reply in the same one
+- **Language matching + translation** — detect incoming message language, reply in the same one; optionally translate the incoming message into the user's language before showing the suggestion
 - **Emoji matching** — mirror the sender's emoji usage style
 
 ### Business / Team

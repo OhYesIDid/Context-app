@@ -3,6 +3,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Linking,
   NativeModules,
@@ -20,7 +21,7 @@ import { importDeviceContacts } from '../services/deviceContacts';
 import { importGoogleContacts } from '../services/googlePeople';
 import { pickAndParseWhatsAppExport } from '../services/whatsappParser';
 
-const { ProTxtSettings } = NativeModules;
+const { ProTxtSettings: ConTxtSettings } = NativeModules;
 
 export interface SetupResult {
   googleAuthed: boolean;
@@ -56,6 +57,7 @@ export default function SetupWizard({ onComplete }: Props) {
   const [hasOpenedNls, setHasOpenedNls]                     = useState(false);
   const [notifPermGranted, setNotifPermGranted]             = useState(false);
   const [bubbleLabel, setBubbleLabel]                       = useState('Notifications → Bubbles');
+  const [hasOpenedBubbles, setHasOpenedBubbles]             = useState(false);
   const [accessibilityEnabled, setAccessibilityEnabled]     = useState(false);
   const [hasOpenedAccessibility, setHasOpenedAccessibility] = useState(false);
   const [locationGranted, setLocationGranted]               = useState(false);
@@ -72,11 +74,11 @@ export default function SetupWizard({ onComplete }: Props) {
   useEffect(() => {
     configureGoogleSignin();
     setGoogleAuthed(isSignedIn());
-    if (Platform.OS === 'android' && ProTxtSettings) {
+    if (Platform.OS === 'android' && ConTxtSettings) {
       Promise.all([
-        ProTxtSettings.isNlsConnected().catch(() => false),
-        ProTxtSettings.isAccessibilityServiceEnabled().catch(() => false),
-        ProTxtSettings.getBubbleSettingsLabel().catch(() => 'Notifications → Bubbles'),
+        ConTxtSettings.isNlsConnected().catch(() => false),
+        ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false),
+        ConTxtSettings.getBubbleSettingsLabel().catch(() => 'Notifications → Bubbles'),
       ]).then(([nls, a11y, label]: [boolean, boolean, string]) => {
         setNlsConnected(nls);
         setAccessibilityEnabled(a11y);
@@ -88,14 +90,14 @@ export default function SetupWizard({ onComplete }: Props) {
   // Re-check NLS / accessibility when returning from system settings screens
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (state) => {
-      if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
+      if (state !== 'active' || Platform.OS !== 'android' || !ConTxtSettings) return;
       const s = stepRef.current;
       if (s === 1) {
-        const ok: boolean = await ProTxtSettings.isNlsConnected().catch(() => false);
+        const ok: boolean = await ConTxtSettings.isNlsConnected().catch(() => false);
         setNlsConnected(ok);
       }
       if (s === 4) {
-        const ok: boolean = await ProTxtSettings.isAccessibilityServiceEnabled().catch(() => false);
+        const ok: boolean = await ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false);
         setAccessibilityEnabled(ok);
       }
     });
@@ -129,10 +131,17 @@ export default function SetupWizard({ onComplete }: Props) {
     advance();
   };
 
+  // Step 3 — bubbles
+  const handleBubblesButton = () => {
+    if (hasOpenedBubbles) { advance(); return; }
+    ConTxtSettings?.openNotificationSettings?.();
+    setHasOpenedBubbles(true);
+  };
+
   // Step 4 — accessibility
   const handleAccessibilityButton = () => {
     if (accessibilityEnabled) { advance(); return; }
-    ProTxtSettings?.openAccessibilitySettings?.();
+    ConTxtSettings?.openAccessibilitySettings?.();
     setHasOpenedAccessibility(true);
   };
 
@@ -141,13 +150,13 @@ export default function SetupWizard({ onComplete }: Props) {
     try {
       const fine = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        { title: 'Location access', message: 'ProTxt uses your location to estimate your travel time when someone asks where you are.', buttonPositive: 'Allow', buttonNegative: 'Not now' }
+        { title: 'Location access', message: 'ConTxt uses your location to estimate your travel time when someone asks where you are.', buttonPositive: 'Allow', buttonNegative: 'Not now' }
       );
       setLocationGranted(fine === PermissionsAndroid.RESULTS.GRANTED);
       if (fine === PermissionsAndroid.RESULTS.GRANTED && Platform.Version >= 29) {
         await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
-          { title: 'Background location', message: 'To estimate your ETA when a message arrives, ProTxt needs location access even when the app is closed. Tap "Allow all the time" on the next screen.', buttonPositive: 'Go to settings', buttonNegative: 'Skip' }
+          { title: 'Background location', message: 'To estimate your ETA when a message arrives, ConTxt needs location access even when the app is closed. Tap "Allow all the time" on the next screen.', buttonPositive: 'Go to settings', buttonNegative: 'Skip' }
         );
       }
     } catch {}
@@ -158,11 +167,17 @@ export default function SetupWizard({ onComplete }: Props) {
   const handleGoogleSignIn = async () => {
     if (googleAuthed) { advance(); return; }
     try {
-      await GoogleSignin.hasPlayServices();
-      await GoogleSignin.signIn();
-      setGoogleAuthed(true);
-      advance();
-    } catch {}
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const result = await GoogleSignin.signIn();
+      if (result.type === 'success') {
+        setGoogleAuthed(true);
+        advance();
+      }
+      // type === 'cancelled': user dismissed account picker or consent — stay on step
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      Alert.alert('Sign-in error', msg);
+    }
   };
 
   // Step 7 — contact imports (independent of Continue button)
@@ -208,7 +223,7 @@ export default function SetupWizard({ onComplete }: Props) {
         return (
           <>
             <Text style={s.icon}>💬</Text>
-            <Text style={s.stepTitle}>Meet ProTxt</Text>
+            <Text style={s.stepTitle}>Meet ConTxt</Text>
             <Text style={s.stepDesc}>Smart reply suggestions that appear before you open your messages. Set up takes about a minute.</Text>
           </>
         );
@@ -217,7 +232,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>🔔</Text>
             <Text style={s.stepTitle}>Allow notification access</Text>
-            <Text style={s.stepDesc}>ProTxt reads incoming messages to prepare suggestions. Your messages stay on your device.</Text>
+            <Text style={s.stepDesc}>ConTxt reads incoming messages to prepare suggestions. Your messages stay on your device.</Text>
             <View style={[s.pill, nlsConnected ? s.pillGreen : s.pillRed]}>
               <Text style={s.pillText}>{nlsConnected ? '🟢  Enabled' : '🔴  Not enabled'}</Text>
             </View>
@@ -236,7 +251,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>💬</Text>
             <Text style={s.stepTitle}>Enable suggestion bubbles</Text>
-            <Text style={s.stepDesc}>Open your notification settings and enable Bubbles for ProTxt under {bubbleLabel}.</Text>
+            <Text style={s.stepDesc}>Tap below to open notification settings, then enable Bubbles for ConTxt under {bubbleLabel}.</Text>
           </>
         );
       case 4:
@@ -255,7 +270,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>📍</Text>
             <Text style={s.stepTitle}>ETA suggestions</Text>
-            <Text style={s.stepDesc}>When someone asks where you are, ProTxt can include your estimated arrival time.</Text>
+            <Text style={s.stepDesc}>When someone asks where you are, ConTxt can include your estimated arrival time.</Text>
           </>
         );
       case 6:
@@ -263,7 +278,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>📅</Text>
             <Text style={s.stepTitle}>Availability suggestions</Text>
-            <Text style={s.stepDesc}>See your calendar so ProTxt can suggest times when you're free.</Text>
+            <Text style={s.stepDesc}>See your calendar so ConTxt can suggest times when you're free.</Text>
           </>
         );
       case 7:
@@ -301,7 +316,7 @@ export default function SetupWizard({ onComplete }: Props) {
           <>
             <Text style={s.icon}>✅</Text>
             <Text style={s.stepTitle}>You're all set!</Text>
-            <Text style={s.stepDesc}>ProTxt runs in the background. Suggestions appear when someone asks about your ETA, availability, or plans — when your context makes a real difference.</Text>
+            <Text style={s.stepDesc}>ConTxt runs in the background. Suggestions appear when someone asks about your ETA, availability, or plans — when your context makes a real difference.</Text>
           </>
         );
       default:
@@ -320,7 +335,12 @@ export default function SetupWizard({ onComplete }: Props) {
         />
       );
       case 2: return <WizardBtn label="Grant permission" onPress={handleNotifPerm} />;
-      case 3: return <WizardBtn label="Done" onPress={advance} />;
+      case 3: return (
+        <WizardBtn
+          label={hasOpenedBubbles ? 'Done  —  Continue' : 'Open Notification Settings'}
+          onPress={handleBubblesButton}
+        />
+      );
       case 4: return (
         <WizardBtn
           label={accessibilityEnabled ? 'Enabled ✓  —  Continue' : 'Open Accessibility Settings'}
@@ -336,7 +356,7 @@ export default function SetupWizard({ onComplete }: Props) {
         />
       );
       case 7: return <WizardBtn label="Continue" onPress={advance} />;
-      case 8: return <WizardBtn label="Start using ProTxt" onPress={handleComplete} />;
+      case 8: return <WizardBtn label="Start using ConTxt" onPress={handleComplete} />;
       default: return null;
     }
   };

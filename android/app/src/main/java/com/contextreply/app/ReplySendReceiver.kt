@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.RemoteInput
 import java.util.concurrent.ConcurrentHashMap
 
@@ -62,6 +64,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
+            ProTxtBgService.pendingBubbles.remove(convKey)
             // Stamp send time keyed by "$packageName:sbnId" — the messaging app's sbn.id
             // stays constant for a conversation even when the title changes to "You" on
             // the outbound update, which would otherwise produce a different convKey.
@@ -72,11 +75,20 @@ class ReplySendReceiver : BroadcastReceiver() {
             }
         }
 
+        // After this slot is freed, promote any overflow bubbles that Android suppressed
+        // because the 6-active-bubble limit was hit (short delay lets the cancel settle first).
+        Handler(Looper.getMainLooper()).postDelayed({
+            ProTxtBgService.getInstance()?.repostPendingBubbles()
+        }, 500L)
+
         if (intent.action == ProTxtBgService.ACTION_DISMISS) {
             if (convKey != null) ContactMemory.clearLastSent(context, convKey)
-            val original = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
-            if (original != null && convKey != null) {
-                StyleEditQueue.enqueue(context, original, "", convKey, "dismissed")
+            val noReply = intent.getBooleanExtra(ProTxtBgService.EXTRA_NO_REPLY, false)
+            if (!noReply) {
+                val original = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
+                if (original != null && convKey != null) {
+                    StyleEditQueue.enqueue(context, original, "", convKey, "dismissed")
+                }
             }
             return
         }

@@ -4,8 +4,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Handler
+import android.os.Looper
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -39,8 +43,8 @@ class ProTxtBgService : NotificationListenerService() {
         fun getInstance(): ProTxtBgService? = instance
 
         const val CHANNEL_ID = "contextreply_suggestions"
-        const val ACTION_SEND = "com.protxt.app.ACTION_SEND_REPLY"
-        const val ACTION_DISMISS = "com.protxt.app.ACTION_DISMISS_REPLY"
+        const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
+        const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
         const val EXTRA_REPLY_FORMAL = "reply_formal"
         const val EXTRA_REPLY_BRIEF = "reply_brief"
@@ -52,12 +56,32 @@ class ProTxtBgService : NotificationListenerService() {
         const val EXTRA_MESSAGE        = "reply_message"
         const val EXTRA_PREFERRED_TONE = "reply_preferred_tone"
         const val EXTRA_OPEN_CHAT_INTENT = "open_chat_intent"
-        const val ACTION_OPEN_CHAT = "com.protxt.app.ACTION_OPEN_CHAT"
+        const val ACTION_OPEN_CHAT = "com.contxt.app.ACTION_OPEN_CHAT"
         const val EXTRA_ACTION_JSON = "action_json"
+        const val EXTRA_CONTACT_MATCH_JSON = "contact_match_json"
+        const val EXTRA_SUGGESTION_TS = "suggestion_ts"
+        const val EXTRA_NO_REPLY = "no_reply"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
         // Sentinel placed in EXTRA_REPLY_TEXT while the worker is in-flight.
         // BubbleSuggestionActivity detects this and shows a loading state.
         const val LOADING_PLACEHOLDER = "__loading__"
+
+        // Stores suggestion args so bubbles can be re-posted after screen unlock / call end.
+        data class PendingBubble(
+            val replyText: String,
+            val formalText: String?,
+            val briefText: String?,
+            val replyPendingIntent: PendingIntent,
+            val remoteInputKey: String,
+            val notifId: Int,
+            val convKey: String,
+            val intent: String?,
+            val openChatIntent: PendingIntent?,
+            val message: String,
+            val detectedIntents: String,
+            val suggestedActionJson: String?,
+        )
+        val pendingBubbles = ConcurrentHashMap<String, PendingBubble>()
 
         // Collapses rapid-fire messages from the same thread into one API call
         private const val DEBOUNCE_MS = 2_500L
@@ -70,6 +94,22 @@ class ProTxtBgService : NotificationListenerService() {
             "org.thoughtcrime.securesms",
             "com.google.android.apps.messaging",
             "com.instagram.android",
+        )
+
+        // Dialer packages whose ongoing call notification removal signals call-end.
+        // Used instead of READ_PHONE_STATE + PhoneStateListener.
+        private val DIALER_PACKAGES = setOf(
+            "com.google.android.dialer",
+            "com.google.android.apps.dialer",
+            "com.android.phone",
+            "com.samsung.android.dialer",
+            "com.coloros.dialer",
+            "com.oppo.contacts",
+            "com.vivo.contacts",
+            "com.miui.phone",
+            "com.motorola.dialer",
+            "com.htc.android.phone",
+            "com.oneplus.dialer",
         )
 
         private val NO_REPLY_TEXT_PATTERNS = listOf(
@@ -122,6 +162,32 @@ class ProTxtBgService : NotificationListenerService() {
         @Deprecated("Deprecated in Java") override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
     }
 
+    // Fires when the keyguard is dismissed — re-post any pending bubbles.
+    private val restoreBubblesReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (pendingBubbles.isEmpty()) return
+            Handler(Looper.getMainLooper()).postDelayed({ repostPendingBubbles() }, 600L)
+        }
+    }
+
+    internal fun repostPendingBubbles() {
+        for ((_, b) in pendingBubbles) {
+            if (b.replyText == LOADING_PLACEHOLDER) {
+                postLoadingNotification(
+                    b.notifId, b.convKey, b.replyPendingIntent,
+                    b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
+                )
+            } else {
+                val sa = b.suggestedActionJson?.let { try { JSONObject(it) } catch (_: Exception) { null } }
+                postSuggestionNotification(
+                    b.replyText, b.formalText, b.briefText,
+                    b.replyPendingIntent, b.remoteInputKey, b.notifId, b.convKey,
+                    b.intent, b.openChatIntent, b.message, b.detectedIntents, sa,
+                )
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -133,21 +199,33 @@ class ProTxtBgService : NotificationListenerService() {
         super.onListenerConnected()
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("nls_connected", true).apply()
+        DeviceContactsResolver.populate(this)
+        registerReceiver(restoreBubblesReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         // Keep location live — short interval so lastLocation is always current.
         // No fallback to getLastKnownLocation(); stale cache is worse than no data.
-        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-        listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
-            try {
-                if (lm.isProviderEnabled(provider))
-                    lm.requestLocationUpdates(provider, 15_000L, 10f, locationListener, mainLooper)
-            } catch (_: SecurityException) {}
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        lm?.let { mgr ->
+            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
+                try {
+                    if (mgr.isProviderEnabled(provider))
+                        mgr.requestLocationUpdates(provider, 15_000L, 10f, locationListener, mainLooper)
+                } catch (_: SecurityException) {}
+            }
         }
+        // Process notifications already in the shade (e.g. after reinstall / service restart).
+        // Short delay gives the service time to fully bind before reading active notifications.
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                getActiveNotifications()?.forEach { sbn -> onNotificationPosted(sbn) }
+            } catch (_: Exception) {}
+        }, 1_500L)
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("nls_connected", false).apply()
+        try { unregisterReceiver(restoreBubblesReceiver) } catch (_: Exception) {}
         try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
     }
 
@@ -226,7 +304,12 @@ class ProTxtBgService : NotificationListenerService() {
         val sbnKey = "${sbn.packageName}:${sbn.id}"
         val sentAt = recentlySentAt[sbnKey]
         val withinCooldown = sentAt != null && System.currentTimeMillis() - sentAt < SENT_COOLDOWN_MS
-        val lastMsgOutbound = notifThread.isNotEmpty() && notifThread.last().first == null
+        // Gate 6a: sender=null is the standard MessagingStyle convention for outbound messages.
+        // Some apps (WhatsApp) use the user's display name instead of null — catch that too.
+        val selfName = extras.getString(Notification.EXTRA_SELF_DISPLAY_NAME)
+        val lastSender = notifThread.lastOrNull()?.first
+        val lastMsgOutbound = notifThread.isNotEmpty() &&
+            (lastSender == null || (selfName != null && lastSender == selfName))
         if (withinCooldown || lastMsgOutbound) {
             if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
                 "filtered: post-send notification (cooldown=$withinCooldown outbound=$lastMsgOutbound sbnKey=$sbnKey)")
@@ -266,7 +349,7 @@ class ProTxtBgService : NotificationListenerService() {
         // after that reply so Claude only sees post-reply context.
         // Guard: lastOutboundIdx > 0 — if the first message has null sender the app likely doesn't
         // set sender at all (non-MessagingStyle format); don't treat that as an outbound reply.
-        val lastOutboundIdx = notifThread.indexOfLast { (sender, _) -> sender == null }
+        val lastOutboundIdx = notifThread.indexOfLast { (sender, _) -> sender == null || (selfName != null && sender == selfName) }
         if (lastOutboundIdx > 0) {
             // User replied directly since our last cached snapshot — record what they sent, clear
             // the store, and reseed with only the inbound messages that came after their reply.
@@ -385,7 +468,7 @@ class ProTxtBgService : NotificationListenerService() {
                     // Update the Activity if it's already open showing the loading state.
                     // The Activity nulls onReplyReady itself in its callback; we don't null
                     // it here to avoid a race where we null it before the Activity registers.
-                    BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief)
+                    BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief, finalAction)
                 } catch (_: Exception) {
                     activeBubbles.remove(convKey)
                 }
@@ -394,7 +477,19 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
-        if (sbn.packageName !in TARGET_PACKAGES) return
+        // Detect call end via in-call notification removal — no READ_PHONE_STATE needed.
+        // CATEGORY_CALL covers standard dialers; DIALER_PACKAGES + FLAG_ONGOING_EVENT
+        // is a fallback for OEMs that don't set the category correctly.
+        if (sbn.packageName !in TARGET_PACKAGES) {
+            val notif = sbn.notification
+            val isCallEnd = notif?.category == Notification.CATEGORY_CALL ||
+                (sbn.packageName in DIALER_PACKAGES &&
+                    (notif?.flags ?: 0) and Notification.FLAG_ONGOING_EVENT != 0)
+            if (isCallEnd && pendingBubbles.isNotEmpty()) {
+                Handler(Looper.getMainLooper()).postDelayed({ repostPendingBubbles() }, 800L)
+            }
+            return
+        }
         if (reason != REASON_APP_CANCEL) return
 
         lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
@@ -486,6 +581,11 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""(share|send|drop).{0,20}(your |a )?(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
         Regex("""(your |a )(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
         Regex("""share where (you are|you're)""", RegexOption.IGNORE_CASE),
+        Regex("""where are you\b""", RegexOption.IGNORE_CASE),
+        Regex("""where r u\b""", RegexOption.IGNORE_CASE),
+        Regex("""where you at\b""", RegexOption.IGNORE_CASE),
+        Regex("""where are you right now""", RegexOption.IGNORE_CASE),
+        Regex("""what('?s| is) your location""", RegexOption.IGNORE_CASE),
         Regex("""(location|pin) (please|pls)\b""", RegexOption.IGNORE_CASE),
     )
 
@@ -751,18 +851,57 @@ class ProTxtBgService : NotificationListenerService() {
             LOADING_PLACEHOLDER, null, null,
             remoteInputKey, notifId, convKey, null,
             openChatIntent, message, detectedIntents,
-            preferredToneForContact(convKey)
+            preferredToneForContact(convKey),
+            contactMatchJson = contactMatchJson(convKey),
         )
         nm.notify(notifId, builder.build())
+        // Store so the bubble can be re-promoted after screen unlock or call end.
+        // postSuggestionNotification will overwrite this entry when the reply is ready.
+        pendingBubbles[convKey] = PendingBubble(
+            LOADING_PLACEHOLDER, null, null, replyPendingIntent, remoteInputKey,
+            notifId, convKey, null, openChatIntent, message, detectedIntents, null,
+        )
     }
 
-    private fun preferredToneForContact(convKey: String): String? {
-        val contact = convKey.substringAfter(":").lowercase()
-        return try {
-            val json = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
-                .getString("contact_tone_map", "{}") ?: "{}"
-            JSONObject(json).optString(contact).ifEmpty { null }
-        } catch (_: Exception) { null }
+    private fun preferredToneForContact(convKey: String): String? = confirmedTone(convKey)
+
+    // Returns the preferred tone for a sender the user has already confirmed,
+    // by looking up their contactId in confirmed_identities and then the tone in contact_cache.
+    private fun confirmedTone(convKey: String): String? {
+        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val confirmed = try {
+            JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+        } catch (_: Exception) { return null }
+        val contactId = confirmed.optString(convKey).ifEmpty { return null }
+        val cache = try {
+            JSONArray(prefs.getString("contact_cache", "[]") ?: "[]")
+        } catch (_: Exception) { return null }
+        for (i in 0 until cache.length()) {
+            val obj = cache.optJSONObject(i) ?: continue
+            if (obj.optString("id") == contactId) return obj.optString("preferred_tone").ifEmpty { null }
+        }
+        return null
+    }
+
+    // Returns a JSON blob for a fuzzy-matched contact that hasn't been confirmed yet,
+    // or null if the sender is already confirmed or no match found.
+    private fun contactMatchJson(convKey: String): String? {
+        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val confirmed = try {
+            JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+        } catch (_: Exception) { JSONObject() }
+        if (confirmed.has(convKey)) return null  // already confirmed, no banner needed
+        val senderName = convKey.substringAfter(":")
+        // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching
+        val match = ContactMatcher.bestMatchByPhone(this, senderName)
+            ?: ContactMatcher.bestMatch(this, senderName)
+            ?: return null
+        return JSONObject().apply {
+            put("contactId",    match.contactId)
+            put("displayName",  match.displayName)
+            put("preferredTone", match.preferredTone ?: "")
+            put("confidence",   match.confidence)
+        }.toString()
     }
 
     private fun postSuggestionNotification(
@@ -835,6 +974,7 @@ class ProTxtBgService : NotificationListenerService() {
             .addAction(sendAction)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
@@ -865,9 +1005,15 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString())
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString(), contactMatchJson = contactMatchJson(convKey), suggestionTs = System.currentTimeMillis())
 
         nm.notify(notifId, builder.build())
+
+        pendingBubbles[convKey] = PendingBubble(
+            replyText, formalText, briefText, replyPendingIntent, remoteInputKey,
+            notifId, convKey, intent, openChatIntent, message, detectedIntents,
+            suggestedAction?.toString(),
+        )
     }
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {

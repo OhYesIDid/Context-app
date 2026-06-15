@@ -4,6 +4,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -39,12 +44,16 @@ object BubbleHelper {
         detectedIntents: String = "",
         preferredTone: String? = null,
         actionJson: String? = null,
+        contactMatchJson: String? = null,
+        suggestionTs: Long = 0L,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
         val contact = convKey.substringAfter(":")
-        val shortcutId = "cr_conv_${convKey.hashCode().and(0x7FFFFFFF)}"
-        val person = Person.Builder().setName(contact).build()
+        // _v5: composite icon = ConTxt logo background + contact initial overlay → main bubble dot
+        val shortcutId = "cr_conv_v5_${convKey.hashCode().and(0x7FFFFFFF)}"
+        val dotIcon = compositeIcon(context, contact)
+        val person = Person.Builder().setName(contact).setIcon(dotIcon).build()
         try {
             val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
                 .setLongLived(true)
@@ -54,6 +63,7 @@ object BubbleHelper {
                 )
                 .setShortLabel(contact.take(25))
                 .setPerson(person)
+                .setIcon(dotIcon)
                 .setCategories(setOf("android.shortcut.conversation"))
                 .build()
             ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
@@ -73,6 +83,8 @@ object BubbleHelper {
             if (detectedIntents.isNotEmpty()) putExtra(ProTxtBgService.EXTRA_INTENTS, detectedIntents)
             if (preferredTone != null) putExtra(ProTxtBgService.EXTRA_PREFERRED_TONE, preferredTone)
             if (actionJson != null) putExtra(ProTxtBgService.EXTRA_ACTION_JSON, actionJson)
+            if (contactMatchJson != null) putExtra(ProTxtBgService.EXTRA_CONTACT_MATCH_JSON, contactMatchJson)
+            if (suggestionTs > 0L) putExtra(ProTxtBgService.EXTRA_SUGGESTION_TS, suggestionTs)
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,
@@ -80,12 +92,13 @@ object BubbleHelper {
         )
 
         builder.setShortcutId(shortcutId)
+        // BubbleMetadata icon is the fallback/badge; main dot comes from the shortcut icon above.
         builder.setBubbleMetadata(
             NotificationCompat.BubbleMetadata.Builder(
                 bubblePi,
-                bubbleIcon(context)
+                dotIcon
             )
-            .setDesiredHeight(420)
+            .setDesiredHeight(520)
             .setAutoExpandBubble(false)
             .setSuppressNotification(true)
             .build()
@@ -106,23 +119,103 @@ object BubbleHelper {
         builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
     }
 
-    // Android 12+ (API 31) requires bubble icons to be TYPE_URI or TYPE_URI_ADAPTIVE_BITMAP;
-    // resource icons are silently ignored and the notification falls back to heads-up.
-    private fun bubbleIcon(context: Context): IconCompat {
+    // App logo served via FileProvider — used as the main bubble dot on Android 12+.
+    private fun appIcon(context: Context): IconCompat {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             return IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
         return try {
-            val iconFile = File(context.cacheDir, "cr_bubble_icon.png")
+            val iconFile = File(context.cacheDir, "cr_app_bubble.png")
+            if (!iconFile.exists() || iconFile.length() == 0L) {
+                val size = (108 * context.resources.displayMetrics.density).toInt()
+                // getApplicationIcon works for any drawable type including AdaptiveIconDrawable
+                val drawable = context.packageManager.getApplicationIcon(context.packageName)
+                val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bm)
+                drawable.setBounds(0, 0, size, size)
+                drawable.draw(canvas)
+                FileOutputStream(iconFile).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bm.recycle()
+            }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
+            IconCompat.createWithAdaptiveBitmapContentUri(uri)
+        } catch (_: Exception) {
+            IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
+    }
+
+    // ConTxt logo background + contact initial overlay — used as the main bubble dot.
+    // OPPO always overrides the badge position with the app launcher icon regardless of what we pass,
+    // so we combine both signals into one composite icon in the main dot.
+    private fun compositeIcon(context: Context, contact: String): IconCompat {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
+        return try {
+            val size = (108 * context.resources.displayMetrics.density).toInt()
+            val initial = contact.firstOrNull()?.uppercase() ?: "?"
+            val iconFile = File(context.cacheDir, "cr_composite_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
             if (!iconFile.exists() || iconFile.length() == 0L) {
                 val drawable = context.packageManager.getApplicationIcon(context.packageName)
-                val bm = (drawable as? BitmapDrawable)?.bitmap
-                    ?: Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bm)
+                drawable.setBounds(0, 0, size, size)
+                drawable.draw(canvas)
+                // Semi-transparent dark circle so the initial is readable over any logo colour
+                val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.argb(170, 0, 0, 0)
+                }
+                val r = size * 0.30f
+                canvas.drawCircle(size / 2f, size / 2f, r, circlePaint)
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    textSize = size * 0.30f
+                    typeface = Typeface.DEFAULT_BOLD
+                    textAlign = Paint.Align.CENTER
+                }
+                val yOff = (textPaint.descent() + textPaint.ascent()) / 2
+                canvas.drawText(initial, size / 2f, size / 2f - yOff, textPaint)
                 FileOutputStream(iconFile).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bm.recycle()
             }
-            val uri = FileProvider.getUriForFile(
-                context, "${context.packageName}.fileprovider", iconFile
-            )
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
+            IconCompat.createWithAdaptiveBitmapContentUri(uri)
+        } catch (_: Exception) {
+            IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
+    }
+
+    // Per-contact coloured circle with initial — kept for reference; no longer used as main dot.
+    private fun contactIcon(context: Context, contact: String): IconCompat {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+        }
+        return try {
+            // 108dp at the device's actual pixel density matches the adaptive-icon spec.
+            // Include size in the filename so stale files from the wrong density are ignored.
+            val size = (108 * context.resources.displayMetrics.density).toInt()
+            val iconFile = File(context.cacheDir, "cr_icon_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
+            if (!iconFile.exists() || iconFile.length() == 0L) {
+                val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bm)
+                val palette = listOf(0xFF6366f1L, 0xFF8b5cf6L, 0xFFec4899L, 0xFFf43f5eL,
+                                     0xFFf59e0bL, 0xFF10b981L, 0xFF06b6d4L, 0xFF3b82f6L)
+                val bgColor = palette[contact.hashCode().and(0x7FFFFFFF) % palette.size].toInt()
+                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
+                canvas.drawOval(RectF(0f, 0f, size.toFloat(), size.toFloat()), bgPaint)
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    textSize = size * 0.42f
+                    typeface = Typeface.DEFAULT_BOLD
+                    textAlign = Paint.Align.CENTER
+                }
+                val initial = contact.firstOrNull()?.uppercase() ?: "?"
+                val yOff = (textPaint.descent() + textPaint.ascent()) / 2
+                canvas.drawText(initial, size / 2f, size / 2f - yOff, textPaint)
+                FileOutputStream(iconFile).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bm.recycle()
+            }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", iconFile)
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
         } catch (_: Exception) {
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)

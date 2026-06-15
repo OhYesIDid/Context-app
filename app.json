@@ -1,17 +1,21 @@
 {
   "expo": {
-    "name": "Protxt",
+    "name": "ConTxt",
     "slug": "context-reply",
-    "scheme": "protxt",
+    "scheme": "contxt",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.protxt.app"
+      "bundleIdentifier": "com.contxt.app"
     },
     "android": {
-      "package": "com.protxt.app"
+      "package": "com.contxt.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -53,7 +57,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Protxt to check your location for ETA replies."
+          "locationWhenInUsePermission": "Allow ConTxt to check your location for ETA replies."
         }
       ]
     ],
@@ -61,6 +65,7 @@
       "eas": {
         "projectId": "191da8c5-ddf6-4ae8-86fe-b39d8eb1ecb5"
       }
-    }
+    },
+    "owner": "ohyesidid"
   }
 }

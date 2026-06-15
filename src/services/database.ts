@@ -305,11 +305,32 @@ export async function upsertPlatformIdentity(
      ON CONFLICT(platform, identifier) DO UPDATE SET
        contact_id=excluded.contact_id,
        confidence=MAX(confidence, excluded.confidence),
+       user_confirmed=MAX(user_confirmed, excluded.user_confirmed),
        updated_at=excluded.updated_at`,
     [id, identity.contactId, identity.platform, identity.identifier, identity.identifierType,
      identity.confidence, identity.userConfirmed ? 1 : 0, now, now]
   );
   return { ...identity, id, createdAt: now, updatedAt: now };
+}
+
+export async function getConfirmedPlatformIdentities(): Promise<PlatformIdentity[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string; contact_id: string; platform: string; identifier: string;
+    identifier_type: string; confidence: number; user_confirmed: number;
+    created_at: string; updated_at: string;
+  }>('SELECT * FROM platform_identities WHERE user_confirmed = 1');
+  return rows.map((r) => ({
+    id: r.id,
+    contactId: r.contact_id,
+    platform: r.platform as PlatformIdentity['platform'],
+    identifier: r.identifier,
+    identifierType: r.identifier_type as PlatformIdentity['identifierType'],
+    confidence: r.confidence,
+    userConfirmed: r.user_confirmed === 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
 }
 
 // ── Memories ──────────────────────────────────────────────────────────────────

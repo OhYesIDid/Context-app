@@ -5,7 +5,7 @@ export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
 export type MemoryType = 'episodic' | 'semantic' | 'spatial' | 'relational' | 'conversation_history';
 export type Platform = 'whatsapp' | 'telegram' | 'instagram' | 'sms' | 'email' | 'messenger' | 'signal' | 'google' | 'phone';
-export type IdentifierType = 'phone' | 'username' | 'email';
+export type IdentifierType = 'phone' | 'username' | 'email' | 'display_name';
 
 export interface ReplyOptions {
   formal: string;

@@ -102,7 +102,7 @@ android {
 
     namespace 'com.contextreply.app'
     defaultConfig {
-        applicationId 'com.protxt.app'
+        applicationId 'com.contxt.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

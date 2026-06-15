@@ -1,5 +1,5 @@
 <resources>
-  <string name="app_name">ProTxt</string>
-  <string name="accessibility_description">ProTxt reads which app you\'re in to surface smart reply suggestions above your keyboard</string>
+  <string name="app_name">ConTxt</string>
+  <string name="accessibility_description">ConTxt reads which app you\'re in to surface smart reply suggestions above your keyboard</string>
   <string name="expo_system_ui_user_interface_style" translatable="false">dark</string>
 </resources>

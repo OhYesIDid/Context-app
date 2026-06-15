@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "4410338903",
-    "project_id": "contexley",
-    "storage_bucket": "contexley.firebasestorage.app"
+    "project_number": "790415280323",
+    "project_id": "contxt-71fbd",
+    "storage_bucket": "contxt-71fbd.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:4410338903:android:3cf2a9453020df400dbd12",
+        "mobilesdk_app_id": "1:790415280323:android:61611b2bf940b33ed37a76",
         "android_client_info": {
-          "package_name": "com.protxt.app"
+          "package_name": "com.contxt.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "4410338903-nblfbs6a003k5jlrqpdtsrj5mhandgr6.apps.googleusercontent.com",
+          "client_id": "790415280323-1e8b6i4an9nu5pe2a8th9cp5l28teob1.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.protxt.app",
+            "package_name": "com.contxt.app",
             "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
-          "client_id": "4410338903-8ncpj8n1gi0k3pk9kecnbc8d69e3vv47.apps.googleusercontent.com",
+          "client_id": "790415280323-n2r8vkcl16qvodepibg29khhv1mq1816.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDVv1qWlqukWkYFcp51M25Bx8yGEDmp7m4"
+          "current_key": "AIzaSyB8TggXheNW-i6Nrye4H-ucufnhZV34dF0"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "4410338903-8ncpj8n1gi0k3pk9kecnbc8d69e3vv47.apps.googleusercontent.com",
+              "client_id": "790415280323-n2r8vkcl16qvodepibg29khhv1mq1816.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

@@ -11,8 +11,8 @@ import java.time.ZoneId
 class ActionReceiver : BroadcastReceiver() {
 
     companion object {
-        const val ACTION_CALENDAR_ADD = "com.protxt.app.ACTION_CALENDAR_ADD"
-        const val ACTION_MAPS_OPEN    = "com.protxt.app.ACTION_MAPS_OPEN"
+        const val ACTION_CALENDAR_ADD = "com.contxt.app.ACTION_CALENDAR_ADD"
+        const val ACTION_MAPS_OPEN    = "com.contxt.app.ACTION_MAPS_OPEN"
         const val EXTRA_TITLE             = "action_title"
         const val EXTRA_DATETIME          = "action_datetime"
         const val EXTRA_DURATION_MINUTES  = "action_duration_minutes"

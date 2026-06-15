@@ -142,6 +142,33 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             .edit().putString("contact_tone_map", json).apply()
     }
 
+    // Returns the confirmed_identities map {convKey: contactId} without clearing it.
+    @ReactMethod
+    fun getConfirmedIdentities(promise: Promise) {
+        val json = reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .getString("confirmed_identities", "{}") ?: "{}"
+        promise.resolve(json)
+    }
+
+    // Writes confirmed_identities back into SharedPrefs — used after reinstall
+    // to restore from the SQLite platform_identities source of truth.
+    @ReactMethod
+    fun restoreConfirmedIdentities(json: String) {
+        reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .edit().putString("confirmed_identities", json).apply()
+    }
+
+    // Stores the full contact list as a JSON array so ContactMatcher can do
+    // fuzzy name matching against it from the background service.
+    @ReactMethod
+    fun cacheContactList(json: String) {
+        reactApplicationContext
+            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+            .edit().putString("contact_cache", json).apply()
+    }
+
     // JS calls this after rebuilding the style profile from SQLite so the
     // Kotlin worker path can include it in the next /suggest request.
     @ReactMethod
@@ -165,6 +192,15 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun openAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        reactApplicationContext.startActivity(intent)
+    }
+
+    @ReactMethod
+    fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, reactApplicationContext.packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         reactApplicationContext.startActivity(intent)

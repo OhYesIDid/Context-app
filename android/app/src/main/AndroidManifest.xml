@@ -44,9 +44,9 @@
       android:name=".ReplySendReceiver"
       android:exported="false">
       <intent-filter>
-        <action android:name="com.protxt.app.ACTION_SEND_REPLY"/>
-        <action android:name="com.protxt.app.ACTION_DISMISS_REPLY"/>
-        <action android:name="com.protxt.app.ACTION_OPEN_CHAT"/>
+        <action android:name="com.contxt.app.ACTION_SEND_REPLY"/>
+        <action android:name="com.contxt.app.ACTION_DISMISS_REPLY"/>
+        <action android:name="com.contxt.app.ACTION_OPEN_CHAT"/>
       </intent-filter>
     </receiver>
 
@@ -54,8 +54,8 @@
       android:name=".ActionReceiver"
       android:exported="false">
       <intent-filter>
-        <action android:name="com.protxt.app.ACTION_CALENDAR_ADD"/>
-        <action android:name="com.protxt.app.ACTION_MAPS_OPEN"/>
+        <action android:name="com.contxt.app.ACTION_CALENDAR_ADD"/>
+        <action android:name="com.contxt.app.ACTION_MAPS_OPEN"/>
       </intent-filter>
     </receiver>
 

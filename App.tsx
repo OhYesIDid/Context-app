@@ -273,7 +273,7 @@ export default function App() {
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
 
         <View style={styles.header}>
-          <Text style={styles.title}>ProTxt</Text>
+          <Text style={styles.title}>ConTxt</Text>
           <Text style={styles.subtitle}>Reply suggestions in the background</Text>
         </View>
 

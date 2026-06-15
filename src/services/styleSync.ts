@@ -1,6 +1,17 @@
 import { NativeModules } from 'react-native';
-import { getAllContacts, getRecentStyleEdits, incrementContactInteraction, recordStyleEdit } from './database';
+import { getAllContacts, getConfirmedPlatformIdentities, getRecentStyleEdits, incrementContactInteraction, recordStyleEdit, upsertPlatformIdentity } from './database';
 import type { Intent, Platform, StyleEdit } from '../types';
+
+// Maps Android package names → Platform type used in SQLite
+const PACKAGE_TO_PLATFORM: Record<string, Platform> = {
+  'com.whatsapp':                     'whatsapp',
+  'com.whatsapp.w4b':                 'whatsapp',
+  'org.telegram.messenger':           'telegram',
+  'com.instagram.android':            'instagram',
+  'com.facebook.orca':                'messenger',
+  'org.thoughtcrime.securesms':       'signal',
+  'com.google.android.apps.messaging': 'sms',
+};
 
 interface QueueItem {
   original: string;
@@ -15,10 +26,62 @@ interface QueueItem {
 // cache the style profile string so the background worker can use it.
 export async function syncStyleProfile(): Promise<void> {
   try {
+    await restoreConfirmedIdentitiesFromDb();
+    await drainConfirmedIdentities();
     await drainQueue();
     await drainCorrections();
     await rebuildCachedProfile();
   } catch (_) {}
+}
+
+// On reinstall SharedPrefs is wiped. If it's empty but SQLite has confirmed
+// identities, write them back so the background service works immediately.
+async function restoreConfirmedIdentitiesFromDb(): Promise<void> {
+  const existing: string = await NativeModules.ProTxtSettings.getConfirmedIdentities();
+  if (Object.keys(JSON.parse(existing)).length > 0) return;
+  const identities = await getConfirmedPlatformIdentities();
+  if (identities.length === 0) return;
+  const map: Record<string, string> = {};
+  for (const identity of identities) {
+    map[`${identity.platform}:${identity.identifier}`] = identity.contactId;
+  }
+  NativeModules.ProTxtSettings.restoreConfirmedIdentities(JSON.stringify(map));
+}
+
+// Reads confirmed_identities from SharedPrefs and upserts each into SQLite
+// platform_identities so confirmations survive a reinstall.
+async function drainConfirmedIdentities(): Promise<void> {
+  const json: string = await NativeModules.ProTxtSettings.getConfirmedIdentities();
+  const confirmed: Record<string, string> = JSON.parse(json);
+  const entries = Object.entries(confirmed);
+  if (entries.length === 0) return;
+  const contacts = await getAllContacts();
+  const contactById = new Map(contacts.map((c) => [c.id, c]));
+  for (const [convKey, contactId] of entries) {
+    const colonIdx = convKey.indexOf(':');
+    if (colonIdx < 0) continue;
+    const packageName = convKey.slice(0, colonIdx);
+    const senderName = convKey.slice(colonIdx + 1);
+    if (!senderName || senderName.startsWith('group:') || senderName.startsWith('id:')) continue;
+    const platform = (PACKAGE_TO_PLATFORM[packageName] ?? packageName) as Platform;
+    // Resolve SQLite contact ID — direct UUID or device contact looked up by name
+    let sqliteContactId: string | null = null;
+    if (!contactId.startsWith('device:')) {
+      sqliteContactId = contactById.has(contactId) ? contactId : null;
+    } else {
+      const match = contacts.find((c) => c.displayName.toLowerCase() === senderName.toLowerCase());
+      sqliteContactId = match?.id ?? null;
+    }
+    if (!sqliteContactId) continue;
+    await upsertPlatformIdentity({
+      contactId: sqliteContactId,
+      platform,
+      identifier: senderName,
+      identifierType: 'display_name',
+      confidence: 1.0,
+      userConfirmed: true,
+    });
+  }
 }
 
 async function drainQueue(): Promise<void> {
@@ -167,6 +230,15 @@ async function rebuildCachedProfile(): Promise<void> {
     if (c.preferredTone) toneMap[c.displayName.toLowerCase()] = c.preferredTone;
   }
   NativeModules.ProTxtSettings.cacheContactTones(JSON.stringify(toneMap));
+
+  // Write full contact list for Jaro-Winkler fuzzy matching in ContactMatcher.kt
+  const contactList = contacts.map((c) => ({
+    id: c.id,
+    display_name: c.displayName,
+    preferred_tone: c.preferredTone ?? null,
+    interaction_count: c.interactionCount ?? 0,
+  }));
+  NativeModules.ProTxtSettings.cacheContactList(JSON.stringify(contactList));
 
   if (sections.length === 0) return;
   NativeModules.ProTxtSettings.cacheStyleProfile(sections.join('\n\n'));
