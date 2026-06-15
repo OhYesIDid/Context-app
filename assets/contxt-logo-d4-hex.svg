@@ -6,21 +6,6 @@
       <stop offset="100%" stop-color="#09090b"/>
     </radialGradient>
 
-    <!-- Per-node fills -->
-    <radialGradient id="nLoc"  cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#67e8f9"/><stop offset="100%" stop-color="#0e7490"/></radialGradient>
-    <radialGradient id="nCal"  cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#b45309"/></radialGradient>
-    <radialGradient id="nMsg"  cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#fb7185"/><stop offset="100%" stop-color="#be123c"/></radialGradient>
-    <radialGradient id="nWthr" cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#93c5fd"/><stop offset="100%" stop-color="#1d4ed8"/></radialGradient>
-    <radialGradient id="nBat"  cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#6ee7b7"/><stop offset="100%" stop-color="#047857"/></radialGradient>
-    <radialGradient id="nHist" cx="35%" cy="30%" r="70%"><stop offset="0%" stop-color="#c4b5fd"/><stop offset="100%" stop-color="#6d28d9"/></radialGradient>
-
-    <!-- Iris orb -->
-    <radialGradient id="orbGlow" cx="50%" cy="42%" r="50%">
-      <stop offset="0%"   stop-color="white"/>
-      <stop offset="55%"  stop-color="white" stop-opacity="0.65"/>
-      <stop offset="100%" stop-color="white" stop-opacity="0"/>
-    </radialGradient>
-
     <!--
       Regular hexagon r=295 from (512,512):
         Top          (512, 217)
@@ -49,21 +34,17 @@
       <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"/><stop offset="100%" stop-color="#ede9fe" stop-opacity="0.9"/>
     </linearGradient>
 
-    <filter id="ambGlow"    x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="55"/></filter>
-    <filter id="nodeGlow"   x="-60%" y="-60%" width="220%" height="220%">
+    <filter id="ambGlow"  x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bubbleGlow" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="lineGlow"   x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="orbHalo"    x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="28" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="dotGlow"    x="-150%" y="-150%" width="400%" height="400%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+    <filter id="dotGlow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
@@ -71,6 +52,8 @@
   <!-- Background -->
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
 
+  <!-- Ambient centre glow -->
+  <circle cx="512" cy="505" r="260" fill="#6d28d9" opacity="0.14" filter="url(#ambGlow)"/>
 
   <!-- Lines: glow pass -->
   <line x1="512" y1="217" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="20" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
@@ -87,122 +70,51 @@
   <line x1="256" y1="660" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
   <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
-  <!-- ========================= NODES (fill r=88) ========================= -->
-
-  <!-- LOCATION — top (512,217) — cyan -->
-  <circle cx="512" cy="217" r="88"  fill="url(#nLoc)"/>
-  <!-- Location pin: solid circle head + triangle tail -->
-  <circle cx="512" cy="200" r="24" fill="white"/>
-  <polygon points="488,215 536,215 512,256" fill="white"/>
-  <circle cx="512" cy="200" r="10" fill="#0e7490"/>
-
-  <!-- CALENDAR — top-right (768,365) — amber -->
-  <circle cx="768" cy="365" r="88"  fill="url(#nCal)"/>
-  <!-- Calendar: body + header band + day grid -->
-  <rect x="737" y="338" width="62" height="54" rx="9" fill="white" opacity="0.15"/>
-  <rect x="737" y="338" width="62" height="54" rx="9" fill="none" stroke="white" stroke-width="3.5"/>
-  <!-- Header band -->
-  <rect x="737" y="338" width="62" height="18" rx="9" fill="white" opacity="0.5"/>
-  <rect x="737" y="347" width="62" height="9"  fill="white" opacity="0.5"/>
-  <!-- Separator line -->
-  <line x1="737" y1="356" x2="799" y2="356" stroke="white" stroke-width="2" opacity="0.4"/>
-  <!-- Day dots: 3×2 grid -->
-  <circle cx="751" cy="367" r="5.5" fill="white"/>
-  <circle cx="768" cy="367" r="5.5" fill="white"/>
-  <circle cx="785" cy="367" r="5.5" fill="white"/>
-  <circle cx="751" cy="381" r="5.5" fill="white"/>
-  <circle cx="768" cy="381" r="5.5" fill="white"/>
-  <!-- Highlighted "today" dot -->
-  <circle cx="785" cy="381" r="7" fill="white"/>
-  <circle cx="785" cy="381" r="4" fill="#b45309"/>
-
-  <!-- MESSAGE — bottom-right (768,660) — rose -->
-  <circle cx="768" cy="660" r="88"  fill="url(#nMsg)"/>
-  <!-- Message bubble: plain bubble + two text lines (no dots — center has typing indicator) -->
-  <path d="M 733 642 Q 733 632 743 632 L 805 632 Q 815 632 815 642
-           L 815 672 Q 815 682 805 682 L 757 682 L 747 695 L 751 682
-           Q 733 682 733 672 Z" fill="white"/>
-  <!-- Text lines inside bubble -->
-  <rect x="745" y="646" width="56" height="7" rx="3.5" fill="#be123c" opacity="0.5"/>
-  <rect x="745" y="659" width="40" height="7" rx="3.5" fill="#be123c" opacity="0.35"/>
-
-  <!-- WEATHER — bottom (512,807) — blue -->
-  <circle cx="512" cy="807" r="88"  fill="url(#nWthr)"/>
-  <!-- Cloud: 5 overlapping circles, no rect — natural rounded shape -->
-  <circle cx="496" cy="810" r="19" fill="white"/>
-  <circle cx="510" cy="800" r="23" fill="white"/>
-  <circle cx="526" cy="808" r="17" fill="white"/>
-  <!-- Two fill circles to close concave gaps at base -->
-  <circle cx="503" cy="817" r="14" fill="white"/>
-  <circle cx="519" cy="817" r="14" fill="white"/>
-  <!-- Rain: slim ellipses, not dots -->
-  <ellipse cx="499" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
-  <ellipse cx="513" cy="844" rx="3.5" ry="8" fill="white" opacity="0.85"/>
-  <ellipse cx="527" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
-
-  <!-- BATTERY — bottom-left (256,660) — emerald -->
-  <circle cx="256" cy="660" r="88"  fill="url(#nBat)"/>
-  <!-- Battery: body (56x32) + terminal nub + charge fill -->
-  <rect x="227" y="644" width="56" height="32" rx="8" fill="white" opacity="0.15"/>
-  <rect x="227" y="644" width="56" height="32" rx="8" fill="none" stroke="white" stroke-width="3.5"/>
-  <!-- Terminal nub -->
-  <rect x="283" y="652" width="9" height="16" rx="4" fill="white"/>
-  <!-- Charge fill (≈70%) — rounded inside the body -->
-  <rect x="231" y="648" width="36" height="24" rx="5" fill="white"/>
-
-  <!-- HISTORY — top-left (256,365) — violet -->
-  <circle cx="256" cy="365" r="88"  fill="url(#nHist)"/>
-  <!-- Clock icon: circle face + hour/minute hands = "history" -->
-  <circle cx="256" cy="365" r="32" fill="none" stroke="white" stroke-width="4"/>
-  <circle cx="256" cy="365" r="4"  fill="white"/>
-  <!-- Minute hand: pointing to 12 (up) -->
-  <line x1="256" y1="365" x2="256" y2="339" stroke="white" stroke-width="4" stroke-linecap="round"/>
-  <!-- Hour hand: pointing to ~10 -->
-  <line x1="256" y1="365" x2="239" y2="352" stroke="white" stroke-width="4" stroke-linecap="round"/>
-  <!-- Counter-clockwise arc hint (history = going back in time) -->
-  <path d="M 246 337 A 20 20 0 0 0 236 345" fill="none"
-        stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-  <polygon points="242,333 246,342 252,336" fill="white"/>
-
   <!-- ====================== CENTRAL: TYPING INDICATOR ====================== -->
   <!--
-    Bubble: 190x150, centered at (512,505). Dark fill + white border matches node language.
-    Squarer proportions (1.27:1) so it reads as a bubble not a banner.
-    Tail points bottom-centre downward.
+    Bubble: 320×240, centered at (512,505). Corner radius 42.
+    x: 352–672  y: 385–625
+    Tail offset right (x=552–592, tip 685) to clear the vertical bottom line at x=512.
   -->
-  <!-- Bubble: dark fill -->
-  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
-           L 607 552 Q 607 580 579 580 L 579 580 L 564 618 L 549 580
-           L 445 580 Q 417 580 417 552 Z"
+  <!-- Glow pass -->
+  <path d="M 352 427 Q 352 385 394 385 L 630 385 Q 672 385 672 427
+           L 672 583 Q 672 625 630 625 L 592 625 L 572 685 L 552 625
+           L 394 625 Q 352 625 352 583 Z"
+        fill="#7c3aed" opacity="0.25" filter="url(#bubbleGlow)"/>
+  <!-- Dark fill -->
+  <path d="M 352 427 Q 352 385 394 385 L 630 385 Q 672 385 672 427
+           L 672 583 Q 672 625 630 625 L 592 625 L 572 685 L 552 625
+           L 394 625 Q 352 625 352 583 Z"
         fill="#0d0a1e"/>
-  <!-- White glow border -->
-  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
-           L 607 552 Q 607 580 579 580 L 579 580 L 564 618 L 549 580
-           L 445 580 Q 417 580 417 552 Z"
+  <!-- White border -->
+  <path d="M 352 427 Q 352 385 394 385 L 630 385 Q 672 385 672 427
+           L 672 583 Q 672 625 630 625 L 592 625 L 572 685 L 552 625
+           L 394 625 Q 352 625 352 583 Z"
         fill="none" stroke="white" stroke-width="3" stroke-opacity="0.45"/>
-  <!-- Top-left glass shimmer -->
-  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
-           L 607 468 Q 417 468 417 458 Z"
+  <!-- Top-edge glass shimmer -->
+  <path d="M 352 427 Q 352 385 394 385 L 630 385 Q 672 385 672 427
+           L 672 437 Q 352 437 352 427 Z"
         fill="white" opacity="0.10"/>
-  <!-- Three white dots centred in bubble body (y midpoint = (430+580)/2 = 505) -->
-  <circle cx="466" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="558" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
+  <!-- Three typing dots — y midpoint (385+625)/2 = 505 -->
+  <circle cx="432" cy="505" r="25" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="505" r="25" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="592" cy="505" r="25" fill="white" filter="url(#dotGlow)"/>
 
   <!--
-    Data particles — placed in clear space between node edge and bubble edge.
-    Bubble occupies x=417-607, y=430-580. Node dark rings end at ~t=0.37.
-    Top  t=0.55 → (512, 379)  — above bubble          clear ✓
-    TR   t=0.50 → (640, 439)  — right of bubble        clear ✓
-    BR   t=0.45 → (653, 593)  — below-right of bubble  clear ✓
-    Bot  t=0.50 → (512, 659)  — below bubble           clear ✓
-    BL   t=0.45 → (371, 593)  — below-left of bubble   clear ✓
-    TL   t=0.50 → (384, 439)  — left of bubble         clear ✓
+    Data particles — one per line, positioned in the open run between
+    bubble edge and canvas edge (t measured from outer hex point toward center).
+    Bubble bounds: x 352–672, y 385–625.
+    Top  t=0.45 → (512, 350)   above bubble        ✓
+    TR   t=0.35 → (678, 416)   right of bubble      ✓
+    BR   t=0.35 → (678, 608)   right of bubble      ✓
+    Bot  t=0.38 → (512, 695)   below tail           ✓
+    BL   t=0.35 → (346, 608)   left of bubble       ✓
+    TL   t=0.35 → (346, 416)   left of bubble       ✓
   -->
-  <circle cx="512" cy="379" r="11" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="640" cy="439" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="653" cy="593" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="659" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="371" cy="593" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="384" cy="439" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="350" r="13" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="678" cy="416" r="13" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="678" cy="608" r="13" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="695" r="13" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="346" cy="608" r="13" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="346" cy="416" r="13" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
