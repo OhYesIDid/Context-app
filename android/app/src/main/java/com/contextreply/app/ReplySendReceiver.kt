@@ -148,5 +148,11 @@ class ReplySendReceiver : BroadcastReceiver() {
         } catch (_: PendingIntent.CanceledException) {
             // Original notification already dismissed — nothing to do
         }
+
+        // Mark the conversation as read in the original app now that we've sent a reply.
+        val markReadPi = if (notifId != -1) pendingMarkReadIntents.remove(notifId) else null
+        if (markReadPi != null) {
+            try { markReadPi.send() } catch (_: PendingIntent.CanceledException) {}
+        }
     }
 }

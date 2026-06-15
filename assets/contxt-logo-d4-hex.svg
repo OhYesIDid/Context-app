@@ -56,12 +56,12 @@
     <circle cx="512" cy="505" r="340" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
 
     <!-- Connector lines (crisp, no glow) -->
-    <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="12" stroke-linecap="round"/>
-    <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="12" stroke-linecap="round"/>
-    <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="12" stroke-linecap="round"/>
-    <line x1="512"  y1="1024" x2="512" y2="767" stroke="url(#lnBot)" stroke-width="12" stroke-linecap="round"/>
-    <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="12" stroke-linecap="round"/>
-    <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="12" stroke-linecap="round"/>
+    <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="18" stroke-linecap="round"/>
+    <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="18" stroke-linecap="round"/>
+    <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="18" stroke-linecap="round"/>
+    <line x1="512"  y1="1024" x2="512" y2="767" stroke="url(#lnBot)" stroke-width="18" stroke-linecap="round"/>
+    <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="18" stroke-linecap="round"/>
+    <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="18" stroke-linecap="round"/>
 
     <!-- Bubble dark fill -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
@@ -72,7 +72,7 @@
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
              L 274 747 Q 189 747 189 662 Z"
-          fill="none" stroke="white" stroke-width="12" stroke-opacity="0.45"/>
+          fill="none" stroke="white" stroke-width="23" stroke-opacity="0.45"/>
     <!-- Glass shimmer -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 369 Q 189 369 189 348 Z"
@@ -82,13 +82,13 @@
     <circle cx="512" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
     <circle cx="630" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
 
-    <!-- Data particles — r=20, t=0.30 from each canvas-edge endpoint -->
-    <circle cx="512" cy="154" r="20" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="305" r="20" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="719" r="20" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="512" cy="870" r="20" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="719" r="20" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="305" r="20" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+    <!-- Data particles — r=30, varied positions along each line segment -->
+    <circle cx="512" cy="134" r="30" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="963" cy="251" r="30" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="908" cy="741" r="30" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="512" cy="916" r="30" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="63"  cy="772" r="30" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="105" cy="277" r="30" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 
   </g>
 </svg>
