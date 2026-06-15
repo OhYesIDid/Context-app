@@ -99,7 +99,7 @@ object BubbleHelper {
             )
             .setDesiredHeight(520)
             .setAutoExpandBubble(false)
-            .setSuppressNotification(false)
+            .setSuppressNotification(true)
             .build()
         )
 
