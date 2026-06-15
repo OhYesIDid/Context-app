@@ -394,7 +394,7 @@ class ProTxtBgService : NotificationListenerService() {
                 ?.takeIf { it.isNotEmpty() }
                 ?: listOf(fullThread.lastOrNull()?.second ?: text)
             val latestMessage = burstTexts.joinToString("\n")
-            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "burst ${burstTexts.size} msgs: ${latestMessage.take(120)}")
+            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "burst ${burstTexts.size} msgs ready")
 
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
@@ -523,7 +523,7 @@ class ProTxtBgService : NotificationListenerService() {
             isGroup -> "group:${sbn.id}"
             else -> title ?: "id:${sbn.id}"
         }
-        if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:$key  isGroup=$isGroup  title=$title  convTitle=$conversationTitle  sbnId=${sbn.id}")
+        if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:[hashed]  isGroup=$isGroup  sbnId=${sbn.id}")
         return "$packageName:$key"
     }
 
@@ -929,7 +929,7 @@ class ProTxtBgService : NotificationListenerService() {
             putExtra(EXTRA_CONV_KEY, convKey)
             if (intent != null) putExtra(EXTRA_INTENT, intent)
         }
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val sendPi = PendingIntent.getBroadcast(this, notifId, sendIntent, flags)
 
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent

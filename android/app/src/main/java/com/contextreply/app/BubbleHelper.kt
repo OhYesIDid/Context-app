@@ -50,10 +50,10 @@ object BubbleHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
         val contact = convKey.substringAfter(":")
-        // _v5: composite icon = ConTxt logo background + contact initial overlay → main bubble dot
-        val shortcutId = "cr_conv_v5_${convKey.hashCode().and(0x7FFFFFFF)}"
-        val dotIcon = compositeIcon(context, contact)
-        val person = Person.Builder().setName(contact).setIcon(dotIcon).build()
+        // _v6: contact initial circle → shortcut icon → main bubble dot; app logo → BubbleMetadata badge
+        val shortcutId = "cr_conv_v6_${convKey.hashCode().and(0x7FFFFFFF)}"
+        val contactIcon = contactIcon(context, contact)
+        val person = Person.Builder().setName(contact).setIcon(contactIcon).build()
         try {
             val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
                 .setLongLived(true)
@@ -63,7 +63,7 @@ object BubbleHelper {
                 )
                 .setShortLabel(contact.take(25))
                 .setPerson(person)
-                .setIcon(dotIcon)
+                .setIcon(contactIcon)
                 .setCategories(setOf("android.shortcut.conversation"))
                 .build()
             ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
@@ -88,15 +88,14 @@ object BubbleHelper {
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         builder.setShortcutId(shortcutId)
-        // BubbleMetadata icon is the fallback/badge; main dot comes from the shortcut icon above.
         builder.setBubbleMetadata(
             NotificationCompat.BubbleMetadata.Builder(
                 bubblePi,
-                dotIcon
+                appIcon(context)
             )
             .setDesiredHeight(520)
             .setAutoExpandBubble(false)
@@ -120,12 +119,15 @@ object BubbleHelper {
     }
 
     // App logo served via FileProvider — used as the main bubble dot on Android 12+.
+    private fun iconDir(context: Context): File =
+        File(context.cacheDir, "bubble_icons").also { it.mkdirs() }
+
     private fun appIcon(context: Context): IconCompat {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             return IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
         return try {
-            val iconFile = File(context.cacheDir, "cr_app_bubble.png")
+            val iconFile = File(iconDir(context), "cr_app_bubble.png")
             if (!iconFile.exists() || iconFile.length() == 0L) {
                 val size = (108 * context.resources.displayMetrics.density).toInt()
                 // getApplicationIcon works for any drawable type including AdaptiveIconDrawable
@@ -154,7 +156,7 @@ object BubbleHelper {
         return try {
             val size = (108 * context.resources.displayMetrics.density).toInt()
             val initial = contact.firstOrNull()?.uppercase() ?: "?"
-            val iconFile = File(context.cacheDir, "cr_composite_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
+            val iconFile = File(iconDir(context), "cr_composite_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
             if (!iconFile.exists() || iconFile.length() == 0L) {
                 val drawable = context.packageManager.getApplicationIcon(context.packageName)
                 val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -194,7 +196,7 @@ object BubbleHelper {
             // 108dp at the device's actual pixel density matches the adaptive-icon spec.
             // Include size in the filename so stale files from the wrong density are ignored.
             val size = (108 * context.resources.displayMetrics.density).toInt()
-            val iconFile = File(context.cacheDir, "cr_icon_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
+            val iconFile = File(iconDir(context), "cr_icon_${contact.hashCode().and(0x7FFFFFFF)}_$size.png")
             if (!iconFile.exists() || iconFile.length() == 0L) {
                 val bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bm)

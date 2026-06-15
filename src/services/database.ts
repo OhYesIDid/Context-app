@@ -382,8 +382,11 @@ export async function getPendingSyncItems(): Promise<{
   };
 }
 
+const SYNCED_TABLES = new Set(['saved_places', 'style_edits'] as const);
+
 export async function markSynced(table: 'saved_places' | 'style_edits', ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (!SYNCED_TABLES.has(table)) throw new Error(`markSynced: invalid table "${table}"`);
   const db = await getDatabase();
   const placeholders = ids.map(() => '?').join(',');
   const now = new Date().toISOString();
