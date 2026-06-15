@@ -7,6 +7,10 @@
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <permission
+    android:name="com.contxt.app.INTERNAL_BROADCAST"
+    android:protectionLevel="signature" />
+
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -42,7 +46,8 @@
 
     <receiver
       android:name=".ReplySendReceiver"
-      android:exported="false">
+      android:exported="false"
+      android:permission="com.contxt.app.INTERNAL_BROADCAST">
       <intent-filter>
         <action android:name="com.contxt.app.ACTION_SEND_REPLY"/>
         <action android:name="com.contxt.app.ACTION_DISMISS_REPLY"/>
@@ -53,7 +58,8 @@
 
     <receiver
       android:name=".ActionReceiver"
-      android:exported="false">
+      android:exported="false"
+      android:permission="com.contxt.app.INTERNAL_BROADCAST">
       <intent-filter>
         <action android:name="com.contxt.app.ACTION_CALENDAR_ADD"/>
         <action android:name="com.contxt.app.ACTION_MAPS_OPEN"/>
