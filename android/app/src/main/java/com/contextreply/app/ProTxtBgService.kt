@@ -145,8 +145,6 @@ class ProTxtBgService : NotificationListenerService() {
     val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
     // Reverse map: "$packageName:$sbnId" → convKey, for resolving outbound notifications.
     private val sbnKeyToConvKey = ConcurrentHashMap<String, String>()
-    // NLS key of the original messaging-app notification, used to cancel it when we take over.
-    private val originalSbnKey = ConcurrentHashMap<String, String>()
     // Timestamp of the most recent outbound send, keyed by "$packageName:$sbnId".
     // Suppresses the notification update the messaging app posts after a RemoteInput reply.
     val recentlySentAt = ConcurrentHashMap<String, Long>()
@@ -245,7 +243,6 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        android.util.Log.d("ProTxt", "onNotificationPosted pkg=${sbn.packageName}")
         if (sbn.packageName !in TARGET_PACKAGES) return
 
         val notification = sbn.notification ?: return
@@ -346,7 +343,6 @@ class ProTxtBgService : NotificationListenerService() {
         // Gate 6 can resolve outbound notifications back to the original convKey.
         sbnIdByConvKey[convKey] = sbn.id
         sbnKeyToConvKey[sbnKey] = convKey
-        originalSbnKey[convKey] = sbn.key
 
         // Only buffer after all gates — prevents outbound text from polluting the next
         // real message's burst context.
@@ -395,7 +391,6 @@ class ProTxtBgService : NotificationListenerService() {
         // clear the active state so the fresh debounce generates a new one.
         activeBubbles.remove(convKey)
         pendingJobs[convKey] = scheduler.schedule({
-            android.util.Log.d("ProTxt", "debounce fired convKey=$convKey")
             pendingJobs.remove(convKey)
             val fullThread = store.getThread(convKey)
             // Drain the arrival buffer — all texts that came in during the debounce window.
@@ -412,13 +407,11 @@ class ProTxtBgService : NotificationListenerService() {
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
             val suggestAll = Prefs.main(this)
                 .getBoolean("suggest_all_messages", true) // TODO before release: flip default back to false
-            android.util.Log.d("ProTxt", "intent=$detectedIntentsStr suggestAll=$suggestAll")
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // Only show loading bubble when the user is not already in the messaging app.
             // When they are in the app, the IME overlay handles the suggestion instead.
             val userInApp = ProTxtAccessibilityService.activePackage == packageName
-            android.util.Log.d("ProTxt", "userInApp=$userInApp activePackage=${ProTxtAccessibilityService.activePackage} pkg=$packageName")
             if (!userInApp) {
                 try {
                     postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
@@ -464,7 +457,6 @@ class ProTxtBgService : NotificationListenerService() {
                         }
                     }
                     val nowInApp = ProTxtAccessibilityService.activePackage == packageName
-                    android.util.Log.d("ProTxt", "worker done: userInApp=$userInApp nowInApp=$nowInApp posting=${!userInApp || !nowInApp}")
                     // If we posted a loading bubble (!userInApp), we must always update it
                     // with the real reply — even if the user entered the app while the worker
                     // was running. Skipping postSuggestionNotification leaves the bubble
@@ -877,9 +869,7 @@ class ProTxtBgService : NotificationListenerService() {
             preferredToneForContact(convKey),
             contactMatchJson = contactMatchJson(convKey),
         )
-        android.util.Log.d("ProTxt", "nm.notify id=$notifId")
         nm.notify(notifId, builder.build())
-        android.util.Log.d("ProTxt", "nm.notify done")
         // Store so the bubble can be re-promoted after screen unlock or call end.
         // postSuggestionNotification will overwrite this entry when the reply is ready.
         pendingBubbles[convKey] = PendingBubble(
