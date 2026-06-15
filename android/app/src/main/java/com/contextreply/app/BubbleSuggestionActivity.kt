@@ -201,7 +201,7 @@ class BubbleSuggestionActivity : Activity() {
                 action = ProTxtBgService.ACTION_OPEN_CHAT
                 putExtra(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT, openChatIntent)
                 if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
-            }, "com.contxt.app.INTERNAL_BROADCAST")
+            })
             if (a11yEnabled) finish()
         }
 
@@ -731,7 +731,7 @@ class BubbleSuggestionActivity : Activity() {
                         action = ProTxtBgService.ACTION_MARK_READ
                         putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
                         if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
-                    }, "com.contxt.app.INTERNAL_BROADCAST")
+                    })
                     finish()
                 }
             })
@@ -914,6 +914,6 @@ class BubbleSuggestionActivity : Activity() {
             putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
             if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
             if (intentExtra != null) putExtra(ProTxtBgService.EXTRA_INTENT, intentExtra)
-        }, "com.contxt.app.INTERNAL_BROADCAST")
+        })
     }
 }
