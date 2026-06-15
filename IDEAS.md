@@ -60,6 +60,9 @@ Take a screenshot of any message → app reads it and suggests a reply. Eliminat
 
 Worth building eventually; needs more thought or platform maturity.
 
+### Suppress original app notification
+When our bubble appears, optionally cancel the original WhatsApp/Messenger notification from the shade via `cancelNotification(sbn.key)` in the NLS. Keeps the shade clean — only our bubble shows. Needs a user-facing toggle since it means the original notification won't reappear if the bubble is dismissed without acting. "Mark as read" already handles the explicit read path.
+
 ### Android Auto
 Already on Android, already have ETA context. Suggest and send replies through the car dashboard. Natural fit with driving mode and ETA suggestions.
 

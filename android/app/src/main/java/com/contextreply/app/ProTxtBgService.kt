@@ -145,6 +145,8 @@ class ProTxtBgService : NotificationListenerService() {
     val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
     // Reverse map: "$packageName:$sbnId" → convKey, for resolving outbound notifications.
     private val sbnKeyToConvKey = ConcurrentHashMap<String, String>()
+    // NLS key of the original messaging-app notification, used to cancel it when we take over.
+    private val originalSbnKey = ConcurrentHashMap<String, String>()
     // Timestamp of the most recent outbound send, keyed by "$packageName:$sbnId".
     // Suppresses the notification update the messaging app posts after a RemoteInput reply.
     val recentlySentAt = ConcurrentHashMap<String, Long>()
@@ -344,6 +346,7 @@ class ProTxtBgService : NotificationListenerService() {
         // Gate 6 can resolve outbound notifications back to the original convKey.
         sbnIdByConvKey[convKey] = sbn.id
         sbnKeyToConvKey[sbnKey] = convKey
+        originalSbnKey[convKey] = sbn.key
 
         // Only buffer after all gates — prevents outbound text from polluting the next
         // real message's burst context.
