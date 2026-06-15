@@ -207,23 +207,28 @@
 
   <!-- ====================== CENTRAL: TYPING INDICATOR ====================== -->
   <!--
-    Bubble body: 230x120, centered at (512,500)
-    x=397 y=442 → corners at rx≈28 via quadratic bezier
-    Tail: bottom-left, pointing down — "AI is composing a reply"
+    Bubble: 190x150, centered at (512,505). Dark fill + white border matches node language.
+    Squarer proportions (1.27:1) so it reads as a bubble not a banner.
+    Tail points bottom-centre downward.
   -->
-  <!-- Soft ambient glow -->
-  <circle cx="512" cy="498" r="160" fill="white" opacity="0.06" filter="url(#orbHalo)"/>
-  <!-- Bubble -->
-  <path d="M 397 470 Q 397 442 425 442 L 599 442 Q 627 442 627 470
-           L 627 534 Q 627 562 599 562 L 444 562 L 428 598 L 435 562
-           Q 397 562 397 534 Z"
-        fill="white" filter="url(#orbHalo)"/>
-  <!-- Top shimmer -->
-  <path d="M 397 470 Q 397 442 425 442 L 599 442 Q 627 442 627 470
-           L 627 478 Q 397 478 397 470 Z"
-        fill="white" opacity="0.22"/>
-  <!-- Three dots: y=502, spaced 44px, r=15 -->
-  <circle cx="468" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
-  <circle cx="556" cy="502" r="15" fill="#6366f1" filter="url(#dotGlow)"/>
+  <!-- Ambient glow (ellipse matches bubble shape, not circle) -->
+  <ellipse cx="512" cy="510" rx="145" ry="120" fill="#4338ca" opacity="0.18" filter="url(#orbHalo)"/>
+  <!-- Bubble: dark fill -->
+  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
+           L 607 552 Q 607 580 579 580 L 546 580 L 530 618 L 514 580
+           L 445 580 Q 417 580 417 552 Z"
+        fill="#0d0a1e"/>
+  <!-- White glow border -->
+  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
+           L 607 552 Q 607 580 579 580 L 546 580 L 530 618 L 514 580
+           L 445 580 Q 417 580 417 552 Z"
+        fill="none" stroke="white" stroke-width="3" stroke-opacity="0.45"/>
+  <!-- Top-left glass shimmer -->
+  <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
+           L 607 468 Q 417 468 417 458 Z"
+        fill="white" opacity="0.10"/>
+  <!-- Three white dots centred in bubble body (y midpoint = (430+580)/2 = 505) -->
+  <circle cx="466" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="558" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
 </svg>
