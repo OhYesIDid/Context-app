@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="512" viewBox="0 0 1024 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="cellBg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#1a1040"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+    <linearGradient id="indigoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="512" fill="#09090b"/>
+
+  <!-- Cell dividers -->
+  <line x1="256" y1="0"   x2="256" y2="512" stroke="#27272a" stroke-width="1"/>
+  <line x1="512" y1="0"   x2="512" y2="512" stroke="#27272a" stroke-width="1"/>
+  <line x1="768" y1="0"   x2="768" y2="512" stroke="#27272a" stroke-width="1"/>
+  <line x1="0"   y1="256" x2="1024" y2="256" stroke="#27272a" stroke-width="1"/>
+
+  <!-- ============================================================ -->
+  <!-- 1. SINGLE BUBBLE — (128, 128) -->
+  <!-- ============================================================ -->
+  <g filter="url(#softGlow)">
+    <path d="M 78 103 Q 78 93 88 93 L 168 93 Q 178 93 178 103
+             L 178 153 Q 178 163 168 163 L 104 163 L 94 181 L 97 163
+             Q 78 163 78 153 Z" fill="white"/>
+  </g>
+  <text x="128" y="222" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">1. Single bubble</text>
+
+  <!-- ============================================================ -->
+  <!-- 2. TWO OVERLAPPING BUBBLES — (384, 128) -->
+  <!-- ============================================================ -->
+  <!-- Received (back, dark) -->
+  <path d="M 318 96 Q 318 87 327 87 L 401 87 Q 410 87 410 96
+           L 410 140 Q 410 149 401 149 L 340 149 L 332 164 L 335 149
+           Q 318 149 318 140 Z" fill="#2d2d45"/>
+  <!-- AI reply (front, white) — offset right+down -->
+  <g filter="url(#softGlow)">
+    <path d="M 344 115 Q 344 106 353 106 L 437 106 Q 446 106 446 115
+             L 446 161 Q 446 170 437 170 L 378 170 L 386 185 L 382 170
+             Q 344 170 344 161 Z" fill="white"/>
+  </g>
+  <text x="384" y="222" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">2. Two bubbles</text>
+
+  <!-- ============================================================ -->
+  <!-- 3. BUBBLE + SPARKLE — (640, 128) -->
+  <!-- ============================================================ -->
+  <g filter="url(#softGlow)">
+    <path d="M 590 98 Q 590 88 600 88 L 680 88 Q 690 88 690 98
+             L 690 152 Q 690 162 680 162 L 616 162 L 606 180 L 609 162
+             Q 590 162 590 152 Z" fill="white"/>
+  </g>
+  <!-- 4-pt sparkle inside, centered (640,125) -->
+  <path d="M 640 109 L 644 121 L 656 125 L 644 129 L 640 141
+           L 636 129 L 624 125 L 636 121 Z"
+        fill="#6366f1" filter="url(#glow)"/>
+  <text x="640" y="222" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">3. Bubble + sparkle</text>
+
+  <!-- ============================================================ -->
+  <!-- 4. TYPING INDICATOR — (896, 128) -->
+  <!-- ============================================================ -->
+  <g filter="url(#softGlow)">
+    <path d="M 846 103 Q 846 93 856 93 L 936 93 Q 946 93 946 103
+             L 946 153 Q 946 163 936 163 L 872 163 L 862 181 L 865 163
+             Q 846 163 846 153 Z" fill="white"/>
+  </g>
+  <!-- Three dots -->
+  <circle cx="874" cy="128" r="8" fill="#6366f1" filter="url(#glow)"/>
+  <circle cx="896" cy="128" r="8" fill="#6366f1" filter="url(#glow)"/>
+  <circle cx="918" cy="128" r="8" fill="#6366f1" filter="url(#glow)"/>
+  <text x="896" y="222" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">4. Typing indicator</text>
+
+  <!-- ============================================================ -->
+  <!-- 5. LIGHTNING BOLT IN BUBBLE — (128, 384) -->
+  <!-- ============================================================ -->
+  <g filter="url(#softGlow)">
+    <path d="M 78 359 Q 78 349 88 349 L 168 349 Q 178 349 178 359
+             L 178 409 Q 178 419 168 419 L 104 419 L 94 437 L 97 419
+             Q 78 419 78 409 Z" fill="white"/>
+  </g>
+  <!-- Lightning bolt centered (128,384) -->
+  <path d="M 136 360 L 116 386 L 129 386 L 118 408 L 144 380 L 130 380 L 148 360 Z"
+        fill="#6366f1" filter="url(#glow)"/>
+  <text x="128" y="478" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">5. Lightning bolt</text>
+
+  <!-- ============================================================ -->
+  <!-- 6. "C" LETTERMARK ARC — (384, 384) -->
+  <!-- ============================================================ -->
+  <!-- C arc: center (384,384), r=52, opens to the right -->
+  <path d="M 421 347 A 52 52 0 1 0 421 421"
+        fill="none" stroke="white" stroke-width="16" stroke-linecap="round"
+        filter="url(#softGlow)"/>
+  <!-- Endpoint dots -->
+  <circle cx="421" cy="347" r="8" fill="#c4b5fd" filter="url(#glow)"/>
+  <circle cx="421" cy="421" r="10" fill="white" filter="url(#glow)"/>
+  <text x="384" y="478" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">6. "C" lettermark</text>
+
+  <!-- ============================================================ -->
+  <!-- 7. INVERTED BUBBLE (tail up = AI speaking outward) — (640, 384) -->
+  <!-- ============================================================ -->
+  <defs>
+    <linearGradient id="invGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <g filter="url(#softGlow)">
+    <!-- Tail pointing UP (AI broadcasting to nodes) -->
+    <path d="M 604 363 L 596 343 L 622 363 Z" fill="url(#invGrad)"/>
+    <!-- Body -->
+    <path d="M 590 363 Q 590 353 600 353 L 690 353 Q 700 353 700 363
+             L 700 419 Q 700 429 690 429 L 600 429 Q 590 429 590 419 Z"
+          fill="url(#invGrad)"/>
+  </g>
+  <!-- Shimmer line on top -->
+  <rect x="590" y="353" width="110" height="30" rx="10"
+        fill="white" opacity="0.14"/>
+  <text x="640" y="478" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">7. Inverted bubble</text>
+
+  <!-- ============================================================ -->
+  <!-- 8. STACKED MICRO-BUBBLES — (896, 384) -->
+  <!-- ============================================================ -->
+  <!-- Back bubble (smallest, dim) -->
+  <path d="M 862 350 Q 862 343 869 343 L 928 343 Q 935 343 935 350
+           L 935 381 Q 935 388 928 388 L 876 388 L 870 398 L 872 388
+           Q 862 388 862 381 Z" fill="#2d2d45" opacity="0.9"/>
+  <!-- Mid bubble -->
+  <path d="M 852 367 Q 852 359 860 359 L 932 359 Q 940 359 940 367
+           L 940 401 Q 940 409 932 409 L 868 409 L 861 420 L 863 409
+           Q 852 409 852 401 Z" fill="#6366f1" opacity="0.7"/>
+  <!-- Front bubble (white) -->
+  <g filter="url(#softGlow)">
+    <path d="M 840 385 Q 840 376 850 376 L 938 376 Q 948 376 948 385
+             L 948 423 Q 948 432 938 432 L 862 432 L 853 445 L 856 432
+             Q 840 432 840 423 Z" fill="white"/>
+  </g>
+  <text x="896" y="478" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="13">8. Stacked bubbles</text>
+
+</svg>
