@@ -80,7 +80,7 @@
   <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
            L 781 636 Q 781 707 710 707 L 625 707 L 600 770 L 574 707
            L 314 707 Q 243 707 243 636 Z"
-        fill="none" stroke="white" stroke-width="6" stroke-opacity="0.45"/>
+        fill="none" stroke="white" stroke-width="12" stroke-opacity="0.45"/>
   <!-- Top-edge glass shimmer -->
   <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
            L 781 391 Q 243 391 243 374 Z"
