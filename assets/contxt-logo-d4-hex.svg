@@ -87,10 +87,9 @@
   <line x1="256" y1="660" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
   <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
-  <!-- ========================= NODES (glow r=150, dark r=110, fill r=88) ========================= -->
+  <!-- ========================= NODES (fill r=88) ========================= -->
 
   <!-- LOCATION — top (512,217) — cyan -->
-  <circle cx="512" cy="217" r="110" fill="#071c24"/>
   <circle cx="512" cy="217" r="88"  fill="url(#nLoc)"/>
   <!-- Location pin: solid circle head + triangle tail -->
   <circle cx="512" cy="200" r="24" fill="white"/>
@@ -98,7 +97,6 @@
   <circle cx="512" cy="200" r="10" fill="#0e7490"/>
 
   <!-- CALENDAR — top-right (768,365) — amber -->
-  <circle cx="768" cy="365" r="110" fill="#231a07"/>
   <circle cx="768" cy="365" r="88"  fill="url(#nCal)"/>
   <!-- Calendar: body + header band + day grid -->
   <rect x="737" y="338" width="62" height="54" rx="9" fill="white" opacity="0.15"/>
@@ -119,7 +117,6 @@
   <circle cx="785" cy="381" r="4" fill="#b45309"/>
 
   <!-- MESSAGE — bottom-right (768,660) — rose -->
-  <circle cx="768" cy="660" r="110" fill="#23070f"/>
   <circle cx="768" cy="660" r="88"  fill="url(#nMsg)"/>
   <!-- Message bubble: plain bubble + two text lines (no dots — center has typing indicator) -->
   <path d="M 733 642 Q 733 632 743 632 L 805 632 Q 815 632 815 642
@@ -130,7 +127,6 @@
   <rect x="745" y="659" width="40" height="7" rx="3.5" fill="#be123c" opacity="0.35"/>
 
   <!-- WEATHER — bottom (512,807) — blue -->
-  <circle cx="512" cy="807" r="110" fill="#07101f"/>
   <circle cx="512" cy="807" r="88"  fill="url(#nWthr)"/>
   <!-- Cloud: 5 overlapping circles, no rect — natural rounded shape -->
   <circle cx="496" cy="810" r="19" fill="white"/>
@@ -145,7 +141,6 @@
   <ellipse cx="527" cy="839" rx="3.5" ry="8" fill="white" opacity="0.85"/>
 
   <!-- BATTERY — bottom-left (256,660) — emerald -->
-  <circle cx="256" cy="660" r="110" fill="#071c13"/>
   <circle cx="256" cy="660" r="88"  fill="url(#nBat)"/>
   <!-- Battery: body (56x32) + terminal nub + charge fill -->
   <rect x="227" y="644" width="56" height="32" rx="8" fill="white" opacity="0.15"/>
@@ -156,7 +151,6 @@
   <rect x="231" y="648" width="36" height="24" rx="5" fill="white"/>
 
   <!-- HISTORY — top-left (256,365) — violet -->
-  <circle cx="256" cy="365" r="110" fill="#130e23"/>
   <circle cx="256" cy="365" r="88"  fill="url(#nHist)"/>
   <!-- Clock icon: circle face + hour/minute hands = "history" -->
   <circle cx="256" cy="365" r="32" fill="none" stroke="white" stroke-width="4"/>
