@@ -58,13 +58,6 @@
       BR   stop: (845, 705)     Bot stop: (512, 767)
       BL   stop: (179, 705)     TL  stop: (175, 317)
   -->
-  <!-- Glow pass -->
-  <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="512"  y1="1024" x2="512" y2="767" stroke="url(#lnBot)" stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="66" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
   <!-- Crisp pass -->
   <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="12" stroke-linecap="round"/>
   <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="12" stroke-linecap="round"/>
