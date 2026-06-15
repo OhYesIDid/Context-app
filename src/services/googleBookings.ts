@@ -1,5 +1,5 @@
 import type { BookingContext, BookingItem, BookingType } from '../types';
-import { getAccessToken } from './googleAuth';
+import { getAccessToken, invalidateToken } from './googleAuth';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -40,7 +40,8 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
       { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    if (listRes.status === 401 || listRes.status === 403) {
+    if (listRes.status === 401) { invalidateToken(); throw new Error('Gmail access token expired. Please sign out and sign in again.'); }
+    if (listRes.status === 403) {
       throw new Error('Gmail access not granted. Please sign out and sign in again to allow booking lookups.');
     }
     if (!listRes.ok) {

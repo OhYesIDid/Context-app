@@ -1,5 +1,5 @@
 import type { AvailabilityData, CalendarEvent } from '../types';
-import { getAccessToken } from './googleAuth';
+import { getAccessToken, invalidateToken } from './googleAuth';
 
 const CALENDAR_ID = process.env.EXPO_PUBLIC_GOOGLE_CALENDAR_ID ?? 'primary';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -53,7 +53,7 @@ async function fetchEvents(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${params}`,
       { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (res.status === 401) throw new Error('Calendar access token is invalid. Please sign out and sign in again.');
+    if (res.status === 401) { invalidateToken(); throw new Error('Calendar access token expired. Please sign out and sign in again.'); }
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
       throw new Error(`Google Calendar error: ${err?.error?.message ?? res.statusText}`);
