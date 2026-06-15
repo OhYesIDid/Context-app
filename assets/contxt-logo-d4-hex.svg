@@ -7,45 +7,39 @@
     </radialGradient>
 
     <!--
-      Regular hexagon r=295 from (512,512):
-        Top (512,217)  TR (768,365)  BR (768,660)
-        Bot (512,807)  BL (256,660)  TL (256,365)
+      Regular hexagon r=413 (1.4× scale) from (512,512):
+        Top          (512,  99)
+        Top-right    (870, 306)
+        Bottom-right (870, 718)
+        Bottom       (512, 925)
+        Bottom-left  (154, 718)
+        Top-left     (154, 306)
     -->
-    <linearGradient id="lnTop" x1="512" y1="217" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#67e8f9" stop-opacity="0.85"/>
+    <linearGradient id="lnTop" x1="512" y1="99"  x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/><stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnTR" x1="768" y1="365" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#fcd34d" stop-opacity="0.85"/>
+    <linearGradient id="lnTR"  x1="870" y1="306" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/><stop offset="100%" stop-color="#fef3c7" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBR" x1="768" y1="660" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#fb7185" stop-opacity="0.85"/>
+    <linearGradient id="lnBR"  x1="870" y1="718" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.3"/><stop offset="100%" stop-color="#ffe4e6" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBot" x1="512" y1="807" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#93c5fd" stop-opacity="0.85"/>
+    <linearGradient id="lnBot" x1="512" y1="925" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#dbeafe" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBL" x1="256" y1="660" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#6ee7b7" stop-opacity="0.85"/>
+    <linearGradient id="lnBL"  x1="154" y1="718" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/><stop offset="100%" stop-color="#d1fae5" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnTL" x1="256" y1="365" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#c4b5fd" stop-opacity="0.85"/>
+    <linearGradient id="lnTL"  x1="154" y1="306" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"/><stop offset="100%" stop-color="#ede9fe" stop-opacity="0.9"/>
     </linearGradient>
 
-    <filter id="ambGlow"    x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
-    <filter id="lineGlow"   x="-20%" y="-20%" width="140%" height="140%">
+    <filter id="ambGlow"  x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="bubbleGlow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="28" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="dotGlow"    x="-150%" y="-150%" width="400%" height="400%">
+    <filter id="dotGlow"  x="-150%" y="-150%" width="400%" height="400%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
@@ -55,68 +49,60 @@
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
 
   <!-- Ambient centre glow -->
-  <circle cx="512" cy="490" r="320" fill="#6d28d9" opacity="0.18" filter="url(#ambGlow)"/>
+  <circle cx="512" cy="505" r="340" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
+
+  <!-- Lines: glow pass -->
+  <line x1="512" y1="99"  x2="512" y2="512" stroke="url(#lnTop)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="870" y1="306" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="870" y1="718" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="512" y1="925" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="154" y1="718" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="154" y1="306" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <!-- Lines: crisp pass -->
+  <line x1="512" y1="99"  x2="512" y2="512" stroke="url(#lnTop)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="870" y1="306" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="870" y1="718" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="512" y1="925" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="154" y1="718" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="154" y1="306" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
   <!--
-    Bubble: nearly full canvas — 50px margin sides/top, tail hangs to y=935.
-    x: 50–974  (width 924)   y: 50–850  (height 800)   corner radius 170.
-    Bubble drawn FIRST so lines appear on top as glowing rays inside the dark space.
+    Central typing bubble — 1.4× previous 320×240:
+    x: 288–736 (448px wide)   y: 337–673 (336px tall)   corner radius 59
+    Tail centre x=585 (right of x=512 to clear bottom line), tip y=726
   -->
-  <!-- Bubble glow -->
-  <path d="M 50 220 Q 50 50 220 50 L 804 50 Q 974 50 974 220
-           L 974 680 Q 974 850 804 850 L 605 850 L 575 935 L 545 850
-           L 220 850 Q 50 850 50 680 Z"
-        fill="#7c3aed" opacity="0.18" filter="url(#bubbleGlow)"/>
   <!-- Bubble dark fill -->
-  <path d="M 50 220 Q 50 50 220 50 L 804 50 Q 974 50 974 220
-           L 974 680 Q 974 850 804 850 L 605 850 L 575 935 L 545 850
-           L 220 850 Q 50 850 50 680 Z"
+  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
+           L 736 614 Q 736 673 677 673 L 606 673 L 585 726 L 564 673
+           L 347 673 Q 288 673 288 614 Z"
         fill="#0d0a1e"/>
-
-  <!-- Lines drawn on top of bubble fill — visible as coloured rays inside -->
-  <!-- Glow pass -->
-  <line x1="512" y1="217" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <line x1="768" y1="365" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <line x1="768" y1="660" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <line x1="512" y1="807" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <line x1="256" y1="660" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="18" stroke-linecap="round" opacity="0.5" filter="url(#lineGlow)"/>
-  <!-- Crisp pass -->
-  <line x1="512" y1="217" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="768" y1="365" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="768" y1="660" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="512" y1="807" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="256" y1="660" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="3.5" stroke-linecap="round"/>
-
-  <!-- Bubble border + shimmer on top of lines -->
-  <path d="M 50 220 Q 50 50 220 50 L 804 50 Q 974 50 974 220
-           L 974 680 Q 974 850 804 850 L 605 850 L 575 935 L 545 850
-           L 220 850 Q 50 850 50 680 Z"
-        fill="none" stroke="white" stroke-width="3" stroke-opacity="0.4"/>
-  <!-- Glass shimmer band across top -->
-  <path d="M 50 220 Q 50 50 220 50 L 804 50 Q 974 50 974 220 L 974 240 L 50 240 Z"
-        fill="white" opacity="0.07"/>
-
-  <!-- Three typing dots — centred at y=450, x=327/512/697, r=48 -->
-  <circle cx="327" cy="450" r="48" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="450" r="48" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="697" cy="450" r="48" fill="white" filter="url(#dotGlow)"/>
+  <!-- White border -->
+  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
+           L 736 614 Q 736 673 677 673 L 606 673 L 585 726 L 564 673
+           L 347 673 Q 288 673 288 614 Z"
+        fill="none" stroke="white" stroke-width="3" stroke-opacity="0.45"/>
+  <!-- Top-edge glass shimmer -->
+  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
+           L 736 410 Q 288 410 288 396 Z"
+        fill="white" opacity="0.10"/>
+  <!-- Three typing dots — y midpoint (337+673)/2=505, r=28, spacing 82px -->
+  <circle cx="430" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="594" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
 
   <!--
-    Data particles — on lines inside the bubble, between the dots and the bubble edges.
-    t measured from hex-point toward centre (512,512).
-    Top  t=0.40 → (512, 335)   above dots             ✓
-    TR   t=0.40 → (666, 424)   upper-right, near wall ✓
-    BR   t=0.40 → (666, 601)   lower-right             ✓
-    Bot  t=0.40 → (512, 689)   below dots, above tail  ✓
-    BL   t=0.40 → (358, 601)   lower-left              ✓
-    TL   t=0.40 → (358, 424)   upper-left              ✓
+    Data particles — in clear space between bubble edge and canvas edge.
+    Top  t=0.40 from (512, 99): cy=265   — above bubble top 337        ✓
+    TR   t=0.25 from (870,306): (781,358) — right of bubble edge 736    ✓
+    BR   t=0.25 from (870,718): (781,667) — right of bubble edge 736    ✓
+    Bot  t=0.35 from (512,925): cy=781   — below tail tip 726           ✓
+    BL   t=0.25 from (154,718): (244,667) — left of bubble edge 288     ✓
+    TL   t=0.25 from (154,306): (244,358) — left of bubble edge 288     ✓
   -->
-  <circle cx="512" cy="335" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="666" cy="424" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="666" cy="601" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="689" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="358" cy="601" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="358" cy="424" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="265" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="781" cy="358" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="781" cy="667" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="781" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="244" cy="667" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="244" cy="358" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
