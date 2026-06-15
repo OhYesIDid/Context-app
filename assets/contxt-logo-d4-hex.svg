@@ -67,28 +67,28 @@
   <line x1="0"    y1="216" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
   <!--
-    Central typing bubble — 1.4× previous 320×240:
-    x: 288–736 (448px wide)   y: 337–673 (336px tall)   corner radius 59
-    Tail centre x=585 (right of x=512 to clear bottom line), tip y=726
+    Central typing bubble — previous size ×1.2:
+    x: 243–781 (538px wide)   y: 303–707 (404px tall)   corner radius 71
+    Tail centre x=600 (right of x=512 to clear bottom line), tip y=770
   -->
   <!-- Bubble dark fill -->
-  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
-           L 736 614 Q 736 673 677 673 L 606 673 L 585 726 L 564 673
-           L 347 673 Q 288 673 288 614 Z"
+  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
+           L 781 636 Q 781 707 710 707 L 625 707 L 600 770 L 574 707
+           L 314 707 Q 243 707 243 636 Z"
         fill="#0d0a1e"/>
   <!-- White border -->
-  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
-           L 736 614 Q 736 673 677 673 L 606 673 L 585 726 L 564 673
-           L 347 673 Q 288 673 288 614 Z"
+  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
+           L 781 636 Q 781 707 710 707 L 625 707 L 600 770 L 574 707
+           L 314 707 Q 243 707 243 636 Z"
         fill="none" stroke="white" stroke-width="3" stroke-opacity="0.45"/>
   <!-- Top-edge glass shimmer -->
-  <path d="M 288 396 Q 288 337 347 337 L 677 337 Q 736 337 736 396
-           L 736 410 Q 288 410 288 396 Z"
+  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
+           L 781 391 Q 243 391 243 374 Z"
         fill="white" opacity="0.10"/>
-  <!-- Three typing dots — y midpoint (337+673)/2=505, r=28, spacing 82px -->
-  <circle cx="430" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="594" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
+  <!-- Three typing dots — y midpoint (303+707)/2=505, r=34, spacing 98px -->
+  <circle cx="414" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="610" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
 
   <!--
     Data particles — t=0.4 from canvas edge toward centre on each line.
