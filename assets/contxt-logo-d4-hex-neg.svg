@@ -2,41 +2,31 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="bg" cx="50%" cy="50%" r="55%">
-      <stop offset="0%" stop-color="#130828"/>
-      <stop offset="100%" stop-color="#09090b"/>
+      <stop offset="0%" stop-color="#f0ecff"/>
+      <stop offset="100%" stop-color="#faf9ff"/>
     </radialGradient>
 
-    <!-- clipPath clips all content to the rounded-rect icon shape, keeping corners transparent -->
     <clipPath id="iconClip">
       <rect width="1024" height="1024" rx="232"/>
     </clipPath>
 
-    <!--
-      Lines extended to canvas edges — hex directions hit the viewBox boundary at:
-        Top          (512,    0)
-        Top-right    (1024, 216)
-        Bottom-right (1024, 808)
-        Bottom       (512, 1024)
-        Bottom-left  (   0, 808)
-        Top-left     (   0, 216)
-    -->
     <linearGradient id="lnTop" x1="512" y1="0"    x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.15"/><stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.2"/><stop offset="100%" stop-color="#0891b2" stop-opacity="0.9"/>
     </linearGradient>
     <linearGradient id="lnTR"  x1="1024" y1="216" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.15"/><stop offset="100%" stop-color="#fef3c7" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.2"/><stop offset="100%" stop-color="#d97706" stop-opacity="0.9"/>
     </linearGradient>
     <linearGradient id="lnBR"  x1="1024" y1="808" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.15"/><stop offset="100%" stop-color="#ffe4e6" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.2"/><stop offset="100%" stop-color="#e11d48" stop-opacity="0.9"/>
     </linearGradient>
     <linearGradient id="lnBot" x1="512" y1="1024" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.15"/><stop offset="100%" stop-color="#dbeafe" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2"/><stop offset="100%" stop-color="#2563eb" stop-opacity="0.9"/>
     </linearGradient>
     <linearGradient id="lnBL"  x1="0"    y1="808" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/><stop offset="100%" stop-color="#d1fae5" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.2"/><stop offset="100%" stop-color="#059669" stop-opacity="0.9"/>
     </linearGradient>
     <linearGradient id="lnTL"  x1="0"    y1="216" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.15"/><stop offset="100%" stop-color="#ede9fe" stop-opacity="0.9"/>
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.2"/><stop offset="100%" stop-color="#7c3aed" stop-opacity="0.9"/>
     </linearGradient>
 
     <filter id="ambGlow"  x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
@@ -46,16 +36,14 @@
     </filter>
   </defs>
 
-  <!-- Background -->
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
 
-  <!-- All content clipped to rounded-rect — corners stay fully transparent -->
   <g clip-path="url(#iconClip)">
 
     <!-- Ambient centre glow -->
-    <circle cx="512" cy="505" r="340" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
+    <circle cx="512" cy="505" r="340" fill="#7c3aed" opacity="0.08" filter="url(#ambGlow)"/>
 
-    <!-- Connector lines (crisp, no glow) -->
+    <!-- Connector lines -->
     <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="12" stroke-linecap="round"/>
     <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="12" stroke-linecap="round"/>
     <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="12" stroke-linecap="round"/>
@@ -63,32 +51,31 @@
     <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="12" stroke-linecap="round"/>
     <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="12" stroke-linecap="round"/>
 
-    <!-- Bubble dark fill -->
+    <!-- Bubble: white fill, dark border -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
              L 274 747 Q 189 747 189 662 Z"
-          fill="#0d0a1e"/>
-    <!-- White border -->
+          fill="#ffffff"/>
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
              L 274 747 Q 189 747 189 662 Z"
-          fill="none" stroke="white" stroke-width="12" stroke-opacity="0.45"/>
-    <!-- Glass shimmer -->
+          fill="none" stroke="#2d1a4e" stroke-width="12" stroke-opacity="0.45"/>
+    <!-- Glass shimmer (dark) -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 369 Q 189 369 189 348 Z"
-          fill="white" opacity="0.10"/>
-    <!-- Three typing dots — y midpoint (263+747)/2=505, r=41, spacing 118px -->
-    <circle cx="394" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
-    <circle cx="512" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
-    <circle cx="630" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
+          fill="#2d1a4e" opacity="0.06"/>
+    <!-- Three typing dots — dark -->
+    <circle cx="394" cy="505" r="41" fill="#2d1a4e" filter="url(#dotGlow)"/>
+    <circle cx="512" cy="505" r="41" fill="#2d1a4e" filter="url(#dotGlow)"/>
+    <circle cx="630" cy="505" r="41" fill="#2d1a4e" filter="url(#dotGlow)"/>
 
-    <!-- Data particles — r=20, t=0.30 from each canvas-edge endpoint -->
-    <circle cx="512" cy="154" r="20" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="305" r="20" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="719" r="20" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="512" cy="870" r="20" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="719" r="20" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="305" r="20" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+    <!-- Data particles — same colours -->
+    <circle cx="512" cy="154" r="20" fill="#06b6d4" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="870" cy="305" r="20" fill="#f59e0b" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="870" cy="719" r="20" fill="#f43f5e" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="512" cy="870" r="20" fill="#3b82f6" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="154" cy="719" r="20" fill="#10b981" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="154" cy="305" r="20" fill="#8b5cf6" opacity="0.95" filter="url(#dotGlow)"/>
 
   </g>
 </svg>
