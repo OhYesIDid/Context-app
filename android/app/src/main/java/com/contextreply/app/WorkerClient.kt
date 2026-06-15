@@ -6,6 +6,8 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?, val action: JSONObject? = null)
 
@@ -73,12 +75,23 @@ object WorkerClient {
 
     private class RetryableException(message: String) : Exception(message)
 
+    private fun hmacSha256(secret: String, data: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return mac.doFinal(data.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
     private fun makeRequest(body: String): WorkerResult? {
         val conn = URL("${BuildConfig.WORKER_URL}/suggest").openConnection() as HttpURLConnection
         return try {
+            val timestamp = (System.currentTimeMillis() / 1000L).toString()
+            val signature = if (BuildConfig.WORKER_SECRET.isNotEmpty())
+                hmacSha256(BuildConfig.WORKER_SECRET, "$timestamp.$body") else ""
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("X-App-Secret", BuildConfig.WORKER_SECRET)
+            conn.setRequestProperty("X-Timestamp", timestamp)
+            if (signature.isNotEmpty()) conn.setRequestProperty("X-Signature", signature)
             conn.doOutput = true
             conn.connectTimeout = 15_000
             conn.readTimeout = 15_000

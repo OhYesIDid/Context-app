@@ -1,6 +1,6 @@
 export interface Env {
   CLAUDE_API_KEY: string;
-  WORKER_SECRET: string;
+  WORKER_SECRET: string; // HMAC-SHA256 key shared with the Android client
 }
 
 interface CalendarEvent {
@@ -214,8 +214,31 @@ function parseReplies(raw: string): ReplyOptions {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-App-Secret',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Timestamp, X-Signature',
 };
+
+// Constant-time string compare — prevents timing attacks that could leak
+// whether the submitted signature shares a common prefix with the correct one.
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifyHmac(secret: string, timestamp: string, rawBody: string, signature: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, enc.encode(`${timestamp}.${rawBody}`));
+  const expected = Array.from(new Uint8Array(sigBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return constantTimeEqual(expected, signature.toLowerCase());
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -226,15 +249,32 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    if (env.WORKER_SECRET && request.headers.get('X-App-Secret') !== env.WORKER_SECRET) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-      });
+    // HMAC-SHA256 request signing — read body as text first so we can verify
+    // the signature before parsing. Timestamp window prevents replay attacks.
+    const rawBody = await request.text();
+
+    if (env.WORKER_SECRET) {
+      const timestamp = request.headers.get('X-Timestamp') ?? '';
+      const signature = request.headers.get('X-Signature') ?? '';
+      const nowSecs = Math.floor(Date.now() / 1000);
+      const reqSecs = parseInt(timestamp, 10);
+
+      if (!timestamp || !signature || isNaN(reqSecs) || Math.abs(nowSecs - reqSecs) > 30) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        });
+      }
+      const valid = await verifyHmac(env.WORKER_SECRET, timestamp, rawBody, signature);
+      if (!valid) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        });
+      }
     }
 
     let body: SuggestRequest;
     try {
-      body = await request.json();
+      body = JSON.parse(rawBody) as SuggestRequest;
     } catch {
       return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
         status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
