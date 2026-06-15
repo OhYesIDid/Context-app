@@ -81,10 +81,6 @@
            L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
            L 274 747 Q 189 747 189 662 Z"
         fill="none" stroke="white" stroke-width="12" stroke-opacity="0.45"/>
-  <!-- Top-edge glass shimmer -->
-  <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
-           L 835 369 Q 189 369 189 348 Z"
-        fill="white" opacity="0.10"/>
   <!-- Three typing dots — y midpoint (263+747)/2=505, r=41, spacing 118px -->
   <circle cx="394" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
   <circle cx="512" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
@@ -95,10 +91,10 @@
     Top  (512,  154)  TR  (870, 305)  BR  (870, 719)
     Bot  (512,  870)  BL  (154, 719)  TL  (154, 305)
   -->
-  <circle cx="512" cy="154" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="870" cy="305" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="870" cy="719" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="870" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="154" cy="719" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="154" cy="305" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="154" r="30" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="870" cy="305" r="30" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="870" cy="719" r="30" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="870" r="30" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="154" cy="719" r="30" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="154" cy="305" r="30" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
