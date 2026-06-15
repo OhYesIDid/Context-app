@@ -51,58 +51,61 @@
   <!-- Ambient centre glow -->
   <circle cx="512" cy="505" r="340" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
 
-  <!-- Lines: glow pass -->
-  <line x1="512" y1="0"    x2="512" y2="512" stroke="url(#lnTop)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="1024" y1="216" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="1024" y1="808" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="512" y1="1024" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="0"    y1="808" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="0"    y1="216" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <!-- Lines: crisp pass -->
-  <line x1="512" y1="0"    x2="512" y2="512" stroke="url(#lnTop)" stroke-width="4" stroke-linecap="round"/>
-  <line x1="1024" y1="216" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="1024" y1="808" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="512" y1="1024" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="4" stroke-linecap="round"/>
-  <line x1="0"    y1="808" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="0"    y1="216" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
+  <!--
+    Connector lines — inner endpoints computed from intersection with the
+    bubble's rounded-rect boundary (cr=85), backed off 20px to clear the 12px border.
+      Top  stop: (512, 243)     TR  stop: (849, 317)
+      BR   stop: (845, 705)     Bot stop: (512, 767)
+      BL   stop: (179, 705)     TL  stop: (175, 317)
+  -->
+  <!-- Glow pass -->
+  <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="512"  y1="1024" x2="512" y2="767" stroke="url(#lnBot)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <!-- Crisp pass -->
+  <line x1="512"  y1="0"    x2="512" y2="243" stroke="url(#lnTop)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="1024" y1="216"  x2="849" y2="317" stroke="url(#lnTR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="1024" y1="808"  x2="845" y2="705" stroke="url(#lnBR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="512"  y1="1024" x2="512" y2="767" stroke="url(#lnBot)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="0"    y1="808"  x2="179" y2="705" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="0"    y1="216"  x2="175" y2="317" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
   <!--
-    Central typing bubble — previous size ×1.2:
-    x: 243–781 (538px wide)   y: 303–707 (404px tall)   corner radius 71
-    Tail centre x=600 (right of x=512 to clear bottom line), tip y=770
+    Central typing bubble — previous ×1.2 (bubble 645×484):
+    x: 189–835   y: 263–747   corner radius 85
+    Tail: centre x=618, width doubled (×2 = 124px), depth doubled (×2 = 152px), tip y=899
   -->
   <!-- Bubble dark fill -->
-  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
-           L 781 636 Q 781 707 710 707 L 625 707 L 600 770 L 574 707
-           L 314 707 Q 243 707 243 636 Z"
+  <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
+           L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
+           L 274 747 Q 189 747 189 662 Z"
         fill="#0d0a1e"/>
   <!-- White border -->
-  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
-           L 781 636 Q 781 707 710 707 L 625 707 L 600 770 L 574 707
-           L 314 707 Q 243 707 243 636 Z"
+  <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
+           L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
+           L 274 747 Q 189 747 189 662 Z"
         fill="none" stroke="white" stroke-width="12" stroke-opacity="0.45"/>
   <!-- Top-edge glass shimmer -->
-  <path d="M 243 374 Q 243 303 314 303 L 710 303 Q 781 303 781 374
-           L 781 391 Q 243 391 243 374 Z"
+  <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
+           L 835 369 Q 189 369 189 348 Z"
         fill="white" opacity="0.10"/>
-  <!-- Three typing dots — y midpoint (303+707)/2=505, r=34, spacing 98px -->
-  <circle cx="414" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
-  <circle cx="610" cy="505" r="34" fill="white" filter="url(#dotGlow)"/>
+  <!-- Three typing dots — y midpoint (263+747)/2=505, r=41, spacing 118px -->
+  <circle cx="394" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
+  <circle cx="630" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
 
   <!--
-    Data particles — t=0.4 from canvas edge toward centre on each line.
-    Top  (512,  0)→(512,512):   (512, 205)  above bubble top 337        ✓
-    TR   (1024,216)→(512,512):  (819, 334)  right of bubble edge 736    ✓
-    BR   (1024,808)→(512,512):  (819, 689)  right of bubble edge 736    ✓
-    Bot  (512,1024)→(512,512):  (512, 819)  below tail tip 726          ✓
-    BL   (0,  808)→(512,512):   (205, 689)  left of bubble edge 288     ✓
-    TL   (0,  216)→(512,512):   (205, 334)  left of bubble edge 288     ✓
+    Data particles — t=0.30 from each canvas-edge endpoint, outside new bubble.
+    Top  (512,  154)  TR  (870, 305)  BR  (870, 719)
+    Bot  (512,  870)  BL  (154, 719)  TL  (154, 305)
   -->
-  <circle cx="512" cy="205" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="819" cy="334" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="819" cy="689" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="819" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="205" cy="689" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="205" cy="334" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="154" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="870" cy="305" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="870" cy="719" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="870" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="154" cy="719" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="154" cy="305" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
