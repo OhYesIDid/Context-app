@@ -95,26 +95,20 @@
   <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
   <!--
-    Particles: 35% and 65% from each node to center
-    Top   (512,217)→(512,512):  35%=(512,320)  65%=(512,409)
-    TR    (768,365)→(512,512):  35%=(678,417)  65%=(602,461)
-    BR    (768,660)→(512,512):  35%=(678,608)  65%=(602,563)
-    Bot   (512,807)→(512,512):  35%=(512,704)  65%=(512,615)
-    BL    (256,660)→(512,512):  35%=(346,608)  65%=(422,563)
-    TL    (256,365)→(512,512):  35%=(346,417)  65%=(422,461)
+    One particle per line, staggered at different distances (% from node toward center):
+    Top   55% → (512, 379)
+    TR    40% → (666, 424)
+    BR    70% → (589, 556)
+    Bot   30% → (512, 718)
+    BL    60% → (410, 571)
+    TL    45% → (371, 431)
   -->
-  <circle cx="512" cy="409" r="9"   fill="#22d3ee" opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="320" r="5.5" fill="#06b6d4"  opacity="0.5"/>
-  <circle cx="602" cy="461" r="9"   fill="#fbbf24"  opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="678" cy="417" r="5.5" fill="#f59e0b"  opacity="0.5"/>
-  <circle cx="602" cy="563" r="9"   fill="#fb7185"  opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="678" cy="608" r="5.5" fill="#f43f5e"  opacity="0.5"/>
-  <circle cx="512" cy="615" r="9"   fill="#93c5fd"  opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="704" r="5.5" fill="#3b82f6"  opacity="0.5"/>
-  <circle cx="422" cy="563" r="9"   fill="#34d399"  opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="346" cy="608" r="5.5" fill="#10b981"  opacity="0.5"/>
-  <circle cx="422" cy="461" r="9"   fill="#c4b5fd"  opacity="0.9" filter="url(#dotGlow)"/>
-  <circle cx="346" cy="417" r="5.5" fill="#8b5cf6"  opacity="0.5"/>
+  <circle cx="512" cy="379" r="11" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="666" cy="424" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="589" cy="556" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="718" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="410" cy="571" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="371" cy="431" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
 
   <!-- ========================= NODES (glow r=150, dark r=110, fill r=88) ========================= -->
 
