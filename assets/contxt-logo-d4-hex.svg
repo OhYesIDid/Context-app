@@ -82,13 +82,13 @@
     <circle cx="512" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
     <circle cx="630" cy="505" r="41" fill="white" filter="url(#dotGlow)"/>
 
-    <!-- Data particles — r=20, t=0.30 from each canvas-edge endpoint -->
-    <circle cx="512" cy="154" r="20" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="305" r="20" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="870" cy="719" r="20" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="512" cy="870" r="20" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="719" r="20" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-    <circle cx="154" cy="305" r="20" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+    <!-- Data particles — r=30, varied positions along each line segment -->
+    <circle cx="512" cy="134" r="30" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="963" cy="251" r="30" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="908" cy="741" r="30" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="512" cy="916" r="30" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="63"  cy="772" r="30" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+    <circle cx="105" cy="277" r="30" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 
   </g>
 </svg>
