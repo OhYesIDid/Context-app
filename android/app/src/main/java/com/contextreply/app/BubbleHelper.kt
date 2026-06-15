@@ -51,7 +51,7 @@ object BubbleHelper {
 
         val contact = convKey.substringAfter(":")
         // _v6: contact initial circle → shortcut icon → main bubble dot; app logo → BubbleMetadata badge
-        val shortcutId = "cr_conv_v6_${convKey.hashCode().and(0x7FFFFFFF)}"
+        val shortcutId = "cr_conv_v5_${convKey.hashCode().and(0x7FFFFFFF)}"
         val contactIcon = contactIcon(context, contact)
         val person = Person.Builder().setName(contact).setIcon(contactIcon).build()
         try {

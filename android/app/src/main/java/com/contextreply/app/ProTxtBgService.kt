@@ -411,7 +411,7 @@ class ProTxtBgService : NotificationListenerService() {
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
             val suggestAll = Prefs.main(this)
-                .getBoolean("suggest_all_messages", false)
+                .getBoolean("suggest_all_messages", true) // TODO before release: flip default back to false
             android.util.Log.d("ProTxt", "intent=$detectedIntentsStr suggestAll=$suggestAll")
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
