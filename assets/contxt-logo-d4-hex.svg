@@ -71,13 +71,6 @@
   <!-- Background -->
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
 
-  <!-- Ambient colour clouds -->
-  <circle cx="512" cy="430" r="260" fill="#06b6d4" opacity="0.04" filter="url(#ambGlow)"/>
-  <circle cx="600" cy="540" r="240" fill="#f59e0b" opacity="0.04" filter="url(#ambGlow)"/>
-  <circle cx="580" cy="620" r="240" fill="#f43f5e" opacity="0.04" filter="url(#ambGlow)"/>
-  <circle cx="512" cy="580" r="260" fill="#3b82f6" opacity="0.04" filter="url(#ambGlow)"/>
-  <circle cx="424" cy="620" r="240" fill="#10b981" opacity="0.04" filter="url(#ambGlow)"/>
-  <circle cx="424" cy="540" r="240" fill="#8b5cf6" opacity="0.05" filter="url(#ambGlow)"/>
 
   <!-- Lines: glow pass -->
   <line x1="512" y1="217" x2="512" y2="512" stroke="url(#lnTop)" stroke-width="20" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
@@ -183,8 +176,6 @@
     Squarer proportions (1.27:1) so it reads as a bubble not a banner.
     Tail points bottom-centre downward.
   -->
-  <!-- Ambient glow (ellipse matches bubble shape, not circle) -->
-  <ellipse cx="512" cy="510" rx="145" ry="120" fill="#4338ca" opacity="0.18" filter="url(#orbHalo)"/>
   <!-- Bubble: dark fill -->
   <path d="M 417 458 Q 417 430 445 430 L 579 430 Q 607 430 607 458
            L 607 552 Q 607 580 579 580 L 579 580 L 564 618 L 549 580
