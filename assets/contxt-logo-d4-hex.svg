@@ -94,22 +94,6 @@
   <line x1="256" y1="660" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
   <line x1="256" y1="365" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
-  <!--
-    One particle per line, staggered at different distances (% from node toward center):
-    Top   55% → (512, 379)
-    TR    40% → (666, 424)
-    BR    70% → (589, 556)
-    Bot   30% → (512, 718)
-    BL    60% → (410, 571)
-    TL    45% → (371, 431)
-  -->
-  <circle cx="512" cy="379" r="11" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="666" cy="424" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="589" cy="556" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="718" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="410" cy="571" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="371" cy="431" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
-
   <!-- ========================= NODES (glow r=150, dark r=110, fill r=88) ========================= -->
 
   <!-- LOCATION — top (512,217) — cyan -->
@@ -225,4 +209,15 @@
   <circle cx="466" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
   <circle cx="512" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
   <circle cx="558" cy="505" r="17" fill="white" filter="url(#dotGlow)"/>
+
+  <!--
+    Data particles — drawn last so they appear above nodes and central bubble.
+    One per line, staggered: Top 55%, TR 40%, BR 70%, Bot 30%, BL 60%, TL 45%
+  -->
+  <circle cx="512" cy="379" r="11" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="666" cy="424" r="11" fill="#fbbf24"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="589" cy="556" r="11" fill="#fb7185"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="718" r="11" fill="#93c5fd"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="410" cy="571" r="11" fill="#34d399"  opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="371" cy="431" r="11" fill="#c4b5fd"  opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
