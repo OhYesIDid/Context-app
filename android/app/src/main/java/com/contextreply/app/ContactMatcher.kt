@@ -72,7 +72,7 @@ object ContactMatcher {
     }
 
     private fun loadCache(context: Context): JSONArray = try {
-        val prefs = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(context)
         val appCache = JSONArray(prefs.getString("contact_cache", "[]") ?: "[]")
         if (appCache.length() > 0) appCache
         else JSONArray(prefs.getString("device_contact_cache", "[]") ?: "[]")

@@ -21,7 +21,7 @@ object StyleEditQueue {
         convKey: String,
         intent: String? = null,
     ) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.styleQueue(context)
         val arr = try {
             JSONArray(prefs.getString(KEY, "[]") ?: "[]")
         } catch (_: Exception) {

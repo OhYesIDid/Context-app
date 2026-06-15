@@ -190,6 +190,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        Prefs.migrateLegacy(this)
         instance = this
         store = NotificationStore.getInstance(this)
         createChannel()
@@ -197,7 +198,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+        Prefs.main(this).edit()
             .putBoolean("nls_connected", true).apply()
         DeviceContactsResolver.populate(this)
         registerReceiver(restoreBubblesReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
@@ -223,7 +224,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+        Prefs.main(this).edit()
             .putBoolean("nls_connected", false).apply()
         try { unregisterReceiver(restoreBubblesReceiver) } catch (_: Exception) {}
         try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
@@ -398,7 +399,7 @@ class ProTxtBgService : NotificationListenerService() {
 
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
-            val suggestAll = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+            val suggestAll = Prefs.main(this)
                 .getBoolean("suggest_all_messages", false)
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
@@ -528,7 +529,7 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private fun shouldSkipGroupMessages(): Boolean =
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(this)
             .getBoolean("skip_group_messages", false)
 
     private fun extractConversationThread(extras: Bundle): List<Pair<String?, String>> {
@@ -766,7 +767,7 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private fun getEnrichmentPref(enrichment: String, key: String, default: String): String {
-        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         return try {
             JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
                 .optJSONObject(enrichment)?.optString(key)?.ifEmpty { null } ?: default
@@ -868,7 +869,7 @@ class ProTxtBgService : NotificationListenerService() {
     // Returns the preferred tone for a sender the user has already confirmed,
     // by looking up their contactId in confirmed_identities and then the tone in contact_cache.
     private fun confirmedTone(convKey: String): String? {
-        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val confirmed = try {
             JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
         } catch (_: Exception) { return null }
@@ -886,7 +887,7 @@ class ProTxtBgService : NotificationListenerService() {
     // Returns a JSON blob for a fuzzy-matched contact that hasn't been confirmed yet,
     // or null if the sender is already confirmed or no match found.
     private fun contactMatchJson(convKey: String): String? {
-        val prefs = getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val confirmed = try {
             JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
         } catch (_: Exception) { JSONObject() }
@@ -947,7 +948,7 @@ class ProTxtBgService : NotificationListenerService() {
 
         // Store all suggestion tones for AccessibilityService overlay + bubble
         val packageName = convKey.substringBefore(":")
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+        Prefs.main(this).edit()
             .putString("last_suggestion_$packageName", replyText)
             .putString("last_suggestion_formal_$packageName", formalText ?: "")
             .putString("last_suggestion_brief_$packageName", briefText ?: "")
@@ -1017,7 +1018,7 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {
-        getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE).edit()
+        Prefs.main(this).edit()
             .putString("last_suggestion_$packageName", casual)
             .putString("last_suggestion_formal_$packageName", formal ?: "")
             .putString("last_suggestion_brief_$packageName", brief ?: "")

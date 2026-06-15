@@ -18,7 +18,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
-        reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit()
             .putBoolean("skip_group_messages", skip)
             .apply()
@@ -26,15 +26,14 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getSkipGroupMessages(promise: Promise) {
-        val skip = reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val skip = Prefs.main(reactApplicationContext)
             .getBoolean("skip_group_messages", false)
         promise.resolve(skip)
     }
 
     @ReactMethod
     fun setSuggestAllMessages(all: Boolean) {
-        reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit()
             .putBoolean("suggest_all_messages", all)
             .apply()
@@ -42,8 +41,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getSuggestAllMessages(promise: Promise) {
-        val all = reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val all = Prefs.main(reactApplicationContext)
             .getBoolean("suggest_all_messages", false)
         promise.resolve(all)
     }
@@ -91,7 +89,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getEnrichmentPreference(enrichment: String, key: String, promise: Promise) {
-        val prefs = reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(reactApplicationContext)
         val value = try {
             val obj = JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
             obj.optJSONObject(enrichment)?.optString(key)?.ifEmpty { null }
@@ -101,7 +99,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setEnrichmentPreference(enrichment: String, key: String, value: String) {
-        val prefs = reactApplicationContext.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(reactApplicationContext)
         try {
             val obj = JSONObject(prefs.getString("enrichment_prefs", "{}") ?: "{}")
             val enrichmentObj = obj.optJSONObject(enrichment) ?: JSONObject()
@@ -115,8 +113,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // the raw JSON array string so JS can drain it into SQLite.
     @ReactMethod
     fun drainStyleQueue(promise: Promise) {
-        val prefs = reactApplicationContext
-            .getSharedPreferences("contextreply_style_queue", Context.MODE_PRIVATE)
+        val prefs = Prefs.styleQueue(reactApplicationContext)
         val json = prefs.getString("queue", "[]") ?: "[]"
         prefs.edit().putString("queue", "[]").apply()
         promise.resolve(json)
@@ -126,8 +123,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // Returns a JSON array of {ts, from[], to[], message} objects.
     @ReactMethod
     fun drainIntentCorrections(promise: Promise) {
-        val prefs = reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(reactApplicationContext)
         val json = prefs.getString("intent_corrections", "[]") ?: "[]"
         prefs.edit().putString("intent_corrections", "[]").apply()
         promise.resolve(json)
@@ -137,16 +133,14 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // can pre-select the right tone tab when posting a bubble for a known contact.
     @ReactMethod
     fun cacheContactTones(json: String) {
-        reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit().putString("contact_tone_map", json).apply()
     }
 
     // Returns the confirmed_identities map {convKey: contactId} without clearing it.
     @ReactMethod
     fun getConfirmedIdentities(promise: Promise) {
-        val json = reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val json = Prefs.main(reactApplicationContext)
             .getString("confirmed_identities", "{}") ?: "{}"
         promise.resolve(json)
     }
@@ -155,8 +149,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // to restore from the SQLite platform_identities source of truth.
     @ReactMethod
     fun restoreConfirmedIdentities(json: String) {
-        reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit().putString("confirmed_identities", json).apply()
     }
 
@@ -164,8 +157,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // fuzzy name matching against it from the background service.
     @ReactMethod
     fun cacheContactList(json: String) {
-        reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit().putString("contact_cache", json).apply()
     }
 
@@ -173,8 +165,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     // Kotlin worker path can include it in the next /suggest request.
     @ReactMethod
     fun cacheStyleProfile(profile: String) {
-        reactApplicationContext
-            .getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        Prefs.main(reactApplicationContext)
             .edit().putString("style_profile", profile).apply()
     }
 

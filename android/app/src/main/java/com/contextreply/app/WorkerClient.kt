@@ -23,7 +23,7 @@ object WorkerClient {
         contactMemory: String? = null,
         lastSentReply: String? = null,
     ): WorkerResult? {
-        val prefs = context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+        val prefs = Prefs.main(context)
         val styleProfile      = prefs.getString("style_profile", null)
         val nativeRecentEdits = prefs.getString("native_recent_edits", null)
         // Merge JS-built profile with edits not yet synced (written by NativeStyleSync after each send)

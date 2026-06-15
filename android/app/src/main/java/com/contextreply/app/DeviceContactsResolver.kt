@@ -14,7 +14,7 @@ object DeviceContactsResolver {
             try {
                 val arr = loadFromDevice(context)
                 if (arr.length() > 0) {
-                    context.getSharedPreferences("contextreply_prefs", Context.MODE_PRIVATE)
+                    Prefs.main(context)
                         .edit().putString("device_contact_cache", arr.toString()).apply()
                 }
             } catch (_: Exception) {}

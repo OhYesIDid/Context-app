@@ -14,9 +14,7 @@ import org.json.JSONObject
  */
 class NotificationStore private constructor(context: Context) {
 
-    private val prefs = context.getSharedPreferences(
-        "contextreply_message_cache", Context.MODE_PRIVATE
-    )
+    private val prefs = Prefs.messageCache(context)
 
     fun isEmpty(convKey: String): Boolean =
         prefs.getString(storeKey(convKey), null) == null

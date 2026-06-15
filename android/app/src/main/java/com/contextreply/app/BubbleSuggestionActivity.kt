@@ -194,7 +194,7 @@ class BubbleSuggestionActivity : Activity() {
             val selectedText = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: "" }
             val a11yEnabled = isAccessibilityEnabled()
             if (a11yEnabled && packageName.isNotEmpty() && selectedText.isNotEmpty()) {
-                getSharedPreferences("contextreply_prefs", MODE_PRIVATE).edit()
+                Prefs.main(this).edit()
                     .putString("pending_inject_$packageName", selectedText).apply()
             }
             sendBroadcast(Intent(this, ReplySendReceiver::class.java).apply {
@@ -412,7 +412,7 @@ class BubbleSuggestionActivity : Activity() {
             })
 
             fun confirmMatch() {
-                val prefs = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+                val prefs = Prefs.main(this)
                 val confirmed = try {
                     JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
                 } catch (_: Exception) { JSONObject() }
@@ -866,7 +866,7 @@ class BubbleSuggestionActivity : Activity() {
     }
 
     private fun logActionFeedback(event: String, actionType: String, convKey: String?) {
-        val prefs = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val existing = prefs.getString("action_feedback", "[]")
         val arr = try { JSONArray(existing) } catch (_: Exception) { JSONArray() }
         arr.put(JSONObject().apply {
@@ -882,7 +882,7 @@ class BubbleSuggestionActivity : Activity() {
     }
 
     private fun logCorrection(from: List<String>, to: List<String>, message: String) {
-        val prefs = getSharedPreferences("contextreply_prefs", MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val existing = prefs.getString("intent_corrections", "[]")
         val arr = try { JSONArray(existing) } catch (_: Exception) { JSONArray() }
         arr.put(JSONObject().apply {

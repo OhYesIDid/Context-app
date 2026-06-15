@@ -22,7 +22,7 @@ object NativeStyleSync {
 
     fun syncFromQueue(context: Context) {
         val arr = try {
-            val raw = context.getSharedPreferences(QUEUE_PREFS, Context.MODE_PRIVATE)
+            val raw = Prefs.styleQueue(context)
                 .getString(QUEUE_KEY, "[]") ?: "[]"
             JSONArray(raw)
         } catch (_: Exception) { return }
@@ -42,14 +42,14 @@ object NativeStyleSync {
 
         if (edits.isEmpty()) return
 
-        context.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
+        Prefs.main(context)
             .edit()
             .putString(NATIVE_KEY, edits.joinToString("\n"))
             .apply()
     }
 
     fun clear(context: Context) {
-        context.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
+        Prefs.main(context)
             .edit().remove(NATIVE_KEY).apply()
     }
 }

@@ -118,7 +118,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 activePackage = pkg
 
                 // Auto-inject suggestion when user tapped "open chat" from the bubble
-                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val prefs = Prefs.main(this)
                 val pendingText = prefs.getString("pending_inject_$pkg", null)
                 if (pendingText != null) {
                     prefs.edit().remove("pending_inject_$pkg").apply()
@@ -138,7 +138,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     // action bar of the messaging app window — i.e. the user is in the right conversation.
     // For group: / id: keys we can't verify so we allow the overlay through.
     private fun isInCorrectConversation(packageName: String): Boolean {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return false
         val contactRaw = convKey.substringAfter(":")
         if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
@@ -180,7 +180,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     private var pendingAction: org.json.JSONObject? = null
 
     private fun maybeShowOverlay(packageName: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
             ?: return
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
@@ -445,7 +445,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private fun recordOverlaySend(packageName: String, replyText: String, tone: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return
         val casual  = prefs.getString("last_suggestion_$packageName", null) ?: return
         StyleEditQueue.enqueue(this, casual, replyText, convKey, tone)
@@ -454,7 +454,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private fun recordOverlayDismiss(packageName: String, suggestion: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return
         if (suggestion.isNotEmpty()) {
             StyleEditQueue.enqueue(this, suggestion, "", convKey, "dismissed")
@@ -463,7 +463,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private fun clearSuggestionPrefs(packageName: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = Prefs.main(this)
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null)
         prefs.edit()
             .remove("last_suggestion_$packageName")
@@ -486,7 +486,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private fun cancelPendingNotification(packageName: String) {
-        val convKey = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val convKey = Prefs.main(this)
             .getString("last_suggestion_conv_$packageName", null) ?: return
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
