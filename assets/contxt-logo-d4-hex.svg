@@ -7,31 +7,31 @@
     </radialGradient>
 
     <!--
-      Regular hexagon r=413 (1.4× scale) from (512,512):
-        Top          (512,  99)
-        Top-right    (870, 306)
-        Bottom-right (870, 718)
-        Bottom       (512, 925)
-        Bottom-left  (154, 718)
-        Top-left     (154, 306)
+      Lines extended to canvas edges — hex directions hit the viewBox boundary at:
+        Top          (512,    0)
+        Top-right    (1024, 216)
+        Bottom-right (1024, 808)
+        Bottom       (512, 1024)
+        Bottom-left  (   0, 808)
+        Top-left     (   0, 216)
     -->
-    <linearGradient id="lnTop" x1="512" y1="99"  x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/><stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.9"/>
+    <linearGradient id="lnTop" x1="512" y1="0"    x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.15"/><stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnTR"  x1="870" y1="306" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/><stop offset="100%" stop-color="#fef3c7" stop-opacity="0.9"/>
+    <linearGradient id="lnTR"  x1="1024" y1="216" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.15"/><stop offset="100%" stop-color="#fef3c7" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBR"  x1="870" y1="718" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.3"/><stop offset="100%" stop-color="#ffe4e6" stop-opacity="0.9"/>
+    <linearGradient id="lnBR"  x1="1024" y1="808" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.15"/><stop offset="100%" stop-color="#ffe4e6" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBot" x1="512" y1="925" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#dbeafe" stop-opacity="0.9"/>
+    <linearGradient id="lnBot" x1="512" y1="1024" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.15"/><stop offset="100%" stop-color="#dbeafe" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnBL"  x1="154" y1="718" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/><stop offset="100%" stop-color="#d1fae5" stop-opacity="0.9"/>
+    <linearGradient id="lnBL"  x1="0"    y1="808" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.15"/><stop offset="100%" stop-color="#d1fae5" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="lnTL"  x1="154" y1="306" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"/><stop offset="100%" stop-color="#ede9fe" stop-opacity="0.9"/>
+    <linearGradient id="lnTL"  x1="0"    y1="216" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.15"/><stop offset="100%" stop-color="#ede9fe" stop-opacity="0.9"/>
     </linearGradient>
 
     <filter id="ambGlow"  x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
@@ -52,19 +52,19 @@
   <circle cx="512" cy="505" r="340" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
 
   <!-- Lines: glow pass -->
-  <line x1="512" y1="99"  x2="512" y2="512" stroke="url(#lnTop)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="870" y1="306" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="870" y1="718" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="512" y1="925" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="154" y1="718" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
-  <line x1="154" y1="306" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="512" y1="0"    x2="512" y2="512" stroke="url(#lnTop)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="1024" y1="216" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="1024" y1="808" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="512" y1="1024" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="0"    y1="808" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
+  <line x1="0"    y1="216" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="22" stroke-linecap="round" opacity="0.4" filter="url(#lineGlow)"/>
   <!-- Lines: crisp pass -->
-  <line x1="512" y1="99"  x2="512" y2="512" stroke="url(#lnTop)" stroke-width="4" stroke-linecap="round"/>
-  <line x1="870" y1="306" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="870" y1="718" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="512" y1="925" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="4" stroke-linecap="round"/>
-  <line x1="154" y1="718" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
-  <line x1="154" y1="306" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="512" y1="0"    x2="512" y2="512" stroke="url(#lnTop)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="1024" y1="216" x2="512" y2="512" stroke="url(#lnTR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="1024" y1="808" x2="512" y2="512" stroke="url(#lnBR)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="512" y1="1024" x2="512" y2="512" stroke="url(#lnBot)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="0"    y1="808" x2="512" y2="512" stroke="url(#lnBL)"  stroke-width="4" stroke-linecap="round"/>
+  <line x1="0"    y1="216" x2="512" y2="512" stroke="url(#lnTL)"  stroke-width="4" stroke-linecap="round"/>
 
   <!--
     Central typing bubble — 1.4× previous 320×240:
@@ -91,18 +91,18 @@
   <circle cx="594" cy="505" r="28" fill="white" filter="url(#dotGlow)"/>
 
   <!--
-    Data particles — in clear space between bubble edge and canvas edge.
-    Top  t=0.40 from (512, 99): cy=265   — above bubble top 337        ✓
-    TR   t=0.25 from (870,306): (781,358) — right of bubble edge 736    ✓
-    BR   t=0.25 from (870,718): (781,667) — right of bubble edge 736    ✓
-    Bot  t=0.35 from (512,925): cy=781   — below tail tip 726           ✓
-    BL   t=0.25 from (154,718): (244,667) — left of bubble edge 288     ✓
-    TL   t=0.25 from (154,306): (244,358) — left of bubble edge 288     ✓
+    Data particles — t=0.4 from canvas edge toward centre on each line.
+    Top  (512,  0)→(512,512):   (512, 205)  above bubble top 337        ✓
+    TR   (1024,216)→(512,512):  (819, 334)  right of bubble edge 736    ✓
+    BR   (1024,808)→(512,512):  (819, 689)  right of bubble edge 736    ✓
+    Bot  (512,1024)→(512,512):  (512, 819)  below tail tip 726          ✓
+    BL   (0,  808)→(512,512):   (205, 689)  left of bubble edge 288     ✓
+    TL   (0,  216)→(512,512):   (205, 334)  left of bubble edge 288     ✓
   -->
-  <circle cx="512" cy="265" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="781" cy="358" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="781" cy="667" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="512" cy="781" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="244" cy="667" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
-  <circle cx="244" cy="358" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="205" r="15" fill="#22d3ee" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="819" cy="334" r="15" fill="#fbbf24" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="819" cy="689" r="15" fill="#fb7185" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="512" cy="819" r="15" fill="#93c5fd" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="205" cy="689" r="15" fill="#34d399" opacity="0.95" filter="url(#dotGlow)"/>
+  <circle cx="205" cy="334" r="15" fill="#c4b5fd" opacity="0.95" filter="url(#dotGlow)"/>
 </svg>
