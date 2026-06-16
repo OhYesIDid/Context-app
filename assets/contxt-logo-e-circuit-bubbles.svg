@@ -11,6 +11,14 @@
     </clipPath>
 
     <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="traceGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="haze"/>
+      <feMerge><feMergeNode in="haze"/><feMergeNode in="haze"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-250%" y="-250%" width="600%" height="600%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="haze"/>
+      <feMerge><feMergeNode in="haze"/><feMergeNode in="haze"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
 
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
@@ -40,41 +48,41 @@
       <path d="M 487 535 L 487 580 L 404 580 L 404 650"/>
     </g>
     <path d="M 487 475 L 487 420 L 400 420 L 400 380 L 340 380" fill="none" stroke="#67e8f9"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     <path d="M 467 505 L 284 505" fill="none" stroke="#67e8f9"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     <path d="M 537 475 L 537 420 L 624 420 L 624 380 L 684 380" fill="none" stroke="#fbbf24"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     <path d="M 557 505 L 700 505 L 700 520 L 740 520" fill="none" stroke="#fbbf24"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     <path d="M 537 535 L 537 580 L 620 580 L 620 650" fill="none" stroke="#fb7185"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     <path d="M 487 535 L 487 580 L 404 580 L 404 650" fill="none" stroke="#34d399"
-          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
 
     <!-- Bold zigzag resistor on the left trace -->
     <g transform="translate(355,505)">
       <rect x="-30" y="-13" width="60" height="26" rx="6" fill="#241a44" stroke="#0b0716" stroke-width="6"/>
-      <path d="M -18 -7 L -10 7 L 0 -7 L 10 7 L 18 -7" fill="none" stroke="#67e8f9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M -18 -7 L -10 7 L 0 -7 L 10 7 L 18 -7" fill="none" stroke="#67e8f9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
     </g>
 
     <!-- Chunky via nodes at trace bends -->
-    <circle cx="400" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
-    <circle cx="624" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
-    <circle cx="700" cy="505" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
-    <circle cx="537" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
-    <circle cx="487" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
+    <circle cx="400" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6" filter="url(#nodeGlow)"/>
+    <circle cx="624" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6" filter="url(#nodeGlow)"/>
+    <circle cx="700" cy="505" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6" filter="url(#nodeGlow)"/>
+    <circle cx="537" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6" filter="url(#nodeGlow)"/>
+    <circle cx="487" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6" filter="url(#nodeGlow)"/>
 
     <!-- Bold round endpoint nodes -->
-    <circle cx="340" cy="380" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8"/>
-    <circle cx="284" cy="505" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8"/>
-    <circle cx="684" cy="380" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8"/>
-    <circle cx="740" cy="520" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8"/>
-    <circle cx="620" cy="650" r="28" fill="#fb7185" stroke="#0b0716" stroke-width="8"/>
-    <circle cx="404" cy="650" r="28" fill="#34d399" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="340" cy="380" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
+    <circle cx="284" cy="505" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
+    <circle cx="684" cy="380" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
+    <circle cx="740" cy="520" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
+    <circle cx="620" cy="650" r="28" fill="#fb7185" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
+    <circle cx="404" cy="650" r="28" fill="#34d399" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
 
     <!-- Central chip, bold flat colour with thick outline and stubby pins -->
-    <rect x="467" y="475" width="90" height="60" rx="14" fill="#a78bfa" stroke="#0b0716" stroke-width="8"/>
+    <rect x="467" y="475" width="90" height="60" rx="14" fill="#a78bfa" stroke="#0b0716" stroke-width="8" filter="url(#nodeGlow)"/>
     <rect x="479" y="463" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
     <rect x="531" y="463" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
     <rect x="479" y="547" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
