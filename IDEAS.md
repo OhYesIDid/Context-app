@@ -13,6 +13,15 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ---
 
+## Known Issues
+
+- **Same-name contact collision in conversation key** — `buildConversationKey()` (`ProTxtBgService.kt`) keys conversations by notification title (the display name shown by the messaging app). Two different contacts with the same name (e.g. two "John"s) will collide on the same `convKey`, causing their message buffers, bubble, and thread history to be shared. Rare but real. Tried fixing 2026-06-16 by keying on `sbn.id` instead, but that broke far worse — `sbn.id` was found to be reused across unrelated active conversations on the test device, causing frequent cross-conversation contamination. Reverted; title-based key stays until a verified-reliable per-conversation ID is found.
+- **`sbn.id` fallback collision (narrower version of the above)** — in the same function, if a notification has no `conversationTitle` and no `title` (or a group with no `conversationTitle`), the key falls back to `"id:${sbn.id}"` / `"group:${sbn.id}"`. Same collision risk as above, just rarer since most WhatsApp/Telegram notifications carry a title. Pre-existing, not introduced by the 2026-06-16 revert.
+- **No certificate pinning on outbound API calls** — `src/services/claude.ts`, `googleMaps.ts`, `googleCalendar.ts` all use plain `fetch` with no pinning. A MITM with a trusted root CA on the device could intercept traffic. (Critical, ~4h fix — see security audit)
+- **SQLite database unencrypted** — `src/services/database.ts` stores contacts, conversations, lat/lng, and writing style in cleartext on disk. Fix: SQLCipher or expo-sqlite encryption with a Keystore-backed key. (Medium, ~4h fix — see security audit)
+
+---
+
 ## Design
 
 - Logo direction: **Thread Bars** and **Reply Arc** are the most distinctive — explore further
@@ -44,6 +53,9 @@ Show the reply text inside the notification itself — not just the bubble. User
 
 ### Regenerate action on the bubble
 Add a `🔄 Try again` notification action button alongside Send / Dismiss. Currently a bad suggestion means the user has to ignore it. A retry fires a new worker call without opening the app.
+
+### Show all buffered messages in the bubble
+During a burst (debounce window), `arrivalBuffer` collects every message that arrived before the worker call fires, but the bubble only displays/replies to the latest one. Surface the full buffered list in the bubble UI so the user can see exactly which messages the suggested reply is responding to, instead of just the last line.
 
 ### Quick-reply templates
 One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.

@@ -528,9 +528,11 @@ class ProTxtBgService : NotificationListenerService() {
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
-        // For group chats without an explicit conversation title (e.g. Telegram groups use
-        // sender name as EXTRA_TITLE rather than group name), fall back to the notification
-        // ID which is stable per-conversation in WhatsApp, Telegram, and Messenger.
+        // Reverted 2026-06-16: tried keying on sbn.id instead of title to avoid the
+        // same-name-contact collision, but on this device WhatsApp reuses small sbn.id
+        // values (e.g. 11, then group:1) across unrelated conversations, which cross-
+        // contaminated the message buffer/thread store between them. Title-based key is
+        // back; the same-name collision is a rarer, lower-impact issue than that.
         val key = when {
             conversationTitle != null -> conversationTitle
             isGroup -> "group:${sbn.id}"
