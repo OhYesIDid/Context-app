@@ -474,6 +474,12 @@ class ProTxtBgService : NotificationListenerService() {
         val fullThread = store.getThread(convKey)
         val contactMemory = ContactMemory.getMemory(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
+        // Tracks whether THIS job has finished — distinct from activeBubbles, which stays
+        // true for any live, un-actioned bubble (including a successful suggestion the user
+        // just hasn't tapped yet). The watchdog must not mistake "still live" for "still
+        // running", or it'll overwrite an already-successful suggestion with the error state
+        // once its deadline passes, however long after the job actually completed.
+        val jobDone = java.util.concurrent.atomic.AtomicBoolean(false)
         workerPool.submit {
             try {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
@@ -544,14 +550,18 @@ class ProTxtBgService : NotificationListenerService() {
                 if (activeBubbles.contains(convKey)) {
                     postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
                 }
+            } finally {
+                jobDone.set(true)
             }
         }
-        // Watchdog: if nothing has cleared activeBubbles by the deadline, the worker
-        // task is stuck on a blocking call somewhere (e.g. GoogleAuthUtil.getToken()
-        // has no timeout of its own). Show the error state instead of leaving the
-        // loading placeholder stuck forever.
+        // Watchdog: if the job hasn't finished by the deadline, it's stuck on a blocking
+        // call somewhere (e.g. GoogleAuthUtil.getToken() has no timeout of its own). Show
+        // the error state instead of leaving the loading placeholder stuck forever. Must
+        // check jobDone, not activeBubbles — activeBubbles stays true after a successful
+        // suggestion too (until the user sends/dismisses it), so checking it here would
+        // overwrite an already-successful suggestion once this deadline passes.
         scheduler.schedule({
-            if (activeBubbles.contains(convKey)) {
+            if (!jobDone.get()) {
                 if (BuildConfig.DEBUG) android.util.Log.w("ProTxt", "worker timed out, showing error state")
                 postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
             }
