@@ -24,7 +24,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 const { ProTxtSettings } = NativeModules;
 
 import { suggestReply } from './src/services/claude';
-import { getAllContacts, updateContactPreferences } from './src/services/database';
+import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
 import { getCalendarData } from './src/services/googleCalendar';
@@ -87,6 +87,11 @@ export default function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsVisible, setContactsVisible] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
+  const [newContactVisible, setNewContactVisible] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactRelationship, setNewContactRelationship] = useState<Relationship | undefined>(undefined);
+  const [newContactTone, setNewContactTone] = useState<Tone | undefined>(undefined);
+  const [newContactSaving, setNewContactSaving] = useState(false);
   const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
@@ -461,7 +466,20 @@ export default function App() {
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Contacts</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Contacts</Text>
+                <Pressable
+                  style={styles.smallButton}
+                  onPress={() => {
+                    setNewContactName('');
+                    setNewContactRelationship(undefined);
+                    setNewContactTone(undefined);
+                    setNewContactVisible(true);
+                  }}
+                >
+                  <Text style={styles.smallButtonText}>+ New</Text>
+                </Pressable>
+              </View>
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search contacts…"
@@ -667,6 +685,90 @@ export default function App() {
             <Pressable style={styles.modalClose} onPress={() => setMapsSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* New contact modal */}
+      <Modal
+        visible={newContactVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNewContactVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setNewContactVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>New Contact</Text>
+            <Text style={styles.modalSection}>NAME</Text>
+            <TextInput
+              style={[styles.searchInput, { marginBottom: 20 }]}
+              placeholder="Display name…"
+              placeholderTextColor={MUTED}
+              value={newContactName}
+              onChangeText={setNewContactName}
+              autoCorrect={false}
+              autoCapitalize="words"
+            />
+            <Text style={styles.modalSection}>RELATIONSHIP</Text>
+            <View style={[styles.chipRow, { marginBottom: 20 }]}>
+              {(['friend', 'colleague', 'family', 'partner', 'flatmate', 'other'] as Relationship[]).map((r) => (
+                <Pressable
+                  key={r}
+                  style={[styles.chip, newContactRelationship === r && styles.chipActive]}
+                  onPress={() => setNewContactRelationship(newContactRelationship === r ? undefined : r)}
+                >
+                  <Text style={[styles.chipText, newContactRelationship === r && styles.chipTextActive]}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.modalSection}>PREFERRED TONE</Text>
+            <View style={[styles.chipRow, { marginBottom: 8 }]}>
+              {(['casual', 'formal', 'brief'] as Tone[]).map((t) => (
+                <Pressable
+                  key={t}
+                  style={[styles.chip, newContactTone === t && styles.chipActive]}
+                  onPress={() => setNewContactTone(newContactTone === t ? undefined : t)}
+                >
+                  <Text style={[styles.chipText, newContactTone === t && styles.chipTextActive]}>
+                    {TONE_LABEL[t]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <Pressable
+                style={[styles.modalClose, { flex: 1, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER }]}
+                onPress={() => setNewContactVisible(false)}
+              >
+                <Text style={[styles.modalCloseText, { color: MUTED }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalClose, { flex: 2, opacity: newContactName.trim().length === 0 || newContactSaving ? 0.5 : 1 }]}
+                disabled={newContactName.trim().length === 0 || newContactSaving}
+                onPress={async () => {
+                  const name = newContactName.trim();
+                  if (!name) return;
+                  setNewContactSaving(true);
+                  try {
+                    const created = await upsertContact({
+                      displayName: name,
+                      relationship: newContactRelationship,
+                      preferredTone: newContactTone,
+                    });
+                    setContacts((prev) => [created, ...prev]);
+                    syncStyleProfile();
+                    setNewContactVisible(false);
+                  } finally {
+                    setNewContactSaving(false);
+                  }
+                }}
+              >
+                <Text style={styles.modalCloseText}>{newContactSaving ? 'Saving…' : 'Save'}</Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
