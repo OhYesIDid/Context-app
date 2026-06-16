@@ -26,15 +26,20 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 class BubbleSuggestionActivity : Activity() {
 
     companion object {
-        @Volatile var onReplyReady: ((casual: String, formal: String?, brief: String?, action: org.json.JSONObject?) -> Unit)? = null
+        // Keyed by convKey — with up to 6 bubbles open at once, a single shared
+        // callback slot would let one bubble's registration silently clobber another's,
+        // leaving the earlier bubble stuck on its loading state forever.
+        val onReplyReady = ConcurrentHashMap<String, (casual: String, formal: String?, brief: String?, action: org.json.JSONObject?) -> Unit>()
     }
 
     private val toneKeys   = listOf("casual", "formal", "brief")
     private val toneLabels = listOf("Casual", "Formal", "Brief")
+    private var myConvKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +53,7 @@ class BubbleSuggestionActivity : Activity() {
             ?: run { finish(); return }
         val notifId         = intent.getIntExtra(ProTxtBgService.EXTRA_NOTIF_ID, -1)
         val convKey         = intent.getStringExtra(ProTxtBgService.EXTRA_CONV_KEY)
+        myConvKey           = convKey
         val intentExtra     = intent.getStringExtra(ProTxtBgService.EXTRA_INTENT)
         val messageExtra    = intent.getStringExtra(ProTxtBgService.EXTRA_MESSAGE) ?: ""
         val intentsRaw      = intent.getStringExtra(ProTxtBgService.EXTRA_INTENTS) ?: ""
@@ -756,9 +762,9 @@ class BubbleSuggestionActivity : Activity() {
         })
 
         // ── onReplyReady: invoked by BgService when worker finishes ───────────
-        onReplyReady = { casual, formal, brief, action ->
+        if (convKey != null) onReplyReady[convKey] = { casual, formal, brief, action ->
             runOnUiThread {
-                onReplyReady = null
+                onReplyReady.remove(convKey)
                 textMap["casual"] = casual
                 if (formal != null) textMap["formal"] = formal
                 if (brief  != null) textMap["brief"]  = brief
@@ -784,7 +790,7 @@ class BubbleSuggestionActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        onReplyReady = null
+        myConvKey?.let { onReplyReady.remove(it) }
     }
 
     private fun postActionFollowUp(action: JSONObject, convKey: String?, notifId: Int) {

@@ -480,7 +480,7 @@ class ProTxtBgService : NotificationListenerService() {
                     // Update the Activity if it's already open showing the loading state.
                     // The Activity nulls onReplyReady itself in its callback; we don't null
                     // it here to avoid a race where we null it before the Activity registers.
-                    BubbleSuggestionActivity.onReplyReady?.invoke(primary, formal, brief, finalAction)
+                    BubbleSuggestionActivity.onReplyReady[convKey]?.invoke(primary, formal, brief, finalAction)
                 } catch (e: Exception) {
                     android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
                     activeBubbles.remove(convKey)
