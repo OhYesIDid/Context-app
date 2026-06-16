@@ -88,6 +88,13 @@ class ProTxtBgService : NotificationListenerService() {
         // Collapses rapid-fire messages from the same thread into one API call
         private const val DEBOUNCE_MS = 2_500L
 
+        // Safety net for the worker job: WorkerClient itself times out (~30s worst case
+        // with retries), but enrichment calls (e.g. GoogleAuthUtil.getToken()) have no
+        // caller-side timeout and can block the pool thread indefinitely. Without this,
+        // a single hung call leaves the loading notification stuck forever since nothing
+        // else ever clears activeBubbles/replaces the notification for that convKey.
+        private const val WORKER_TIMEOUT_MS = 45_000L
+
         val TARGET_PACKAGES = setOf(
             "com.whatsapp",
             "com.whatsapp.w4b",
@@ -486,6 +493,16 @@ class ProTxtBgService : NotificationListenerService() {
                     activeBubbles.remove(convKey)
                 }
             }
+            // Watchdog: if nothing has cleared activeBubbles by the deadline, the worker
+            // task is stuck on a blocking call somewhere (e.g. GoogleAuthUtil.getToken()
+            // has no timeout of its own). Clear the stuck loading notification instead of
+            // leaving it on the placeholder forever.
+            scheduler.schedule({
+                if (activeBubbles.remove(convKey)) {
+                    if (BuildConfig.DEBUG) android.util.Log.w("ProTxt", "worker timed out, clearing stuck loading notification")
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                }
+            }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
 
@@ -533,10 +550,17 @@ class ProTxtBgService : NotificationListenerService() {
         // values (e.g. 11, then group:1) across unrelated conversations, which cross-
         // contaminated the message buffer/thread store between them. Title-based key is
         // back; the same-name collision is a rarer, lower-impact issue than that.
+        // title must be checked before isGroup: Instagram has been observed posting two
+        // notifications for the same sbn.id ~100ms apart with isGroup flapping true->false
+        // while conversationTitle stays null. Checking isGroup first meant the first post
+        // keyed on "group:<sbnId>" and the second on the title, splitting one conversation
+        // into two convKeys/jobs/notifIds — the stray "group:" job's bubble never gets
+        // updated/cancelled and the title-keyed one races it, leaving things stuck.
         val key = when {
             conversationTitle != null -> conversationTitle
+            title != null -> title
             isGroup -> "group:${sbn.id}"
-            else -> title ?: "id:${sbn.id}"
+            else -> "id:${sbn.id}"
         }
         if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:[hashed]  isGroup=$isGroup  sbnId=${sbn.id}")
         return "$packageName:$key"
