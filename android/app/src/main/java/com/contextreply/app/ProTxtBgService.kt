@@ -1,5 +1,6 @@
 package com.contextreply.app
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -850,6 +851,15 @@ class ProTxtBgService : NotificationListenerService() {
         return enabled.contains("$packageName/com.contextreply.app.ProTxtAccessibilityService")
     }
 
+    // Android can't render a bubble over the lock screen — a bubble-eligible notification
+    // posted while locked falls back to a normal shade entry, then gets converted into a
+    // bubble (shade entry disappears, bubble appears) once restoreBubblesReceiver fires on
+    // ACTION_USER_PRESENT. That conversion is what shows as a visible flash. Skip the post
+    // entirely while locked; pendingBubbles still gets cached below so the unlock receiver's
+    // repostPendingBubbles() does the first real, non-flashing post once the device is unlocked.
+    private fun isDeviceLocked(): Boolean =
+        (getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
+
     private fun postLoadingNotification(
         notifId: Int,
         convKey: String,
@@ -895,7 +905,7 @@ class ProTxtBgService : NotificationListenerService() {
             preferredToneForContact(convKey),
             contactMatchJson = contactMatchJson(convKey),
         )
-        nm.notify(notifId, builder.build())
+        if (!isDeviceLocked()) nm.notify(notifId, builder.build())
         // Store so the bubble can be re-promoted after screen unlock or call end.
         // postSuggestionNotification will overwrite this entry when the reply is ready.
         pendingBubbles[convKey] = PendingBubble(
@@ -1051,7 +1061,7 @@ class ProTxtBgService : NotificationListenerService() {
 
         BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString(), contactMatchJson = contactMatchJson(convKey), suggestionTs = System.currentTimeMillis())
 
-        nm.notify(notifId, builder.build())
+        if (!isDeviceLocked()) nm.notify(notifId, builder.build())
 
         pendingBubbles[convKey] = PendingBubble(
             replyText, formalText, briefText, replyPendingIntent, remoteInputKey,
