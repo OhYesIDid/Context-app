@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#130828"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <clipPath id="iconClip">
+      <rect width="1024" height="1024" rx="232"/>
+    </clipPath>
+
+    <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+
+    <filter id="arrowGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="halo"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="body"/>
+      <feMerge>
+        <feMergeNode in="halo"/>
+        <feMergeNode in="halo"/>
+        <feMergeNode in="body"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="nodeGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="halo"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="body"/>
+      <feMerge>
+        <feMergeNode in="halo"/>
+        <feMergeNode in="halo"/>
+        <feMergeNode in="body"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <g clip-path="url(#iconClip)">
+
+    <!-- Ambient centre glow -->
+    <circle cx="512" cy="512" r="350" fill="#6d28d9" opacity="0.14" filter="url(#ambGlow)"/>
+
+    <!-- C: thick open arc, center (432,512), radius=165, gap on right side ±45° -->
+    <!-- Arc from (549,395) around the left and down to (549,629), leaving the right side open -->
+    <path d="M 549 395 A 165 165 0 1 0 549 629"
+          fill="none"
+          stroke="white"
+          stroke-width="85"
+          stroke-linecap="round"/>
+
+    <!-- T vertical stem: x=697, y=390 to y=640 -->
+    <line x1="697" y1="390" x2="697" y2="640"
+          stroke="white"
+          stroke-width="85"
+          stroke-linecap="round"/>
+
+    <!-- Arrow glow layer (soft cyan glow behind arrow) -->
+    <polygon points="610,408 610,488 762,488 762,506 845,448 762,390 762,408"
+             fill="#67e8f9"
+             opacity="0.35"
+             filter="url(#nodeGlow)"/>
+
+    <!-- Arrow (T crossbar) — filled polygon in cyan -->
+    <!-- Shaft rect x=610-762, y=408-488 plus arrowhead tip at (845,448) -->
+    <polygon points="610,408 610,488 762,488 762,506 845,448 762,390 762,408"
+             fill="#67e8f9"
+             filter="url(#arrowGlow)"/>
+
+  </g>
+</svg>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#130828"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <clipPath id="iconClip">
+      <rect width="1024" height="1024" rx="232"/>
+    </clipPath>
+
+    <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+
+    <filter id="nodeGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="dotGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="traceGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <g clip-path="url(#iconClip)">
+
+    <!-- Ambient centre glow -->
+    <circle cx="512" cy="430" r="280" fill="#6d28d9" opacity="0.18" filter="url(#ambGlow)"/>
+
+    <!-- ===== SPEECH BUBBLE ===== -->
+
+    <!-- Bubble body: dark fill -->
+    <rect x="145" y="155" width="734" height="380" rx="100"
+          fill="#170f30"/>
+
+    <!-- Bubble tail: blends with bubble interior, then outlined in white -->
+    <!-- Fill pass (dark, matches bubble interior) -->
+    <polygon points="440,535 478,730 516,535"
+             fill="#170f30"/>
+    <!-- White outline on tail edges only -->
+    <polyline points="440,535 478,730 516,535"
+              fill="none"
+              stroke="white"
+              stroke-width="22"
+              stroke-linejoin="round"
+              stroke-linecap="round"/>
+
+    <!-- White outline on bubble (drawn after tail so outline sits on top) -->
+    <rect x="145" y="155" width="734" height="380" rx="100"
+          fill="none"
+          stroke="white"
+          stroke-width="22"
+          stroke-linejoin="round"/>
+
+    <!-- Typing dots inside bubble -->
+    <circle cx="370" cy="345" r="32" fill="white" filter="url(#dotGlow)"/>
+    <circle cx="512" cy="345" r="32" fill="white" filter="url(#dotGlow)"/>
+    <circle cx="654" cy="345" r="32" fill="white" filter="url(#dotGlow)"/>
+
+    <!-- ===== NEURAL NETWORK (below bubble, radiating from tail tip) ===== -->
+
+    <!-- Second-order connections between outer nodes (drawn first, behind primaries) -->
+    <line x1="280" y1="848" x2="400" y2="900"
+          stroke="#67e8f9" stroke-width="4" opacity="0.5"
+          filter="url(#traceGlow)"/>
+    <line x1="676" y1="848" x2="556" y2="900"
+          stroke="#fbbf24" stroke-width="4" opacity="0.5"
+          filter="url(#traceGlow)"/>
+    <line x1="256" y1="742" x2="280" y2="848"
+          stroke="#c4b5fd" stroke-width="4" opacity="0.5"
+          filter="url(#traceGlow)"/>
+    <line x1="700" y1="742" x2="676" y2="848"
+          stroke="#fb7185" stroke-width="4" opacity="0.5"
+          filter="url(#traceGlow)"/>
+
+    <!-- Primary connections from hub (478,730) to outer nodes -->
+    <line x1="478" y1="730" x2="280" y2="848"
+          stroke="#67e8f9" stroke-width="6"
+          filter="url(#traceGlow)"/>
+    <line x1="478" y1="730" x2="400" y2="900"
+          stroke="#34d399" stroke-width="6"
+          filter="url(#traceGlow)"/>
+    <line x1="478" y1="730" x2="556" y2="900"
+          stroke="#22d3ee" stroke-width="6"
+          filter="url(#traceGlow)"/>
+    <line x1="478" y1="730" x2="676" y2="848"
+          stroke="#fbbf24" stroke-width="6"
+          filter="url(#traceGlow)"/>
+    <line x1="478" y1="730" x2="700" y2="742"
+          stroke="#fb7185" stroke-width="6"
+          filter="url(#traceGlow)"/>
+    <line x1="478" y1="730" x2="256" y2="742"
+          stroke="#c4b5fd" stroke-width="6"
+          filter="url(#traceGlow)"/>
+
+    <!-- Hub node -->
+    <circle cx="478" cy="730" r="22" fill="#a78bfa" filter="url(#nodeGlow)"/>
+
+    <!-- Outer nodes -->
+    <circle cx="280" cy="848" r="18" fill="#67e8f9" filter="url(#nodeGlow)"/>
+    <circle cx="400" cy="900" r="14" fill="#34d399" filter="url(#nodeGlow)"/>
+    <circle cx="556" cy="900" r="14" fill="#22d3ee" filter="url(#nodeGlow)"/>
+    <circle cx="676" cy="848" r="18" fill="#fbbf24" filter="url(#nodeGlow)"/>
+    <circle cx="700" cy="742" r="14" fill="#fb7185" filter="url(#nodeGlow)"/>
+    <circle cx="256" cy="742" r="14" fill="#c4b5fd" filter="url(#nodeGlow)"/>
+
+  </g>
+</svg>
