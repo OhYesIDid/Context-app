@@ -10,20 +10,7 @@
       <rect width="1024" height="1024" rx="232"/>
     </clipPath>
 
-    <linearGradient id="copper" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e7c789"/>
-      <stop offset="100%" stop-color="#a9783f"/>
-    </linearGradient>
-    <linearGradient id="chipBody" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1e1638"/>
-      <stop offset="100%" stop-color="#0b0716"/>
-    </linearGradient>
-
     <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
-    <filter id="softGlow" x="-200%" y="-200%" width="500%" height="500%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
@@ -33,7 +20,7 @@
     <!-- Ambient centre glow -->
     <circle cx="512" cy="505" r="320" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
 
-    <!-- Single speech bubble, dark PCB-substrate fill so circuitry reads clearly inside it -->
+    <!-- Single speech bubble, dark fill so circuitry pops inside it -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
              L 274 747 Q 189 747 189 662 Z"
@@ -43,57 +30,55 @@
              L 274 747 Q 189 747 189 662 Z"
           fill="none" stroke="white" stroke-width="24" stroke-opacity="0.85" stroke-linejoin="round"/>
 
-    <!-- Faint silkscreen grid hinting at a PCB substrate -->
-    <g stroke="#3a2d63" stroke-width="1.5" opacity="0.35">
-      <line x1="260" y1="330" x2="260" y2="690"/>
-      <line x1="370" y1="310" x2="370" y2="710"/>
-      <line x1="650" y1="310" x2="650" y2="710"/>
-      <line x1="760" y1="330" x2="760" y2="690"/>
-      <line x1="230" y1="420" x2="800" y2="420"/>
-      <line x1="230" y1="600" x2="800" y2="600"/>
+    <!-- Cartoon circuit traces: bold dark outline pass underneath, flat bright colour on top -->
+    <g fill="none" stroke="#0b0716" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 487 475 L 487 420 L 400 420 L 400 380 L 340 380"/>
+      <path d="M 467 505 L 284 505"/>
+      <path d="M 537 475 L 537 420 L 624 420 L 624 380 L 684 380"/>
+      <path d="M 557 505 L 700 505 L 700 520 L 740 520"/>
+      <path d="M 537 535 L 537 580 L 620 580 L 620 650"/>
+      <path d="M 487 535 L 487 580 L 404 580 L 404 650"/>
     </g>
+    <path d="M 487 475 L 487 420 L 400 420 L 400 380 L 340 380" fill="none" stroke="#67e8f9"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 467 505 L 284 505" fill="none" stroke="#67e8f9"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 537 475 L 537 420 L 624 420 L 624 380 L 684 380" fill="none" stroke="#fbbf24"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 557 505 L 700 505 L 700 520 L 740 520" fill="none" stroke="#fbbf24"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 537 535 L 537 580 L 620 580 L 620 650" fill="none" stroke="#fb7185"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 487 535 L 487 580 L 404 580 L 404 650" fill="none" stroke="#34d399"
+          stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- Copper traces routed with multiple right-angle bends, varied gauge like real signal/power runs -->
-    <path d="M 487 475 L 487 420 L 400 420 L 400 380 L 340 380" fill="none" stroke="url(#copper)"
-          stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
-    <path d="M 467 505 L 284 505" fill="none" stroke="url(#copper)"
-          stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"/>
-    <path d="M 537 475 L 537 420 L 624 420 L 624 380 L 684 380" fill="none" stroke="url(#copper)"
-          stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
-    <path d="M 557 505 L 700 505 L 700 520 L 740 520" fill="none" stroke="url(#copper)"
-          stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"/>
-    <path d="M 537 535 L 537 580 L 620 580 L 620 650" fill="none" stroke="url(#copper)"
-          stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
-    <path d="M 487 535 L 487 580 L 404 580 L 404 650" fill="none" stroke="url(#copper)"
-          stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
-
-    <!-- Resistor symbol inline on the left power trace -->
+    <!-- Bold zigzag resistor on the left trace -->
     <g transform="translate(355,505)">
-      <rect x="-26" y="-9" width="52" height="18" rx="3" fill="#241a44" stroke="url(#copper)" stroke-width="3"/>
-      <path d="M -16 -5 L -10 5 L -2 -5 L 6 5 L 14 -5" fill="none" stroke="#e7c789" stroke-width="2.5"/>
+      <rect x="-30" y="-13" width="60" height="26" rx="6" fill="#241a44" stroke="#0b0716" stroke-width="6"/>
+      <path d="M -18 -7 L -10 7 L 0 -7 L 10 7 L 18 -7" fill="none" stroke="#67e8f9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
 
-    <!-- Plated through-hole vias at trace bends -->
-    <circle cx="400" cy="420" r="9" fill="url(#copper)"/><circle cx="400" cy="420" r="4" fill="#170f30"/>
-    <circle cx="624" cy="420" r="9" fill="url(#copper)"/><circle cx="624" cy="420" r="4" fill="#170f30"/>
-    <circle cx="700" cy="505" r="9" fill="url(#copper)"/><circle cx="700" cy="505" r="4" fill="#170f30"/>
-    <circle cx="537" cy="580" r="9" fill="url(#copper)"/><circle cx="537" cy="580" r="4" fill="#170f30"/>
-    <circle cx="487" cy="580" r="9" fill="url(#copper)"/><circle cx="487" cy="580" r="4" fill="#170f30"/>
+    <!-- Chunky via nodes at trace bends -->
+    <circle cx="400" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
+    <circle cx="624" cy="420" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
+    <circle cx="700" cy="505" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
+    <circle cx="537" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
+    <circle cx="487" cy="580" r="15" fill="#c4b5fd" stroke="#0b0716" stroke-width="6"/>
 
-    <!-- SMD solder pads at the six terminating components -->
-    <g stroke="#0b0716" stroke-width="2.5">
-      <rect x="320" y="368" width="40" height="24" rx="4" fill="#67e8f9"/>
-      <rect x="264" y="493" width="40" height="24" rx="4" fill="#67e8f9"/>
-      <rect x="664" y="368" width="40" height="24" rx="4" fill="#fbbf24"/>
-      <rect x="720" y="508" width="40" height="24" rx="4" fill="#fbbf24"/>
-      <rect x="600" y="638" width="40" height="24" rx="4" fill="#fb7185"/>
-      <rect x="384" y="638" width="40" height="24" rx="4" fill="#34d399"/>
-    </g>
+    <!-- Bold round endpoint nodes -->
+    <circle cx="340" cy="380" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="284" cy="505" r="28" fill="#67e8f9" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="684" cy="380" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="740" cy="520" r="28" fill="#fbbf24" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="620" cy="650" r="28" fill="#fb7185" stroke="#0b0716" stroke-width="8"/>
+    <circle cx="404" cy="650" r="28" fill="#34d399" stroke="#0b0716" stroke-width="8"/>
 
-    <!-- Central IC chip with six labelled pins -->
-    <rect x="467" y="475" width="90" height="60" rx="6" fill="url(#chipBody)" stroke="#c9b8f0" stroke-width="3"/>
-    <circle cx="481" cy="489" r="3.5" fill="#c9b8f0"/>
-    <line x1="492" y1="505" x2="532" y2="505" stroke="#3a2d63" stroke-width="2"/>
+    <!-- Central chip, bold flat colour with thick outline and stubby pins -->
+    <rect x="467" y="475" width="90" height="60" rx="14" fill="#a78bfa" stroke="#0b0716" stroke-width="8"/>
+    <rect x="479" y="463" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
+    <rect x="531" y="463" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
+    <rect x="479" y="547" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
+    <rect x="531" y="547" width="14" height="14" rx="4" fill="#a78bfa" stroke="#0b0716" stroke-width="6"/>
 
   </g>
 </svg>
