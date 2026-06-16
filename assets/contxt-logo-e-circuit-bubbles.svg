@@ -11,6 +11,14 @@
     </clipPath>
 
     <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="extTraceGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="extNodeGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
     <filter id="traceGlow" x="-100%" y="-100%" width="300%" height="300%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="halo"/>
       <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="body"/>
@@ -30,6 +38,34 @@
     <!-- Ambient centre glow -->
     <circle cx="512" cy="505" r="320" fill="#6d28d9" opacity="0.16" filter="url(#ambGlow)"/>
 
+    <!-- External circuit traces routing from icon edges to the bubble border -->
+    <g fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#extTraceGlow)">
+      <!-- TOP: 3 traces arriving at bubble top edge (y=263) -->
+      <path d="M 340 0 L 340 200 L 440 200 L 440 263" stroke="#67e8f9"/>
+      <path d="M 512 0 L 512 263"                     stroke="#a78bfa"/>
+      <path d="M 670 0 L 670 200 L 590 200 L 590 263" stroke="#fbbf24"/>
+      <!-- LEFT: 2 traces arriving at bubble left edge (x=189) -->
+      <path d="M 0 420 L 110 420 L 110 480 L 189 480" stroke="#34d399"/>
+      <path d="M 0 580 L 189 580"                     stroke="#fb7185"/>
+      <!-- RIGHT: 2 traces arriving at bubble right edge (x=835) -->
+      <path d="M 1024 400 L 920 400 L 920 460 L 835 460" stroke="#67e8f9"/>
+      <path d="M 1024 600 L 835 600"                     stroke="#fbbf24"/>
+      <!-- BOTTOM-LEFT: trace arriving at bubble bottom (y=747, left of tail) -->
+      <path d="M 290 1024 L 290 840 L 340 840 L 340 747" stroke="#34d399"/>
+      <!-- BOTTOM-RIGHT: trace arriving at bubble bottom (y=747, right of tail) -->
+      <path d="M 730 1024 L 730 840 L 700 840 L 700 747" stroke="#fb7185"/>
+    </g>
+
+    <!-- Via nodes at external trace bends -->
+    <g filter="url(#extNodeGlow)">
+      <circle cx="340" cy="200" r="8" fill="#67e8f9"/><circle cx="440" cy="200" r="8" fill="#67e8f9"/>
+      <circle cx="670" cy="200" r="8" fill="#fbbf24"/><circle cx="590" cy="200" r="8" fill="#fbbf24"/>
+      <circle cx="110" cy="420" r="8" fill="#34d399"/><circle cx="110" cy="480" r="8" fill="#34d399"/>
+      <circle cx="920" cy="400" r="8" fill="#67e8f9"/><circle cx="920" cy="460" r="8" fill="#67e8f9"/>
+      <circle cx="290" cy="840" r="8" fill="#34d399"/><circle cx="340" cy="840" r="8" fill="#34d399"/>
+      <circle cx="730" cy="840" r="8" fill="#fb7185"/><circle cx="700" cy="840" r="8" fill="#fb7185"/>
+    </g>
+
     <!-- Single speech bubble, dark fill so circuitry pops inside it -->
     <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
@@ -39,6 +75,19 @@
              L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
              L 274 747 Q 189 747 189 662 Z"
           fill="none" stroke="white" stroke-width="24" stroke-opacity="0.85" stroke-linejoin="round"/>
+
+    <!-- Colored connection pads where external traces meet the bubble border -->
+    <g filter="url(#extNodeGlow)">
+      <circle cx="440" cy="263" r="14" fill="#67e8f9"/>
+      <circle cx="512" cy="263" r="14" fill="#a78bfa"/>
+      <circle cx="590" cy="263" r="14" fill="#fbbf24"/>
+      <circle cx="189" cy="480" r="14" fill="#34d399"/>
+      <circle cx="189" cy="580" r="14" fill="#fb7185"/>
+      <circle cx="835" cy="460" r="14" fill="#67e8f9"/>
+      <circle cx="835" cy="600" r="14" fill="#fbbf24"/>
+      <circle cx="340" cy="747" r="14" fill="#34d399"/>
+      <circle cx="700" cy="747" r="14" fill="#fb7185"/>
+    </g>
 
     <!-- Cartoon circuit traces: bold dark outline pass underneath, flat bright colour on top -->
     <g fill="none" stroke="#0b0716" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
