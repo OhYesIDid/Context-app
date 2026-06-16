@@ -114,6 +114,9 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - Dynamic Island — show reply status while processing
 - Home screen widget — paste a message, get a reply on the home screen
 - Apple Watch — tap to copy top suggestion to clipboard
+- Landscape orientation — make the bubble activity scrollable so long threads/replies aren't clipped when the device is rotated
+- Live-apply the group-message toggle (`skip_group_messages` in `ProTxtSettingsModule.kt`) — currently only affects the next incoming message; toggling it on/off should also dismiss/re-evaluate any group bubbles already showing in `activeBubbles`
+- Quoted message in the bubble (`messageExtra`/`quoteText` in `BubbleSuggestionActivity.kt`) is capped at 3 lines and truncates with an ellipsis — allow more quoted text and make that section scrollable or paginated for long bursts instead of clipping them
 
 ### Personalisation
 - **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")

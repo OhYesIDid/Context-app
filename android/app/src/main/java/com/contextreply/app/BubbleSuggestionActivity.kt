@@ -35,6 +35,12 @@ class BubbleSuggestionActivity : Activity() {
         // callback slot would let one bubble's registration silently clobber another's,
         // leaving the earlier bubble stuck on its loading state forever.
         val onReplyReady = ConcurrentHashMap<String, (casual: String, formal: String?, brief: String?, action: org.json.JSONObject?) -> Unit>()
+        // A bubble's expanded Activity is never recreated when the system re-shows it —
+        // there's no onNewIntent for bubbles, so a message that arrives while this
+        // Activity is already open/alive must reach it through this side channel instead.
+        // Fired when the bg service starts a new worker job for an already-open bubble's
+        // convKey, so it can flip back to a loading state and show the new message.
+        val onNewJobStarted = ConcurrentHashMap<String, (latestMessage: String) -> Unit>()
     }
 
     private val toneKeys   = listOf("casual", "formal", "brief")
@@ -409,6 +415,11 @@ class BubbleSuggestionActivity : Activity() {
         })
 
         // ── Incoming message quote ────────────────────────────────────────────
+        // Held so onNewJobStarted (below) can refresh the quoted text in place when a
+        // later message arrives for this convKey while this same Activity instance is
+        // still alive — the system never recreates it via onNewIntent, so this is the
+        // only way the quote reflects anything newer than what onCreate first saw.
+        var quoteText: TextView? = null
         if (messageExtra.isNotEmpty()) {
             root.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -431,6 +442,7 @@ class BubbleSuggestionActivity : Activity() {
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setLineSpacing(0f, 1.25f)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    quoteText = this
                 })
             })
         }
@@ -819,9 +831,12 @@ class BubbleSuggestionActivity : Activity() {
         })
 
         // ── onReplyReady: invoked by BgService when worker finishes ───────────
+        // Stays registered for the Activity's whole lifetime (removed only in onDestroy)
+        // — this same instance can receive results for several messages in a row if the
+        // user leaves the bubble open without sending/dismissing, since the system never
+        // recreates it to deliver a fresh Intent.
         if (convKey != null) onReplyReady[convKey] = { casual, formal, brief, action ->
             runOnUiThread {
-                onReplyReady.remove(convKey)
                 textMap["casual"] = casual
                 if (formal != null) textMap["formal"] = formal
                 if (brief  != null) textMap["brief"]  = brief
@@ -836,7 +851,31 @@ class BubbleSuggestionActivity : Activity() {
                 sendBtn.setTextColor(Color.WHITE)
                 (sendBtn.background as? GradientDrawable)?.setColor(PURPLE)
                 regenBtn?.isEnabled = true
-                if (action != null) showActionCTA(action)
+                if (action != null) {
+                    showActionCTA(action)
+                } else {
+                    actionContainer.visibility = View.GONE
+                    actionContainer.removeAllViews()
+                }
+            }
+        }
+
+        // ── onNewJobStarted: a later message for this convKey started a new worker
+        // call while this Activity is still open — flip back to the loading skeleton
+        // and show the new message so the bubble doesn't look stuck on stale content.
+        if (convKey != null) onNewJobStarted[convKey] = { latestMessage ->
+            runOnUiThread {
+                quoteText?.text = latestMessage
+                restartSkeletonAnimations()
+                skeletonContainer.visibility = View.VISIBLE
+                replyEdit.visibility = View.GONE
+                replyEdit.isEnabled = false
+                sendBtn.isEnabled = false
+                sendBtn.setTextColor(MUTED)
+                (sendBtn.background as? GradientDrawable)?.setColor(SURFACE2)
+                regenBtn?.isEnabled = false
+                actionContainer.visibility = View.GONE
+                actionContainer.removeAllViews()
             }
         }
 
@@ -847,7 +886,10 @@ class BubbleSuggestionActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        myConvKey?.let { onReplyReady.remove(it) }
+        myConvKey?.let {
+            onReplyReady.remove(it)
+            onNewJobStarted.remove(it)
+        }
     }
 
     private fun postActionFollowUp(action: JSONObject, convKey: String?, notifId: Int) {

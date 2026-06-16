@@ -438,6 +438,10 @@ class ProTxtBgService : NotificationListenerService() {
                 .getBoolean("suggest_all_messages", true) // TODO before release: flip default back to false
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
+            // If this convKey's bubble Activity is already open (the system never recreates
+            // it to deliver a fresh Intent for later messages), push it back into a loading
+            // state directly rather than leaving it stuck showing the previous reply.
+            BubbleSuggestionActivity.onNewJobStarted[convKey]?.invoke(latestMessage)
             // Only show loading bubble when the user is not already in the messaging app.
             // When they are in the app, the IME overlay handles the suggestion instead.
             val userInApp = ProTxtAccessibilityService.activePackage == packageName
