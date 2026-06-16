@@ -286,6 +286,44 @@ export async function getAllContacts(): Promise<Contact[]> {
   return rows.map(rowToContact);
 }
 
+export async function findContactByDisplayName(name: string): Promise<Contact | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<ContactRow>(
+    'SELECT * FROM contacts WHERE LOWER(display_name) = LOWER(?) AND deleted_at IS NULL LIMIT 1',
+    [name]
+  );
+  return row ? rowToContact(row) : null;
+}
+
+// Migrates all style_edits, platform_identities, and memories from fromId to toId,
+// sums interaction counts, then hard-deletes the orphaned from contact.
+export async function mergeContact(fromId: string, toId: string): Promise<void> {
+  if (fromId === toId) return;
+  const db = await getDatabase();
+  await db.runAsync('UPDATE style_edits SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
+  await db.runAsync('UPDATE memories SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
+  // platform_identities has a unique index on (platform, identifier) — use INSERT OR IGNORE to
+  // avoid conflicts when both contacts somehow share an identity, then delete the rest.
+  await db.runAsync(
+    `INSERT OR IGNORE INTO platform_identities
+       (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
+     SELECT id, ?, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at
+     FROM platform_identities WHERE contact_id = ?`,
+    [toId, fromId]
+  );
+  await db.runAsync('DELETE FROM platform_identities WHERE contact_id = ?', [fromId]);
+  await db.runAsync(
+    `UPDATE contacts SET
+       interaction_count = interaction_count + (
+         SELECT COALESCE(interaction_count, 0) FROM contacts WHERE id = ?
+       ),
+       updated_at = ?
+     WHERE id = ?`,
+    [fromId, new Date().toISOString(), toId]
+  );
+  await db.runAsync('DELETE FROM contacts WHERE id = ?', [fromId]);
+}
+
 export async function incrementContactInteraction(displayName: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(

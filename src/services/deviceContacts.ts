@@ -1,5 +1,5 @@
 import * as Contacts from 'expo-contacts';
-import { upsertContact, upsertPlatformIdentity } from './database';
+import { findContactByDisplayName, upsertContact, upsertPlatformIdentity } from './database';
 
 export async function importDeviceContacts(): Promise<number> {
   const { status } = await Contacts.requestPermissionsAsync();
@@ -13,7 +13,13 @@ export async function importDeviceContacts(): Promise<number> {
   for (const c of data) {
     if (!c.name) continue;
 
-    const contact = await upsertContact({ displayName: c.name });
+    const existing = await findContactByDisplayName(c.name);
+    const contact = await upsertContact({
+      id: existing?.id,
+      displayName: c.name,
+      relationship: existing?.relationship,
+      preferredTone: existing?.preferredTone,
+    });
 
     for (const entry of c.emails ?? []) {
       if (entry.email) {

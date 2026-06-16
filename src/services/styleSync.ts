@@ -1,5 +1,5 @@
 import { NativeModules } from 'react-native';
-import { getAllContacts, getConfirmedPlatformIdentities, getRecentStyleEdits, incrementContactInteraction, recordStyleEdit, upsertPlatformIdentity } from './database';
+import { findContactByDisplayName, getAllContacts, getConfirmedPlatformIdentities, getRecentStyleEdits, incrementContactInteraction, mergeContact, recordStyleEdit, upsertContact, upsertPlatformIdentity } from './database';
 import type { Intent, Platform, StyleEdit } from '../types';
 
 // Maps Android package names → Platform type used in SQLite
@@ -74,6 +74,12 @@ async function drainConfirmedIdentities(): Promise<void> {
       sqliteContactId = match?.id ?? null;
     }
     if (!sqliteContactId) continue;
+    // If an auto-created contact exists for this sender name with a different id,
+    // merge it into the confirmed contact so style history isn't split.
+    const autoCreated = await findContactByDisplayName(senderName);
+    if (autoCreated && autoCreated.id !== sqliteContactId) {
+      await mergeContact(autoCreated.id, sqliteContactId);
+    }
     await upsertPlatformIdentity({
       contactId: sqliteContactId,
       platform,
@@ -93,10 +99,17 @@ async function drainQueue(): Promise<void> {
   const contacts = await getAllContacts();
   for (const item of items) {
     if (!item.original) continue;
-    const matched = item.contact
+    const isSend = item.edit.length > 0;
+    let matched = item.contact
       ? contacts.find((c) => c.displayName.toLowerCase() === item.contact!.toLowerCase())
       : undefined;
-    const editDelta = item.edit.length > 0 ? computeEditDelta(item.original, item.edit) : undefined;
+    // Auto-create a contact on first reply so style edits link correctly going forward.
+    // Dismissals (edit="") are not enough signal to warrant creating a contact.
+    if (!matched && item.contact && isSend) {
+      matched = await upsertContact({ displayName: item.contact });
+      contacts.push(matched);
+    }
+    const editDelta = isSend ? computeEditDelta(item.original, item.edit) : undefined;
     await recordStyleEdit({
       originalSuggestion: item.original,
       userEdit: item.edit,

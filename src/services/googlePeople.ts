@@ -1,5 +1,5 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { upsertContact, upsertPlatformIdentity } from './database';
+import { findContactByDisplayName, upsertContact, upsertPlatformIdentity } from './database';
 
 export async function importGoogleContacts(): Promise<number> {
   // Request contacts scope; prompts the user if not yet granted
@@ -40,7 +40,15 @@ export async function importGoogleContacts(): Promise<number> {
       const name = person.names?.[0]?.displayName;
       if (!name) continue;
 
-      const contact = await upsertContact({ displayName: name });
+      // Reuse an existing contact with the same name (e.g. auto-created from a reply)
+      // so we preserve its UUID, interaction count, and style edit links.
+      const existing = await findContactByDisplayName(name);
+      const contact = await upsertContact({
+        id: existing?.id,
+        displayName: name,
+        relationship: existing?.relationship,
+        preferredTone: existing?.preferredTone,
+      });
 
       for (const { value } of person.emailAddresses ?? []) {
         if (value) {
