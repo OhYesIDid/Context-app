@@ -36,11 +36,11 @@
           fill="none" stroke="#38bdf8" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- LEFT: lavender — exits left side, straight -->
-    <path d="M 215 435 L 100 435"
+    <path d="M 215 455 L 100 455"
           fill="none" stroke="#c4b5fd" stroke-width="13" stroke-linecap="round"/>
 
     <!-- RIGHT: lavender — exits right side, straight -->
-    <path d="M 809 435 L 924 435"
+    <path d="M 809 455 L 924 455"
           fill="none" stroke="#c4b5fd" stroke-width="13" stroke-linecap="round"/>
 
     <!-- BOTTOM-LEFT: amber — exits bottom-left, bends left -->
@@ -53,7 +53,7 @@
 
     <!-- Speech bubble: stroke-only, gradient, matched proportions to reference -->
     <path d="M 215 325 Q 215 215 325 215 L 699 215 Q 809 215 809 325
-             L 809 545 Q 809 655 699 655 L 562 655 L 512 760 L 462 655
+             L 809 545 Q 809 655 699 655 L 537 655 L 512 720 L 487 655
              L 325 655 Q 215 655 215 545 Z"
           fill="none" stroke="url(#bubbleGrad)" stroke-width="14" stroke-linejoin="round"/>
 
