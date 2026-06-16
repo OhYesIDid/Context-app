@@ -65,6 +65,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
+            ProTxtBgService.getInstance()?.arrivalBuffer?.remove(convKey)
             ProTxtBgService.pendingBubbles.remove(convKey)
             // Stamp send time keyed by "$packageName:sbnId" — the messaging app's sbn.id
             // stays constant for a conversation even when the title changes to "You" on

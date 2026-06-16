@@ -144,7 +144,12 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
-    private val arrivalBuffer = ConcurrentHashMap<String, MutableList<String>>()
+    // Unanswered message backlog per conversation. Survives across debounce firings —
+    // only cleared when the user actually sends/dismisses or replies directly in-app
+    // (see arrivalBuffer.remove call sites). This lets a message that arrives just
+    // outside the debounce window still be shown together with an earlier message
+    // whose suggestion is still pending.
+    val arrivalBuffer = ConcurrentHashMap<String, MutableList<String>>()
     // Tracks convKeys that currently have a live bubble so we don't stack duplicates.
     // Cleared by ReplySendReceiver on send or dismiss.
     val activeBubbles = ConcurrentHashMap.newKeySet<String>()
@@ -334,6 +339,7 @@ class ProTxtBgService : NotificationListenerService() {
             val notifId = originalConvKey.hashCode().and(0x7FFFFFFF)
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
             activeBubbles.remove(originalConvKey)
+            arrivalBuffer.remove(originalConvKey)
             pendingJobs[originalConvKey]?.cancel(false)
             pendingJobs.remove(originalConvKey)
             // Clear the cached thread so the next incoming message starts a fresh context
@@ -401,10 +407,12 @@ class ProTxtBgService : NotificationListenerService() {
         pendingJobs[convKey] = scheduler.schedule({
             pendingJobs.remove(convKey)
             val fullThread = store.getThread(convKey)
-            // Drain the arrival buffer — all texts that came in during the debounce window.
-            // This is more reliable than a sender-based walk-back because it doesn't depend
-            // on apps correctly setting sender=null for outgoing MessagingStyle messages.
-            val burstTexts = arrivalBuffer.remove(convKey)
+            // Peek (don't drain) the arrival buffer — it holds every text that's arrived
+            // since the last actual send/dismiss, not just this debounce window. A message
+            // that arrives after this debounce already fired but before the user has acted
+            // on the resulting suggestion still belongs in this still-pending backlog, so
+            // it must still be here for the *next* debounce to pick up.
+            val burstTexts = arrivalBuffer[convKey]
                 ?.distinct()
                 ?.takeIf { it.isNotEmpty() }
                 ?: listOf(fullThread.lastOrNull()?.second ?: text)
@@ -536,6 +544,7 @@ class ProTxtBgService : NotificationListenerService() {
             val notifId = convKey.hashCode().and(0x7FFFFFFF)
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
             activeBubbles.remove(convKey)
+            arrivalBuffer.remove(convKey)
             pendingJobs[convKey]?.cancel(false)
             pendingJobs.remove(convKey)
         }
