@@ -57,6 +57,15 @@ class ReplySendReceiver : BroadcastReceiver() {
         val notifId = intent.getIntExtra(ProTxtBgService.EXTRA_NOTIF_ID, -1)
         val convKey = intent.getStringExtra(ProTxtBgService.EXTRA_CONV_KEY)
 
+        // Retry re-runs the worker call in place — it must bypass the shared Send/Dismiss
+        // block below, which clears arrivalBuffer/pendingBubbles/activeBubbles. Retry needs
+        // all three still intact (pendingBubbles holds the cached args, arrivalBuffer holds
+        // the message text) to re-submit the same job.
+        if (intent.action == ProTxtBgService.ACTION_RETRY) {
+            if (convKey != null) ProTxtBgService.getInstance()?.retry(convKey)
+            return
+        }
+
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (notifId != -1) nm.cancel(notifId)
 

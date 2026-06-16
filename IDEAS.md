@@ -41,6 +41,8 @@ Features already live in the codebase — kept here for context.
 - **ETA enrichment** — Google Maps live ETA injected into reply
 - **Calendar enrichment** — Google Calendar free/busy checked for availability replies
 - **Gmail bookings** — reservation lookup for travel/restaurant questions
+- **Show all buffered messages in the bubble** — `arrivalBuffer` collects every message that arrives during the debounce window; on fire, all buffered texts are deduped and joined with `\n` into both the worker context and the bubble's quote section (`ProTxtBgService.kt:357,407-411`). Capped at 3 visible lines before truncating.
+- **Error state + retry on failed reply generation** — a failed/timed-out worker call now shows a "Couldn't generate a reply" bubble with Retry/Dismiss actions instead of silently disappearing. Retry re-runs the same worker call via the cached `PendingBubble` (`ACTION_RETRY`, `ProTxtBgService.kt` `postErrorNotification`/`retry`/`runWorkerJob`). The general "regenerate any suggestion, even a good one" idea below is still unbuilt, but could now reuse this same `runWorkerJob` plumbing.
 
 ---
 
@@ -54,8 +56,13 @@ Show the reply text inside the notification itself — not just the bubble. User
 ### Regenerate action on the bubble
 Add a `🔄 Try again` notification action button alongside Send / Dismiss. Currently a bad suggestion means the user has to ignore it. A retry fires a new worker call without opening the app.
 
-### Show all buffered messages in the bubble
-During a burst (debounce window), `arrivalBuffer` collects every message that arrived before the worker call fires, but the bubble only displays/replies to the latest one. Surface the full buffered list in the bubble UI so the user can see exactly which messages the suggested reply is responding to, instead of just the last line.
+### Adaptive debounce window
+`DEBOUNCE_MS` (`ProTxtBgService.kt`) is a fixed 2.5s wait for every message before the worker call fires — collapses rapid-fire bursts into one API call/suggestion instead of one per message, but the fixed window is a guess: too short to catch slower double-texters, too long for someone who only ever sends one message at a time. Possible signals to make it adaptive instead, cheapest first:
+- **Trailing punctuation/completeness of the latest buffered message** — ends in `.`/`?`/`!` reads as finished (fire sooner); ends mid-sentence or on a single word ("wait", "so") reads as a continuation (extend the wait). No new tracking needed, just a heuristic on text already in hand.
+- **App-side batching signal** — if a single `onNotificationPosted` update's `EXTRA_MESSAGES` count jumps by more than one at once, the messaging app already coalesced a burst for us; less reason to keep waiting.
+- **Per-contact learned double-texting rate** — track a rolling average inter-message gap per contact (similar to existing style-learning profiles) and size that contact's window to their own texting pattern. More powerful, more complexity, and a cold-start period with no data per contact.
+
+Recommended starting point: the punctuation heuristic — simplest, no new storage, covers the common "finished sentence vs. trailing off" case.
 
 ### Quick-reply templates
 One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.

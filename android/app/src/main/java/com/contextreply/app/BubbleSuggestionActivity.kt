@@ -103,6 +103,63 @@ class BubbleSuggestionActivity : Activity() {
                                     0xFFf59e0bL, 0xFF10b981L, 0xFF06b6d4L, 0xFF3b82f6L)
         val avatarColor = AVATAR_PALETTE[contact.hashCode().and(0x7FFFFFFF) % AVATAR_PALETTE.size].toInt()
 
+        // ── Error state: worker failed — there's no suggestion to edit/send, so show
+        // a minimal retry prompt instead of the full reply editor below.
+        if (casualText == ProTxtBgService.ERROR_PLACEHOLDER) {
+            val root = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(BG)
+                setPadding(dp(20), dp(24), dp(20), dp(20))
+            }
+            root.addView(TextView(this).apply {
+                text = "Couldn't generate a reply"
+                setTextColor(TEXT)
+                textSize = 16f
+                setTypeface(null, Typeface.BOLD)
+            })
+            root.addView(TextView(this).apply {
+                text = "The request failed or timed out."
+                setTextColor(MUTED)
+                textSize = 13f
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.topMargin = dp(4)
+                lp.bottomMargin = dp(16)
+                layoutParams = lp
+            })
+            root.addView(TextView(this).apply {
+                text = "Retry"
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTypeface(null, Typeface.BOLD)
+                background = GradientDrawable().apply {
+                    setColor(PURPLE)
+                    cornerRadius = dp(12).toFloat()
+                }
+                setPadding(dp(16), dp(13), dp(16), dp(13))
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(8)
+                layoutParams = lp
+                setOnClickListener {
+                    sendAction(ProTxtBgService.ACTION_RETRY, null, null, notifId, convKey, null)
+                    finish()
+                }
+            })
+            root.addView(TextView(this).apply {
+                text = "Dismiss"
+                setTextColor(MUTED)
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setPadding(dp(16), dp(13), dp(16), dp(13))
+                setOnClickListener {
+                    sendAction(ProTxtBgService.ACTION_DISMISS, "", null, notifId, convKey, null)
+                    finish()
+                }
+            })
+            setContentView(root)
+            return
+        }
+
         // ── Early view declarations (referenced across closures) ───────────────
         val replyEdit = EditText(this).apply {
             setText(if (showSkeleton) "" else textMap[available[selectedIdx]])

@@ -47,6 +47,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
         const val ACTION_MARK_READ = "com.contxt.app.ACTION_MARK_READ"
+        const val ACTION_RETRY = "com.contxt.app.ACTION_RETRY_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
         const val EXTRA_REPLY_FORMAL = "reply_formal"
         const val EXTRA_REPLY_BRIEF = "reply_brief"
@@ -67,6 +68,9 @@ class ProTxtBgService : NotificationListenerService() {
         // Sentinel placed in EXTRA_REPLY_TEXT while the worker is in-flight.
         // BubbleSuggestionActivity detects this and shows a loading state.
         const val LOADING_PLACEHOLDER = "__loading__"
+        // Sentinel placed in EXTRA_REPLY_TEXT when the worker failed or timed out.
+        // BubbleSuggestionActivity detects this and shows a retry state.
+        const val ERROR_PLACEHOLDER = "__error__"
 
         // Stores suggestion args so bubbles can be re-posted after screen unlock / call end.
         data class PendingBubble(
@@ -192,6 +196,12 @@ class ProTxtBgService : NotificationListenerService() {
         for ((_, b) in pendingBubbles) {
             if (b.replyText == LOADING_PLACEHOLDER) {
                 postLoadingNotification(
+                    b.notifId, b.convKey, b.replyPendingIntent,
+                    b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
+                    b.markAsReadPendingIntent,
+                )
+            } else if (b.replyText == ERROR_PLACEHOLDER) {
+                postErrorNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
                     b.markAsReadPendingIntent,
@@ -438,84 +448,132 @@ class ProTxtBgService : NotificationListenerService() {
                     android.util.Log.e("ProTxt", "postLoadingNotification threw: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
-            val contactMemory = ContactMemory.getMemory(this, convKey)
-            val lastSent = ContactMemory.getLastSent(this, convKey)
-            workerPool.submit {
-                try {
-                    val enrichments = buildEnrichments(latestMessage)
-                    val result = WorkerClient.call(
-                        this, latestMessage, fullThread, enrichments,
-                        contactMemory = contactMemory,
-                        lastSentReply = lastSent,
-                    ) ?: run {
-                        android.util.Log.e("ProTxt", "WorkerClient.call returned null")
-                        cancelStuckBubble(convKey, notifId)
-                        return@submit
+            runWorkerJob(
+                convKey, notifId, latestMessage, detectedIntentsStr,
+                replyPendingIntent, remoteInputKey, openChatIntent,
+                markAsReadPendingIntent, packageName, userInApp,
+            )
+        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+    }
+
+    // Submits the worker call for a conversation and arms the timeout watchdog. Shared by
+    // the debounce-fire path above and retry() below, so a failed/timed-out call can be
+    // re-run without duplicating the worker-submission and result-handling logic.
+    private fun runWorkerJob(
+        convKey: String,
+        notifId: Int,
+        latestMessage: String,
+        detectedIntentsStr: String,
+        replyPendingIntent: PendingIntent,
+        remoteInputKey: String,
+        openChatIntent: PendingIntent?,
+        markAsReadPendingIntent: PendingIntent?,
+        packageName: String,
+        userInApp: Boolean,
+    ) {
+        val fullThread = store.getThread(convKey)
+        val contactMemory = ContactMemory.getMemory(this, convKey)
+        val lastSent = ContactMemory.getLastSent(this, convKey)
+        workerPool.submit {
+            try {
+                if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
+                val enrichments = buildEnrichments(latestMessage)
+                if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
+                val result = WorkerClient.call(
+                    this, latestMessage, fullThread, enrichments,
+                    contactMemory = contactMemory,
+                    lastSentReply = lastSent,
+                ) ?: run {
+                    android.util.Log.e("ProTxt", "WorkerClient.call returned null")
+                    if (activeBubbles.contains(convKey)) {
+                        postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
                     }
-                    // Persist context update for future conversations with this contact
-                    result.contextUpdate?.let { ContactMemory.saveMemory(this, convKey, it) }
-                    // User may have dismissed the loading bubble — don't post a stale result
-                    if (!activeBubbles.contains(convKey)) return@submit
-                    val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
-                    val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
-                    val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
-                    val primary = casual ?: formal ?: brief ?: run {
-                        cancelStuckBubble(convKey, notifId)
-                        return@submit
-                    }
-                    // Enrich share_location action with coordinates + area name so the
-                    // bubble/overlay can compose the full reply without geocoding at tap time.
-                    val finalAction = result.action?.also { action ->
-                        if (action.optString("type") == "share_location") {
-                            getCurrentLocation()?.let { loc ->
-                                action.put("lat", loc.latitude)
-                                action.put("lon", loc.longitude)
-                                reverseGeocode(loc.latitude, loc.longitude)
-                                    ?.let { area -> action.put("area", area) }
-                            }
+                    return@submit
+                }
+                if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "worker call returned")
+                // Persist context update for future conversations with this contact
+                result.contextUpdate?.let { ContactMemory.saveMemory(this, convKey, it) }
+                // User may have dismissed the loading bubble — don't post a stale result
+                if (!activeBubbles.contains(convKey)) return@submit
+                val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
+                val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
+                val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
+                val primary = casual ?: formal ?: brief ?: run {
+                    postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
+                    return@submit
+                }
+                // Enrich share_location action with coordinates + area name so the
+                // bubble/overlay can compose the full reply without geocoding at tap time.
+                val finalAction = result.action?.also { action ->
+                    if (action.optString("type") == "share_location") {
+                        getCurrentLocation()?.let { loc ->
+                            action.put("lat", loc.latitude)
+                            action.put("lon", loc.longitude)
+                            reverseGeocode(loc.latitude, loc.longitude)
+                                ?.let { area -> action.put("area", area) }
                         }
                     }
-                    val nowInApp = ProTxtAccessibilityService.activePackage == packageName
-                    // If we posted a loading bubble (!userInApp), we must always update it
-                    // with the real reply — even if the user entered the app while the worker
-                    // was running. Skipping postSuggestionNotification leaves the bubble
-                    // stuck on the loading placeholder and the activity blank.
-                    // If the user left the app after an in-app debounce (userInApp && !nowInApp),
-                    // post a fresh bubble so the suggestion isn't silently dropped.
-                    if (!userInApp || !nowInApp) {
-                        postSuggestionNotification(
-                            primary, formal, brief,
-                            replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                            openChatIntent, latestMessage, detectedIntentsStr,
-                            suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent
-                        )
-                    }
-                    if (nowInApp) {
-                        // Also cache for the overlay when user is currently in the app
-                        cacheSuggestion(packageName, convKey, primary, formal, brief, finalAction?.toString())
-                    }
-                    // Notify the IME overlay — shows/refreshes strip if the app is in focus
-                    ProTxtAccessibilityService.onSuggestionReady?.invoke(packageName)
-                    // Update the Activity if it's already open showing the loading state.
-                    // The Activity nulls onReplyReady itself in its callback; we don't null
-                    // it here to avoid a race where we null it before the Activity registers.
-                    BubbleSuggestionActivity.onReplyReady[convKey]?.invoke(primary, formal, brief, finalAction)
-                } catch (e: Exception) {
-                    android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
-                    cancelStuckBubble(convKey, notifId)
+                }
+                val nowInApp = ProTxtAccessibilityService.activePackage == packageName
+                // If we posted a loading bubble (!userInApp), we must always update it
+                // with the real reply — even if the user entered the app while the worker
+                // was running. Skipping postSuggestionNotification leaves the bubble
+                // stuck on the loading placeholder and the activity blank.
+                // If the user left the app after an in-app debounce (userInApp && !nowInApp),
+                // post a fresh bubble so the suggestion isn't silently dropped.
+                if (!userInApp || !nowInApp) {
+                    postSuggestionNotification(
+                        primary, formal, brief,
+                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
+                        openChatIntent, latestMessage, detectedIntentsStr,
+                        suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent
+                    )
+                }
+                if (nowInApp) {
+                    // Also cache for the overlay when user is currently in the app
+                    cacheSuggestion(packageName, convKey, primary, formal, brief, finalAction?.toString())
+                }
+                // Notify the IME overlay — shows/refreshes strip if the app is in focus
+                ProTxtAccessibilityService.onSuggestionReady?.invoke(packageName)
+                // Update the Activity if it's already open showing the loading state.
+                // The Activity nulls onReplyReady itself in its callback; we don't null
+                // it here to avoid a race where we null it before the Activity registers.
+                BubbleSuggestionActivity.onReplyReady[convKey]?.invoke(primary, formal, brief, finalAction)
+            } catch (e: Exception) {
+                android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
+                if (activeBubbles.contains(convKey)) {
+                    postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
                 }
             }
-            // Watchdog: if nothing has cleared activeBubbles by the deadline, the worker
-            // task is stuck on a blocking call somewhere (e.g. GoogleAuthUtil.getToken()
-            // has no timeout of its own). Clear the stuck loading notification instead of
-            // leaving it on the placeholder forever.
-            scheduler.schedule({
-                if (activeBubbles.contains(convKey)) {
-                    if (BuildConfig.DEBUG) android.util.Log.w("ProTxt", "worker timed out, clearing stuck loading notification")
-                    cancelStuckBubble(convKey, notifId)
-                }
-            }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+        }
+        // Watchdog: if nothing has cleared activeBubbles by the deadline, the worker
+        // task is stuck on a blocking call somewhere (e.g. GoogleAuthUtil.getToken()
+        // has no timeout of its own). Show the error state instead of leaving the
+        // loading placeholder stuck forever.
+        scheduler.schedule({
+            if (activeBubbles.contains(convKey)) {
+                if (BuildConfig.DEBUG) android.util.Log.w("ProTxt", "worker timed out, showing error state")
+                postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
+            }
+        }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    }
+
+    // Re-runs the worker call for a conversation currently showing the error state.
+    // Reuses the PendingBubble cached by postErrorNotification — it carries everything
+    // runWorkerJob needs (replyPendingIntent, remoteInputKey, etc.) without requiring
+    // a second parallel cache.
+    fun retry(convKey: String) {
+        val cached = pendingBubbles[convKey] ?: return
+        val packageName = convKey.substringBefore(":")
+        postLoadingNotification(
+            cached.notifId, convKey, cached.replyPendingIntent, cached.remoteInputKey,
+            cached.openChatIntent, cached.message, cached.detectedIntents, cached.markAsReadPendingIntent,
+        )
+        runWorkerJob(
+            convKey, cached.notifId, cached.message, cached.detectedIntents,
+            cached.replyPendingIntent, cached.remoteInputKey, cached.openChatIntent,
+            cached.markAsReadPendingIntent, packageName, userInApp = false,
+        )
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
@@ -863,16 +921,6 @@ class ProTxtBgService : NotificationListenerService() {
         return enabled.contains("$packageName/com.contextreply.app.ProTxtAccessibilityService")
     }
 
-    // Worker call failed, timed out, or produced no usable reply — drop the loading
-    // placeholder instead of leaving it stuck. Clearing pendingBubbles too matters here:
-    // otherwise the unlock/send/call-end repost mechanisms would resurrect this same
-    // dead placeholder later, since they have no way to know the worker job never finished.
-    private fun cancelStuckBubble(convKey: String, notifId: Int) {
-        activeBubbles.remove(convKey)
-        pendingBubbles.remove(convKey)
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-    }
-
     // Android can't render a bubble over the lock screen — a bubble-eligible notification
     // posted while locked falls back to a normal shade entry, then gets converted into a
     // bubble (shade entry disappears, bubble appears) once restoreBubblesReceiver fires on
@@ -932,6 +980,75 @@ class ProTxtBgService : NotificationListenerService() {
         // postSuggestionNotification will overwrite this entry when the reply is ready.
         pendingBubbles[convKey] = PendingBubble(
             LOADING_PLACEHOLDER, null, null, replyPendingIntent, remoteInputKey,
+            notifId, convKey, null, openChatIntent, message, detectedIntents, null,
+            markAsReadPendingIntent,
+        )
+    }
+
+    // Worker call failed, timed out, or produced no usable reply — show a visible
+    // error state with a Retry action instead of silently dropping the loading bubble.
+    // Keeps a PendingBubble cached (unlike the silent-cancel it replaces) so retry()
+    // and the unlock/send/call-end repost mechanisms have everything needed to either
+    // re-run the worker call or re-show this same error state.
+    private fun postErrorNotification(
+        notifId: Int,
+        convKey: String,
+        replyPendingIntent: PendingIntent,
+        remoteInputKey: String,
+        openChatIntent: PendingIntent?,
+        message: String,
+        detectedIntents: String,
+        markAsReadPendingIntent: PendingIntent? = null,
+    ) {
+        ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
+        if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
+            action = ACTION_DISMISS
+            putExtra(EXTRA_NOTIF_ID, notifId)
+            putExtra(EXTRA_CONV_KEY, convKey)
+            putExtra(EXTRA_REPLY_TEXT, "")
+        }
+        val dismissPi = PendingIntent.getBroadcast(
+            this, notifId + 1, dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val retryIntent = Intent(this, ReplySendReceiver::class.java).apply {
+            action = ACTION_RETRY
+            putExtra(EXTRA_NOTIF_ID, notifId)
+            putExtra(EXTRA_CONV_KEY, convKey)
+        }
+        val retryPi = PendingIntent.getBroadcast(
+            this, notifId + 3, retryIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val contactLabel = convKey.substringAfter(":").let { key ->
+            when {
+                key.startsWith("group:") -> "Group chat"
+                key.startsWith("id:") -> null
+                else -> key.take(30)
+            }
+        }
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Couldn't generate a reply")
+            .setContentText("Couldn't generate a reply")
+            .addAction(android.R.drawable.ic_menu_revert, "Retry", retryPi)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setGroup("contextreply_suggestions")
+        BubbleHelper.attach(
+            this, builder,
+            ERROR_PLACEHOLDER, null, null,
+            remoteInputKey, notifId, convKey, null,
+            openChatIntent, message, detectedIntents,
+            preferredToneForContact(convKey),
+            contactMatchJson = contactMatchJson(convKey),
+        )
+        if (!isDeviceLocked()) nm.notify(notifId, builder.build())
+        pendingBubbles[convKey] = PendingBubble(
+            ERROR_PLACEHOLDER, null, null, replyPendingIntent, remoteInputKey,
             notifId, convKey, null, openChatIntent, message, detectedIntents, null,
             markAsReadPendingIntent,
         )
