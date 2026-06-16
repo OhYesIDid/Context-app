@@ -1,3 +1,8 @@
+if (!__DEV__) {
+  console.log = () => {};
+  console.warn = () => {};
+}
+
 import { registerRootComponent } from 'expo';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
