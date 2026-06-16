@@ -1092,6 +1092,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     // Returns a JSON blob for a fuzzy-matched contact that hasn't been confirmed yet,
     // or null if the sender is already confirmed or no match found.
+    // Includes a `candidates` array of up to 3 near-matches for the disambiguation picker.
     private fun contactMatchJson(convKey: String): String? {
         val prefs = Prefs.main(this)
         val confirmed = try {
@@ -1100,14 +1101,23 @@ class ProTxtBgService : NotificationListenerService() {
         if (confirmed.has(convKey)) return null  // already confirmed, no banner needed
         val senderName = convKey.substringAfter(":")
         // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching
-        val match = ContactMatcher.bestMatchByPhone(this, senderName)
-            ?: ContactMatcher.bestMatch(this, senderName)
-            ?: return null
+        val phoneMatch = ContactMatcher.bestMatchByPhone(this, senderName)
+        val candidates = if (phoneMatch != null) listOf(phoneMatch)
+                         else ContactMatcher.bestMatches(this, senderName, 3)
+        val primary = candidates.firstOrNull() ?: return null
         return JSONObject().apply {
-            put("contactId",    match.contactId)
-            put("displayName",  match.displayName)
-            put("preferredTone", match.preferredTone ?: "")
-            put("confidence",   match.confidence)
+            put("contactId",    primary.contactId)
+            put("displayName",  primary.displayName)
+            put("preferredTone", primary.preferredTone ?: "")
+            put("confidence",   primary.confidence)
+            put("candidates", JSONArray().also { arr ->
+                for (c in candidates) arr.put(JSONObject().apply {
+                    put("contactId",    c.contactId)
+                    put("displayName",  c.displayName)
+                    put("preferredTone", c.preferredTone ?: "")
+                    put("confidence",   c.confidence)
+                })
+            })
         }.toString()
     }
 

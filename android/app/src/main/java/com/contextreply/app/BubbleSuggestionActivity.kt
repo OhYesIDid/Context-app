@@ -515,12 +515,72 @@ class BubbleSuggestionActivity : Activity() {
                 setPadding(dp(12), dp(4), dp(6), dp(4))
                 setOnClickListener { confirmMatch() }
             })
+
+            // Parse alternative candidates for the "No" disambiguation expansion
+            val candidatesArr = try {
+                contactMatch.optJSONArray("candidates") ?: JSONArray()
+            } catch (_: Exception) { JSONArray() }
+            val alternatives = (0 until candidatesArr.length())
+                .mapNotNull { candidatesArr.optJSONObject(it) }
+                .filter { it.optString("contactId") != matchContactId }
+
             banner.addView(TextView(this).apply {
                 text = "No"
                 setTextColor(MUTED)
                 textSize = 12f
                 setPadding(dp(6), dp(4), 0, dp(4))
-                setOnClickListener { banner.visibility = View.GONE }
+                setOnClickListener {
+                    if (alternatives.isEmpty()) {
+                        banner.visibility = View.GONE
+                        return@setOnClickListener
+                    }
+                    // Replace banner contents with the disambiguation picker in-place
+                    banner.removeAllViews()
+                    banner.orientation = LinearLayout.VERTICAL
+                    banner.addView(TextView(this@BubbleSuggestionActivity).apply {
+                        text = "Who is this?"
+                        setTextColor(AMBER)
+                        textSize = 12f
+                        setTypeface(null, Typeface.BOLD)
+                        setPadding(0, 0, 0, dp(6))
+                    })
+                    for (candidate in alternatives) {
+                        val cId   = candidate.optString("contactId")
+                        val cName = candidate.optString("displayName")
+                        val cTone = candidate.optString("preferredTone").ifEmpty { null }
+                        banner.addView(TextView(this@BubbleSuggestionActivity).apply {
+                            text = cName
+                            setTextColor(AMBER)
+                            textSize = 12f
+                            setPadding(0, dp(3), 0, dp(3))
+                            setOnClickListener {
+                                val prefs = Prefs.main(this@BubbleSuggestionActivity)
+                                val conf = try {
+                                    JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+                                } catch (_: Exception) { JSONObject() }
+                                if (convKey != null) conf.put(convKey, cId)
+                                prefs.edit().putString("confirmed_identities", conf.toString()).apply()
+                                if (cTone != null && !isLoading) {
+                                    val toneIdx = available.indexOf(cTone)
+                                    if (toneIdx >= 0) {
+                                        selectedIdx = toneIdx
+                                        replyEdit.setText(textMap[available[toneIdx]])
+                                        replyEdit.setSelection(replyEdit.text.length)
+                                        refreshTabsFn[0]?.invoke(toneIdx)
+                                    }
+                                }
+                                banner.visibility = View.GONE
+                            }
+                        })
+                    }
+                    banner.addView(TextView(this@BubbleSuggestionActivity).apply {
+                        text = "Not in my contacts"
+                        setTextColor(MUTED)
+                        textSize = 12f
+                        setPadding(0, dp(6), 0, 0)
+                        setOnClickListener { banner.visibility = View.GONE }
+                    })
+                }
             })
             root.addView(banner)
         }

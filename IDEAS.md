@@ -64,11 +64,23 @@ Add a `🔄 Try again` notification action button alongside Send / Dismiss. Curr
 
 Recommended starting point: the punctuation heuristic — simplest, no new storage, covers the common "finished sentence vs. trailing off" case.
 
+### Urgency detection
+Detect how time-sensitive an incoming message is and surface that signal in the bubble and suggestion. Two layers: (1) **signal detection** — patterns like "ASAP", "urgent", "call me now", "??", "hello??", repeated messages in short succession, or a long gap since a prior unanswered message. (2) **downstream effects** — flag the bubble with a visual urgency indicator, bias the worker toward a shorter/more direct reply, shorten the debounce window so the suggestion arrives faster, and optionally push a higher-priority notification if the device is locked. Could also feed into proactive follow-up (lower the reminder threshold for contacts who tend to send urgent messages). Intent detection already runs in `ProTxtBgService.kt` — urgency is a natural addition alongside `eta`/`availability`/`location_share`.
+
+### Per-contact data insights
+Stats surfaced in the contact detail / settings view: average reply time (time between incoming message timestamp and user's outbound reply stamped in `ContactMemory`/`StyleEditQueue`), messages per month (count from `NotificationStore`/`StyleEditQueue` grouped by contact + month), most active hour, most common intent types. Could also flag contacts whose reply time is trending up ("you're taking longer to reply to Sarah"). Data is already partially captured — `StyleEditQueue` records suggestion→send pairs with timestamps, and `arrivalBuffer` sees every incoming message. Main new work: aggregate queries + a UI surface.
+
 ### Quick-reply templates
 One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.
 
 ### Proactive follow-up
 If a message arrived and the user hasn't replied in X hours, surface a reminder notification with a pre-generated reply ready to send. Opt-in per contact. High value for people who read and forget.
+
+### Live-apply group message toggle
+When `skip_group_messages` is switched on, immediately cancel any group bubbles currently showing in `activeBubbles` (cancel notification + remove from map). When switched off, no immediate action needed — the next group message will trigger normally. Toggle is set via `ProTxtSettingsModule.kt`; the dismiss logic mirrors what `ReplySendReceiver` already does on ACTION_DISMISS, so the main work is wiring the setting change event from the RN layer into a call on the `ProTxtBgService` instance.
+
+### Calendar event — include contact as attendee
+When the user taps the "Add to Calendar" action button, pre-populate the sender as an attendee and add them to the event description. Implementation: pass `EXTRA_PERSON_NAME` / `EXTRA_PERSON_EMAIL` from `BubbleSuggestionActivity.postActionFollowUp` (resolved from `contactMatchJson` or `DeviceContactsResolver`); in `ActionReceiver.ACTION_CALENDAR_ADD`, set `CalendarContract.Attendees.ATTENDEE_EMAIL` on the INSERT intent if an email is available, otherwise append "with [Name]" to `CalendarContract.Events.DESCRIPTION`. No new permissions needed — the insert intent already opens the calendar app for confirmation.
 
 ### Screenshot OCR
 Take a screenshot of any message → app reads it and suggests a reply. Eliminates copy-paste entirely for apps not covered by the notification listener. Biggest UX jump for platform coverage.
@@ -115,7 +127,7 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - Home screen widget — paste a message, get a reply on the home screen
 - Apple Watch — tap to copy top suggestion to clipboard
 - Landscape orientation — make the bubble activity scrollable so long threads/replies aren't clipped when the device is rotated
-- Live-apply the group-message toggle (`skip_group_messages` in `ProTxtSettingsModule.kt`) — currently only affects the next incoming message; toggling it on/off should also dismiss/re-evaluate any group bubbles already showing in `activeBubbles`
+
 - Quoted message in the bubble (`messageExtra`/`quoteText` in `BubbleSuggestionActivity.kt`) is capped at 3 lines and truncates with an ellipsis — allow more quoted text and make that section scrollable or paginated for long bursts instead of clipping them
 
 ### Personalisation

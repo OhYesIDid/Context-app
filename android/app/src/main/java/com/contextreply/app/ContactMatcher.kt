@@ -44,13 +44,17 @@ object ContactMatcher {
     }
 
     /** Returns the highest-confidence contact match ≥ MIN_MATCH, or null. */
-    fun bestMatch(context: Context, senderName: String): MatchResult? {
-        if (senderName.isBlank()) return null
+    fun bestMatch(context: Context, senderName: String): MatchResult? =
+        bestMatches(context, senderName, 1).firstOrNull()
+
+    /** Returns up to [limit] matches ≥ MIN_MATCH, sorted by confidence descending. */
+    fun bestMatches(context: Context, senderName: String, limit: Int = 3): List<MatchResult> {
+        if (senderName.isBlank()) return emptyList()
         val cache = loadCache(context)
-        if (cache.length() == 0) return null
+        if (cache.length() == 0) return emptyList()
 
         val needle = senderName.trim().lowercase()
-        var best: MatchResult? = null
+        val results = mutableListOf<MatchResult>()
 
         for (i in 0 until cache.length()) {
             val obj = cache.optJSONObject(i) ?: continue
@@ -63,12 +67,10 @@ object ContactMatcher {
             val haystack = displayName.trim().lowercase()
             val score = max(jaroWinkler(needle, haystack), tokenSortJaroWinkler(needle, haystack))
 
-            if (score >= MIN_MATCH && (best == null || score > best.confidence)) {
-                best = MatchResult(id, displayName, tone, score)
-            }
+            if (score >= MIN_MATCH) results.add(MatchResult(id, displayName, tone, score))
         }
 
-        return best
+        return results.sortedByDescending { it.confidence }.take(limit)
     }
 
     private fun loadCache(context: Context): JSONArray = try {
