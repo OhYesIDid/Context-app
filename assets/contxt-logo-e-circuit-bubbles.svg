@@ -10,10 +10,21 @@
       <rect width="1024" height="1024" rx="232"/>
     </clipPath>
 
-    <linearGradient id="traceGrad" x1="180" y1="460" x2="720" y2="460" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"  stop-color="#67e8f9"/>
-      <stop offset="50%" stop-color="#818cf8"/>
-      <stop offset="100%" stop-color="#a78bfa"/>
+    <linearGradient id="traceGradA" x1="512" y1="505" x2="284" y2="505" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+    <linearGradient id="traceGradB" x1="512" y1="505" x2="740" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="traceGradC" x1="512" y1="505" x2="620" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#fb7185"/>
+    </linearGradient>
+    <linearGradient id="traceGradD" x1="512" y1="505" x2="404" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#34d399"/>
     </linearGradient>
 
     <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
@@ -31,42 +42,48 @@
 
   <g clip-path="url(#iconClip)">
 
-    <!-- Ambient centre glow behind the overlap -->
-    <circle cx="512" cy="460" r="260" fill="#6d28d9" opacity="0.18" filter="url(#ambGlow)"/>
+    <!-- Ambient centre glow -->
+    <circle cx="512" cy="505" r="320" fill="#6d28d9" opacity="0.18" filter="url(#ambGlow)"/>
 
-    <!--
-      Two speech-bubble outlines, overlapping in the centre (x 444–580).
-      Stroke only — dark background shows through so the outlines read
-      as interlocking rings, like the reference image.
-    -->
-    <!-- Left bubble: x 120–580, y 270–650, cr 90, tail down-left -->
-    <path d="M 120 360 Q 120 270 210 270 L 490 270 Q 580 270 580 360
-             L 580 560 Q 580 650 490 650 L 270 650 L 150 760 L 190 650
-             L 210 650 Q 120 650 120 560 Z"
-          fill="none" stroke="white" stroke-width="22" stroke-opacity="0.9" stroke-linejoin="round"/>
-    <!-- Right bubble: x 444–904, y 270–650, cr 90, tail down-right -->
-    <path d="M 444 360 Q 444 270 534 270 L 814 270 Q 904 270 904 360
-             L 904 560 Q 904 650 814 650 L 834 650 L 874 760 L 754 650
-             L 534 650 Q 444 650 444 560 Z"
-          fill="none" stroke="white" stroke-width="22" stroke-opacity="0.9" stroke-linejoin="round"/>
+    <!-- Single speech bubble, dark chip-like fill so circuitry reads clearly inside it -->
+    <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
+             L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
+             L 274 747 Q 189 747 189 662 Z"
+          fill="#170f30"/>
+    <path d="M 189 348 Q 189 263 274 263 L 750 263 Q 835 263 835 348
+             L 835 662 Q 835 747 750 747 L 680 747 L 618 899 L 556 747
+             L 274 747 Q 189 747 189 662 Z"
+          fill="none" stroke="white" stroke-width="24" stroke-opacity="0.85" stroke-linejoin="round"/>
 
-    <!--
-      Circuit trace linking the two bubbles through the overlap zone.
-      Two small entry nodes merge into a stepped PCB-style trace that
-      exits into the right bubble.
-    -->
-    <path d="M 210 430 L 270 460 L 350 460 L 350 540 L 512 540 L 512 460 L 700 460
-             M 210 490 L 270 460"
-          fill="none" stroke="url(#traceGrad)" stroke-width="9" stroke-linecap="round"
-          stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <!-- Circuit traces fanning from a central hub to six nodes inside the bubble -->
+    <path d="M 512 505 L 400 505 L 400 380 L 340 380" fill="none" stroke="url(#traceGradA)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <path d="M 512 505 L 284 505" fill="none" stroke="url(#traceGradA)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <path d="M 512 505 L 624 505 L 624 380 L 684 380" fill="none" stroke="url(#traceGradB)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <path d="M 512 505 L 700 505 L 700 520 L 740 520" fill="none" stroke="url(#traceGradB)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <path d="M 512 505 L 620 505 L 620 650" fill="none" stroke="url(#traceGradC)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
+    <path d="M 512 505 L 404 505 L 404 650" fill="none" stroke="url(#traceGradD)"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#traceGlow)"/>
 
-    <!-- Nodes along the trace -->
-    <circle cx="210" cy="430" r="13" fill="#67e8f9" filter="url(#nodeGlow)"/>
-    <circle cx="210" cy="490" r="13" fill="#67e8f9" filter="url(#nodeGlow)"/>
-    <circle cx="350" cy="460" r="10" fill="#818cf8" filter="url(#nodeGlow)"/>
-    <circle cx="512" cy="540" r="10" fill="#818cf8" filter="url(#nodeGlow)"/>
-    <circle cx="512" cy="460" r="10" fill="#a78bfa" filter="url(#nodeGlow)"/>
-    <circle cx="700" cy="460" r="18" fill="#c4b5fd" filter="url(#nodeGlow)"/>
+    <!-- Via nodes at trace bends -->
+    <circle cx="400" cy="505" r="9" fill="#c4b5fd" filter="url(#nodeGlow)"/>
+    <circle cx="624" cy="505" r="9" fill="#c4b5fd" filter="url(#nodeGlow)"/>
+    <circle cx="700" cy="505" r="9" fill="#c4b5fd" filter="url(#nodeGlow)"/>
+
+    <!-- Endpoint nodes -->
+    <circle cx="340" cy="380" r="16" fill="#67e8f9" filter="url(#nodeGlow)"/>
+    <circle cx="284" cy="505" r="16" fill="#67e8f9" filter="url(#nodeGlow)"/>
+    <circle cx="684" cy="380" r="16" fill="#fbbf24" filter="url(#nodeGlow)"/>
+    <circle cx="740" cy="520" r="16" fill="#fbbf24" filter="url(#nodeGlow)"/>
+    <circle cx="620" cy="650" r="16" fill="#fb7185" filter="url(#nodeGlow)"/>
+    <circle cx="404" cy="650" r="16" fill="#34d399" filter="url(#nodeGlow)"/>
+
+    <!-- Central hub -->
+    <circle cx="512" cy="505" r="26" fill="#a78bfa" filter="url(#nodeGlow)"/>
 
   </g>
 </svg>
