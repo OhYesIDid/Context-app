@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="50%" r="55%">
-      <stop offset="0%" stop-color="#130828"/>
-      <stop offset="100%" stop-color="#09090b"/>
-    </radialGradient>
+    <!-- Solid very dark background matching the reference -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#12102a"/>
+      <stop offset="100%" stop-color="#0c0a1e"/>
+    </linearGradient>
 
     <clipPath id="iconClip">
       <rect width="1024" height="1024" rx="232"/>
     </clipPath>
 
-    <!-- Gradient follows the bubble from tail-tip (warm) up to top (cool) -->
-    <linearGradient id="bubbleGrad" x1="512" y1="710" x2="512" y2="220" gradientUnits="userSpaceOnUse">
+    <!-- Bubble gradient: amber at tail → pink → violet → sky-blue at top -->
+    <linearGradient id="bubbleGrad" x1="512" y1="760" x2="512" y2="215"
+                    gradientUnits="userSpaceOnUse">
       <stop offset="0%"   stop-color="#f59e0b"/>
-      <stop offset="28%"  stop-color="#f472b6"/>
-      <stop offset="58%"  stop-color="#a78bfa"/>
+      <stop offset="30%"  stop-color="#f472b6"/>
+      <stop offset="62%"  stop-color="#a78bfa"/>
       <stop offset="100%" stop-color="#38bdf8"/>
     </linearGradient>
   </defs>
@@ -23,45 +25,45 @@
 
   <g clip-path="url(#iconClip)">
 
-    <!-- External circuit traces drawn first so the bubble stroke sits on top of their origins -->
+    <!-- Traces drawn first; bubble stroke covers their origin points cleanly -->
 
-    <!-- TOP-LEFT: amber trace exits top of bubble, bends left -->
-    <path d="M 395 240 L 395 155 L 278 155"
-          fill="none" stroke="#f59e0b" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- TOP-LEFT: amber — exits top, bends left -->
+    <path d="M 378 215 L 378 128 L 252 128"
+          fill="none" stroke="#f59e0b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- TOP-RIGHT: sky-blue trace exits top of bubble, bends right -->
-    <path d="M 637 240 L 637 155 L 754 155"
-          fill="none" stroke="#38bdf8" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- TOP-RIGHT: sky-blue — exits top, bends right -->
+    <path d="M 648 215 L 648 128 L 774 128"
+          fill="none" stroke="#38bdf8" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- LEFT: lavender trace exits left side of bubble, goes straight left -->
-    <path d="M 265 420 L 152 420"
-          fill="none" stroke="#c4b5fd" stroke-width="11" stroke-linecap="round"/>
+    <!-- LEFT: lavender — exits left side, straight -->
+    <path d="M 215 435 L 100 435"
+          fill="none" stroke="#c4b5fd" stroke-width="13" stroke-linecap="round"/>
 
-    <!-- RIGHT: lavender trace exits right side of bubble, goes straight right -->
-    <path d="M 759 420 L 872 420"
-          fill="none" stroke="#c4b5fd" stroke-width="11" stroke-linecap="round"/>
+    <!-- RIGHT: lavender — exits right side, straight -->
+    <path d="M 809 435 L 924 435"
+          fill="none" stroke="#c4b5fd" stroke-width="13" stroke-linecap="round"/>
 
-    <!-- BOTTOM-LEFT: amber trace exits bubble bottom-left, bends left -->
-    <path d="M 395 600 L 395 738 L 275 738"
-          fill="none" stroke="#f59e0b" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- BOTTOM-LEFT: amber — exits bottom-left, bends left -->
+    <path d="M 378 655 L 378 770 L 248 770"
+          fill="none" stroke="#f59e0b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- BOTTOM-RIGHT: amber trace exits bubble bottom-right, bends right -->
-    <path d="M 637 600 L 637 738 L 757 738"
-          fill="none" stroke="#f59e0b" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- BOTTOM-RIGHT: amber — exits bottom-right, bends right -->
+    <path d="M 648 655 L 648 770 L 778 770"
+          fill="none" stroke="#f59e0b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- Speech bubble: stroke-only, gradient -->
-    <path d="M 265 330 Q 265 240 355 240 L 669 240 Q 759 240 759 330
-             L 759 510 Q 759 600 669 600 L 554 600 L 512 710 L 470 600
-             L 355 600 Q 265 600 265 510 Z"
-          fill="none" stroke="url(#bubbleGrad)" stroke-width="28" stroke-linejoin="round"/>
+    <!-- Speech bubble: stroke-only, gradient, matched proportions to reference -->
+    <path d="M 215 325 Q 215 215 325 215 L 699 215 Q 809 215 809 325
+             L 809 545 Q 809 655 699 655 L 562 655 L 512 760 L 462 655
+             L 325 655 Q 215 655 215 545 Z"
+          fill="none" stroke="url(#bubbleGrad)" stroke-width="14" stroke-linejoin="round"/>
 
-    <!-- Open ring endpoints (drawn last so they sit on top of traces) -->
-    <circle cx="255"  cy="155" r="22" fill="none" stroke="#f59e0b" stroke-width="11"/>
-    <circle cx="777"  cy="155" r="22" fill="none" stroke="#38bdf8" stroke-width="11"/>
-    <circle cx="129"  cy="420" r="22" fill="none" stroke="#c4b5fd" stroke-width="11"/>
-    <circle cx="895"  cy="420" r="22" fill="none" stroke="#c4b5fd" stroke-width="11"/>
-    <circle cx="251"  cy="738" r="22" fill="none" stroke="#f59e0b" stroke-width="11"/>
-    <circle cx="781"  cy="738" r="22" fill="none" stroke="#f59e0b" stroke-width="11"/>
+    <!-- Open ring endpoints -->
+    <circle cx="224" cy="128" r="24" fill="none" stroke="#f59e0b" stroke-width="13"/>
+    <circle cx="802" cy="128" r="24" fill="none" stroke="#38bdf8" stroke-width="13"/>
+    <circle cx="72"  cy="435" r="24" fill="none" stroke="#c4b5fd" stroke-width="13"/>
+    <circle cx="952" cy="435" r="24" fill="none" stroke="#c4b5fd" stroke-width="13"/>
+    <circle cx="220" cy="770" r="24" fill="none" stroke="#f59e0b" stroke-width="13"/>
+    <circle cx="806" cy="770" r="24" fill="none" stroke="#f59e0b" stroke-width="13"/>
 
   </g>
 </svg>
