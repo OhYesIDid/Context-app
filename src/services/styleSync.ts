@@ -19,6 +19,7 @@ interface QueueItem {
   platform: string;
   contact?: string;
   intent?: string;
+  tone_selected?: string;
   ts: number;
 }
 
@@ -95,11 +96,14 @@ async function drainQueue(): Promise<void> {
     const matched = item.contact
       ? contacts.find((c) => c.displayName.toLowerCase() === item.contact!.toLowerCase())
       : undefined;
+    const editDelta = item.edit.length > 0 ? computeEditDelta(item.original, item.edit) : undefined;
     await recordStyleEdit({
       originalSuggestion: item.original,
       userEdit: item.edit,
       platform: item.platform as Platform,
       intent: item.intent as Intent | undefined,
+      toneSelected: item.tone_selected,
+      editDeltaJson: editDelta ? JSON.stringify(editDelta) : undefined,
       contactId: matched?.id,
     });
     if (item.contact) await incrementContactInteraction(item.contact);
@@ -124,6 +128,39 @@ async function drainCorrections(): Promise<void> {
   await AsyncStorage.setItem('intent_corrections', JSON.stringify(merged));
 }
 
+// ── Edit delta ────────────────────────────────────────────────────────────────
+
+interface EditDelta {
+  wordsRemoved: string[];
+  wordsAdded: string[];
+  characterDelta: number;
+  shortened: boolean;
+}
+
+function computeEditDelta(original: string, edited: string): EditDelta {
+  const tokenize = (s: string) => s.toLowerCase().match(/\b\w+\b/g) ?? [];
+  const origWords = new Set(tokenize(original));
+  const editWords = new Set(tokenize(edited));
+  return {
+    wordsRemoved: [...origWords].filter((w) => !editWords.has(w)),
+    wordsAdded: [...editWords].filter((w) => !origWords.has(w)),
+    characterDelta: edited.length - original.length,
+    shortened: edited.length < original.length * 0.7,
+  };
+}
+
+// Infer a preferred tone from relationship when none is explicitly set
+function inferredTone(relationship: string | undefined): string | undefined {
+  switch (relationship) {
+    case 'colleague': return 'formal';
+    case 'partner':
+    case 'friend':
+    case 'family': return 'casual';
+    case 'flatmate': return 'brief';
+    default: return undefined;
+  }
+}
+
 async function rebuildCachedProfile(): Promise<void> {
   const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
   const [edits, contacts, correctionsJson] = await Promise.all([
@@ -134,35 +171,84 @@ async function rebuildCachedProfile(): Promise<void> {
   const corrections: IntentCorrection[] = correctionsJson ? JSON.parse(correctionsJson) : [];
 
   const now = Date.now();
-  const HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+  const HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
   const recencyScore = (e: StyleEdit) => Math.exp(-(now - new Date(e.createdAt).getTime()) / HALF_LIFE_MS);
-
   const normalize = (s: string) => s.toLowerCase().replace(/[.,!?\s]+$/, '').trim();
 
-  // Split into meaningful edits and dismissals, sorted most-recent first
   const meaningful = edits
     .filter((e) => e.userEdit.length > 0 && normalize(e.userEdit) !== normalize(e.originalSuggestion))
     .sort((a, b) => recencyScore(b) - recencyScore(a));
 
+  // Dismissal filtering: exclude dismissals that were followed by a send for the same
+  // contact within 2 minutes — those are timing dismissals (user was busy), not style signal.
+  const sendTsByContact = new Map<string, number[]>();
+  for (const e of meaningful) {
+    if (!e.contactId) continue;
+    (sendTsByContact.get(e.contactId) ?? sendTsByContact.set(e.contactId, []).get(e.contactId)!).push(
+      new Date(e.createdAt).getTime()
+    );
+  }
   const dismissed = edits
-    .filter((e) => e.userEdit.length === 0)
+    .filter((e) => {
+      if (e.userEdit.length !== 0) return false;
+      if (!e.contactId) return true; // no contact info — keep as signal
+      const dismissTs = new Date(e.createdAt).getTime();
+      const sends = sendTsByContact.get(e.contactId) ?? [];
+      // Drop if user sent something for this contact within 2 minutes of the dismissal
+      return !sends.some((ts) => ts > dismissTs && ts - dismissTs < 2 * 60_000);
+    })
     .sort((a, b) => recencyScore(b) - recencyScore(a))
-    .slice(0, 5);
+    .slice(0, 3);
 
   const sections: string[] = [];
 
-  // ── General style examples (top 6 by recency-weighted score) ─────────────
+  // ── General style examples ────────────────────────────────────────────────
   const topExamples = meaningful.slice(0, 6);
   if (topExamples.length > 0) {
     const lines = topExamples.map((e) => `• "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
     sections.push(`User's writing style (suggestion → what they actually sent):\n${lines}`);
   }
 
-  // ── Per-intent examples ───────────────────────────────────────────────────
+  // ── Word-level patterns (aggregated from edit deltas) ─────────────────────
+  const wordRemovedCount = new Map<string, number>();
+  const wordAddedCount = new Map<string, number>();
+  let shortenCount = 0;
+  for (const e of meaningful) {
+    const delta: EditDelta = e.editDeltaJson
+      ? JSON.parse(e.editDeltaJson)
+      : computeEditDelta(e.originalSuggestion, e.userEdit);
+    for (const w of delta.wordsRemoved) wordRemovedCount.set(w, (wordRemovedCount.get(w) ?? 0) + 1);
+    for (const w of delta.wordsAdded) wordAddedCount.set(w, (wordAddedCount.get(w) ?? 0) + 1);
+    if (delta.shortened) shortenCount++;
+  }
+  const alwaysRemoves = [...wordRemovedCount.entries()].filter(([, n]) => n >= 2).map(([w]) => w);
+  const alwaysAdds = [...wordAddedCount.entries()].filter(([, n]) => n >= 2).map(([w]) => w);
+  const patternLines: string[] = [];
+  if (alwaysRemoves.length > 0) patternLines.push(`• Always removes: ${alwaysRemoves.join(', ')}`);
+  if (alwaysAdds.length > 0) patternLines.push(`• Always adds: ${alwaysAdds.join(', ')}`);
+  if (meaningful.length >= 3 && shortenCount / meaningful.length > 0.6)
+    patternLines.push(`• Consistently shortens suggestions (shortened ${shortenCount}/${meaningful.length} times)`);
+  if (patternLines.length > 0) sections.push(`Word-level patterns:\n${patternLines.join('\n')}`);
+
+  // ── Style by tone ─────────────────────────────────────────────────────────
+  const toneGroups: Record<string, StyleEdit[]> = {};
+  for (const e of meaningful) {
+    const tone = e.toneSelected ?? 'casual';
+    (toneGroups[tone] ??= []).push(e);
+  }
+  const toneLines: string[] = [];
+  for (const [tone, group] of Object.entries(toneGroups)) {
+    if (group.length < 2) continue;
+    const examples = group.slice(0, 3).map((e) => `  • "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
+    toneLines.push(`${tone.charAt(0).toUpperCase() + tone.slice(1)}:\n${examples}`);
+  }
+  if (toneLines.length > 0) sections.push(`Style by tone:\n${toneLines.join('\n')}`);
+
+  // ── Style by intent ───────────────────────────────────────────────────────
   const INTENT_LABEL: Record<string, string> = {
-    eta: 'ETA / location messages',
-    availability: 'availability / calendar messages',
-    other: 'general messages',
+    eta: 'ETA / location',
+    availability: 'availability / scheduling',
+    other: 'general',
   };
   const intentGroups: Record<string, StyleEdit[]> = {};
   for (const e of meaningful) {
@@ -172,13 +258,10 @@ async function rebuildCachedProfile(): Promise<void> {
   const intentLines: string[] = [];
   for (const [intent, group] of Object.entries(intentGroups)) {
     if (group.length < 2) continue;
-    const label = INTENT_LABEL[intent] ?? intent;
     const examples = group.slice(0, 3).map((e) => `  • "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
-    intentLines.push(`${label}:\n${examples}`);
+    intentLines.push(`${INTENT_LABEL[intent] ?? intent}:\n${examples}`);
   }
-  if (intentLines.length > 0) {
-    sections.push(`Style by message type:\n${intentLines.join('\n')}`);
-  }
+  if (intentLines.length > 0) sections.push(`Style by message type:\n${intentLines.join('\n')}`);
 
   // ── Contact-specific examples ─────────────────────────────────────────────
   const contactById = Object.fromEntries(contacts.map((c) => [c.id, c]));
@@ -195,23 +278,22 @@ async function rebuildCachedProfile(): Promise<void> {
     const examples = group.slice(0, 2).map((e) => `  • "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
     contactStyleLines.push(`With ${contact.displayName}:\n${examples}`);
   }
-  if (contactStyleLines.length > 0) {
-    sections.push(`Style with specific contacts:\n${contactStyleLines.join('\n')}`);
-  }
+  if (contactStyleLines.length > 0) sections.push(`Style with specific contacts:\n${contactStyleLines.join('\n')}`);
 
-  // ── Dismissed suggestions ─────────────────────────────────────────────────
+  // ── Rejected suggestions ──────────────────────────────────────────────────
   if (dismissed.length >= 2) {
     const lines = dismissed.map((e) => `• "${e.originalSuggestion}"`).join('\n');
     sections.push(`Suggestions the user has rejected (avoid similar phrasing):\n${lines}`);
   }
 
-  // ── Per-contact preferences ───────────────────────────────────────────────
+  // ── Contact preferences (explicit + inferred) ─────────────────────────────
   const withPrefs = contacts.filter((c) => c.relationship || c.preferredTone);
   if (withPrefs.length > 0) {
     const lines = withPrefs.map((c) => {
       const parts: string[] = [];
       if (c.relationship) parts.push(c.relationship);
-      if (c.preferredTone) parts.push(`prefer ${c.preferredTone} tone`);
+      const tone = c.preferredTone ?? inferredTone(c.relationship);
+      if (tone) parts.push(`prefer ${tone} tone`);
       return `• ${c.displayName} — ${parts.join(', ')}`;
     }).join('\n');
     sections.push(`Contact preferences:\n${lines}`);
@@ -224,18 +306,19 @@ async function rebuildCachedProfile(): Promise<void> {
     sections.push(`Intent corrections (user flagged missing context):\n${lines}`);
   }
 
-  // Write per-contact tone map so BgService can pre-select the right bubble tab
+  // ── Write caches to Kotlin ─────────────────────────────────────────────────
+  // Tone map: explicit preferred_tone first, then infer from relationship for pre-selecting the bubble tab
   const toneMap: Record<string, string> = {};
   for (const c of contacts) {
-    if (c.preferredTone) toneMap[c.displayName.toLowerCase()] = c.preferredTone;
+    const tone = c.preferredTone ?? inferredTone(c.relationship);
+    if (tone) toneMap[c.displayName.toLowerCase()] = tone;
   }
   NativeModules.ProTxtSettings.cacheContactTones(JSON.stringify(toneMap));
 
-  // Write full contact list for Jaro-Winkler fuzzy matching in ContactMatcher.kt
   const contactList = contacts.map((c) => ({
     id: c.id,
     display_name: c.displayName,
-    preferred_tone: c.preferredTone ?? null,
+    preferred_tone: c.preferredTone ?? inferredTone(c.relationship) ?? null,
     interaction_count: c.interactionCount ?? 0,
   }));
   NativeModules.ProTxtSettings.cacheContactList(JSON.stringify(contactList));

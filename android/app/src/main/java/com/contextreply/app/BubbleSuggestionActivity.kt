@@ -209,8 +209,10 @@ class BubbleSuggestionActivity : Activity() {
             lp.bottomMargin = dp(8)
             layoutParams = lp
             setOnClickListener {
-                val text = replyEdit.text.toString().trim().ifEmpty { textMap[available[selectedIdx]] ?: casualText }
-                sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra)
+                val selectedTone = if (available.isNotEmpty()) available[selectedIdx] else "casual"
+                val aiSuggestion = textMap[selectedTone] ?: casualText
+                val text = replyEdit.text.toString().trim().ifEmpty { aiSuggestion }
+                sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra, aiSuggestion, selectedTone)
                 if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId)
                 finish()
             }
@@ -1011,6 +1013,7 @@ class BubbleSuggestionActivity : Activity() {
     private fun sendAction(
         action: String, replyText: String?, remoteInputKey: String?,
         notifId: Int, convKey: String?, intentExtra: String?,
+        originalSuggestion: String? = null, toneSelected: String? = null,
     ) {
         sendBroadcast(Intent(this, ReplySendReceiver::class.java).apply {
             this.action = action
@@ -1019,6 +1022,8 @@ class BubbleSuggestionActivity : Activity() {
             putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
             if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
             if (intentExtra != null) putExtra(ProTxtBgService.EXTRA_INTENT, intentExtra)
+            if (originalSuggestion != null) putExtra(ProTxtBgService.EXTRA_ORIGINAL_SUGGESTION, originalSuggestion)
+            if (toneSelected != null) putExtra(ProTxtBgService.EXTRA_TONE_SELECTED, toneSelected)
         })
     }
 }

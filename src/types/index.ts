@@ -141,6 +141,10 @@ export interface StyleEdit {
   userEdit: string;
   platform?: Platform;
   intent?: Intent;
+  toneSelected?: string;
+  editDeltaJson?: string;
+  subintent?: string;
+  dismissalContextJson?: string;
   createdAt: string;
   syncedAt?: string;
 }

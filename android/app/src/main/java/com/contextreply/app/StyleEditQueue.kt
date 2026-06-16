@@ -20,6 +20,7 @@ object StyleEditQueue {
         userSentText: String,
         convKey: String,
         intent: String? = null,
+        toneSelected: String? = null,
     ) {
         val prefs = Prefs.styleQueue(context)
         val arr = try {
@@ -33,6 +34,7 @@ object StyleEditQueue {
             put("platform", platformFromConvKey(convKey))
             put("contact", convKey.substringAfter(":"))
             if (intent != null) put("intent", intent)
+            if (toneSelected != null) put("tone_selected", toneSelected)
             put("ts", System.currentTimeMillis())
         })
         prefs.edit().putString(KEY, arr.toString()).apply()

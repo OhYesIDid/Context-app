@@ -114,8 +114,13 @@ class ReplySendReceiver : BroadcastReceiver() {
         }
         if (intent.action != ProTxtBgService.ACTION_SEND) return
 
-        val originalSuggestion = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
+        // EXTRA_ORIGINAL_SUGGESTION carries the AI's suggestion before any user edit (set by
+        // BubbleSuggestionActivity). Fall back to EXTRA_REPLY_TEXT for notification-shade sends
+        // where the action Intent already holds the unedited suggestion in that field.
+        val originalSuggestion = intent.getStringExtra(ProTxtBgService.EXTRA_ORIGINAL_SUGGESTION)
+            ?: intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
         val intentType = intent.getStringExtra(ProTxtBgService.EXTRA_INTENT)
+        val toneSelected = intent.getStringExtra(ProTxtBgService.EXTRA_TONE_SELECTED)
 
         val remoteResults = RemoteInput.getResultsFromIntent(intent)
         val replyText = remoteResults
@@ -128,7 +133,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         // Record (original suggestion → what was actually sent) for writing style learning.
         // Sprint 3 will bridge this SharedPreferences queue into the SQLite style_edits table.
         if (originalSuggestion != null && convKey != null) {
-            StyleEditQueue.enqueue(context, originalSuggestion, replyText, convKey, intentType)
+            StyleEditQueue.enqueue(context, originalSuggestion, replyText, convKey, intentType, toneSelected)
             // Immediately update the native "recent edits" cache so the next background
             // suggestion reflects this edit without waiting for the app to open.
             NativeStyleSync.syncFromQueue(context)

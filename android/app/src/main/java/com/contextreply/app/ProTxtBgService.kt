@@ -64,6 +64,8 @@ class ProTxtBgService : NotificationListenerService() {
         const val EXTRA_CONTACT_MATCH_JSON = "contact_match_json"
         const val EXTRA_SUGGESTION_TS = "suggestion_ts"
         const val EXTRA_NO_REPLY = "no_reply"
+        const val EXTRA_ORIGINAL_SUGGESTION = "original_suggestion"
+        const val EXTRA_TONE_SELECTED = "tone_selected"
         const val REMOTE_INPUT_KEY = "contextreply_edited_reply"
         // Sentinel placed in EXTRA_REPLY_TEXT while the worker is in-flight.
         // BubbleSuggestionActivity detects this and shows a loading state.

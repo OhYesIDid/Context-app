@@ -124,6 +124,10 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   // Add columns introduced after initial schema — safe to run repeatedly
   try { await db.runAsync('ALTER TABLE contacts ADD COLUMN preferred_tone TEXT'); } catch (_) {}
   try { await db.runAsync('ALTER TABLE contacts ADD COLUMN interaction_count INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN tone_selected TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN edit_delta_json TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN subintent TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN dismissal_context_json TEXT'); } catch (_) {}
 }
 
 // ── Saved places ──────────────────────────────────────────────────────────────
@@ -199,10 +203,15 @@ export async function recordStyleEdit(
 ): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO style_edits (id, contact_id, original_suggestion, user_edit, platform, intent, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO style_edits
+       (id, contact_id, original_suggestion, user_edit, platform, intent,
+        tone_selected, edit_delta_json, subintent, dismissal_context_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [randomUUID(), edit.contactId ?? null, edit.originalSuggestion, edit.userEdit,
-     edit.platform ?? null, edit.intent ?? null, new Date().toISOString()]
+     edit.platform ?? null, edit.intent ?? null,
+     edit.toneSelected ?? null, edit.editDeltaJson ?? null,
+     edit.subintent ?? null, edit.dismissalContextJson ?? null,
+     new Date().toISOString()]
   );
 }
 
@@ -210,7 +219,9 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
     id: string; contact_id: string | null; original_suggestion: string; user_edit: string;
-    platform: string | null; intent: string | null; created_at: string; synced_at: string | null;
+    platform: string | null; intent: string | null; tone_selected: string | null;
+    edit_delta_json: string | null; subintent: string | null;
+    dismissal_context_json: string | null; created_at: string; synced_at: string | null;
   }>('SELECT * FROM style_edits ORDER BY created_at DESC LIMIT ?', [limit]);
   return rows.map((r) => ({
     id: r.id,
@@ -219,6 +230,10 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
     userEdit: r.user_edit,
     platform: (r.platform as StyleEdit['platform']) ?? undefined,
     intent: (r.intent as StyleEdit['intent']) ?? undefined,
+    toneSelected: r.tone_selected ?? undefined,
+    editDeltaJson: r.edit_delta_json ?? undefined,
+    subintent: r.subintent ?? undefined,
+    dismissalContextJson: r.dismissal_context_json ?? undefined,
     createdAt: r.created_at,
     syncedAt: r.synced_at ?? undefined,
   }));
