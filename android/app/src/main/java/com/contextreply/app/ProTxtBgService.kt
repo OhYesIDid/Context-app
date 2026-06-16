@@ -89,12 +89,15 @@ class ProTxtBgService : NotificationListenerService() {
         // Collapses rapid-fire messages from the same thread into one API call
         private const val DEBOUNCE_MS = 2_500L
 
-        // Safety net for the worker job: WorkerClient itself times out (~30s worst case
-        // with retries), but enrichment calls (e.g. GoogleAuthUtil.getToken()) have no
-        // caller-side timeout and can block the pool thread indefinitely. Without this,
-        // a single hung call leaves the loading notification stuck forever since nothing
-        // else ever clears activeBubbles/replaces the notification for that convKey.
-        private const val WORKER_TIMEOUT_MS = 45_000L
+        // Safety net for the worker job: enrichment calls (e.g. GoogleAuthUtil.getToken())
+        // have no caller-side timeout and can block the pool thread indefinitely, and
+        // without this, a single hung call leaves the loading notification stuck forever
+        // since nothing else ever clears activeBubbles/replaces the notification for that
+        // convKey. Must safely exceed WorkerClient's own worst case, which is NOT 30s —
+        // 3 attempts (initial + MAX_RETRIES=2) x (15s connect + 15s read) + 2x1s retry
+        // delay = ~92s. A shorter timeout here fires while WorkerClient is still validly
+        // retrying, cancelling the bubble and then discarding the eventual result.
+        private const val WORKER_TIMEOUT_MS = 100_000L
 
         val TARGET_PACKAGES = setOf(
             "com.whatsapp",
@@ -446,7 +449,7 @@ class ProTxtBgService : NotificationListenerService() {
                         lastSentReply = lastSent,
                     ) ?: run {
                         android.util.Log.e("ProTxt", "WorkerClient.call returned null")
-                        activeBubbles.remove(convKey)
+                        cancelStuckBubble(convKey, notifId)
                         return@submit
                     }
                     // Persist context update for future conversations with this contact
@@ -457,7 +460,7 @@ class ProTxtBgService : NotificationListenerService() {
                     val formal = result.replies.optString("formal").takeIf { it.isNotEmpty() }
                     val brief  = result.replies.optString("brief").takeIf { it.isNotEmpty() }
                     val primary = casual ?: formal ?: brief ?: run {
-                        activeBubbles.remove(convKey)
+                        cancelStuckBubble(convKey, notifId)
                         return@submit
                     }
                     // Enrich share_location action with coordinates + area name so the
@@ -499,7 +502,7 @@ class ProTxtBgService : NotificationListenerService() {
                     BubbleSuggestionActivity.onReplyReady[convKey]?.invoke(primary, formal, brief, finalAction)
                 } catch (e: Exception) {
                     android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
-                    activeBubbles.remove(convKey)
+                    cancelStuckBubble(convKey, notifId)
                 }
             }
             // Watchdog: if nothing has cleared activeBubbles by the deadline, the worker
@@ -507,9 +510,9 @@ class ProTxtBgService : NotificationListenerService() {
             // has no timeout of its own). Clear the stuck loading notification instead of
             // leaving it on the placeholder forever.
             scheduler.schedule({
-                if (activeBubbles.remove(convKey)) {
+                if (activeBubbles.contains(convKey)) {
                     if (BuildConfig.DEBUG) android.util.Log.w("ProTxt", "worker timed out, clearing stuck loading notification")
-                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                    cancelStuckBubble(convKey, notifId)
                 }
             }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
@@ -858,6 +861,16 @@ class ProTxtBgService : NotificationListenerService() {
             contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
         return enabled.contains("$packageName/com.contextreply.app.ProTxtAccessibilityService")
+    }
+
+    // Worker call failed, timed out, or produced no usable reply — drop the loading
+    // placeholder instead of leaving it stuck. Clearing pendingBubbles too matters here:
+    // otherwise the unlock/send/call-end repost mechanisms would resurrect this same
+    // dead placeholder later, since they have no way to know the worker job never finished.
+    private fun cancelStuckBubble(convKey: String, notifId: Int) {
+        activeBubbles.remove(convKey)
+        pendingBubbles.remove(convKey)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
     }
 
     // Android can't render a bubble over the lock screen — a bubble-eligible notification
