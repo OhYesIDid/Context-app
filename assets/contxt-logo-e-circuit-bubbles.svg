@@ -11,13 +11,15 @@
     </clipPath>
 
     <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="60"/></filter>
-    <filter id="traceGlow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="haze"/>
-      <feMerge><feMergeNode in="haze"/><feMergeNode in="haze"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="traceGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="halo"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="body"/>
+      <feMerge><feMergeNode in="halo"/><feMergeNode in="halo"/><feMergeNode in="body"/></feMerge>
     </filter>
-    <filter id="nodeGlow" x="-250%" y="-250%" width="600%" height="600%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="haze"/>
-      <feMerge><feMergeNode in="haze"/><feMergeNode in="haze"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="nodeGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="halo"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="body"/>
+      <feMerge><feMergeNode in="halo"/><feMergeNode in="halo"/><feMergeNode in="body"/></feMerge>
     </filter>
   </defs>
 
