@@ -4,6 +4,8 @@ import android.app.ActivityOptions
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -112,6 +114,19 @@ class ReplySendReceiver : BroadcastReceiver() {
             }
             return
         }
+
+        if (intent.action == ProTxtBgService.ACTION_COPY) {
+            val replyText = intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT) ?: return
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("suggested reply", replyText))
+            val intentType = intent.getStringExtra(ProTxtBgService.EXTRA_INTENT)
+            if (convKey != null) {
+                StyleEditQueue.enqueue(context, replyText, replyText, convKey, intentType)
+                ContactMemory.saveLastSent(context, convKey, replyText)
+            }
+            return
+        }
+
         if (intent.action != ProTxtBgService.ACTION_SEND) return
 
         // EXTRA_ORIGINAL_SUGGESTION carries the AI's suggestion before any user edit (set by

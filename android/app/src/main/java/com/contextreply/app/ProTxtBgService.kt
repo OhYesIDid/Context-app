@@ -46,6 +46,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val CHANNEL_ID = "contextreply_suggestions"
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
+        const val ACTION_COPY = "com.contxt.app.ACTION_COPY_REPLY"
         const val ACTION_MARK_READ = "com.contxt.app.ACTION_MARK_READ"
         const val ACTION_RETRY = "com.contxt.app.ACTION_RETRY_REPLY"
         const val EXTRA_REPLY_TEXT = "reply_text"
@@ -1153,14 +1154,15 @@ class ProTxtBgService : NotificationListenerService() {
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
         if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
 
-        val dismissIntent = Intent(this, ReplySendReceiver::class.java).apply {
-            action = ACTION_DISMISS
+        val copyIntent = Intent(this, ReplySendReceiver::class.java).apply {
+            action = ACTION_COPY
             putExtra(EXTRA_NOTIF_ID, notifId)
             putExtra(EXTRA_CONV_KEY, convKey)
             putExtra(EXTRA_REPLY_TEXT, replyText)
+            if (intent != null) putExtra(EXTRA_INTENT, intent)
         }
-        val dismissPi = PendingIntent.getBroadcast(
-            this, notifId + 1, dismissIntent,
+        val copyPi = PendingIntent.getBroadcast(
+            this, notifId + 1, copyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -1185,13 +1187,26 @@ class ProTxtBgService : NotificationListenerService() {
                 else -> key.take(30)
             }
         }
+
+        // Build expanded text: show all available tone variants so the user can read
+        // and choose from the shade without opening the bubble.
+        val bigText = buildString {
+            if (!formalText.isNullOrEmpty() || !briefText.isNullOrEmpty()) {
+                append("Casual: $replyText")
+                if (!formalText.isNullOrEmpty()) append("\nFormal: $formalText")
+                if (!briefText.isNullOrEmpty()) append("\nBrief: $briefText")
+            } else {
+                append(replyText)
+            }
+        }
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Suggested reply")
             .setContentText(replyText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(replyText))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
+            .addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
             .addAction(sendAction)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
