@@ -39,19 +39,19 @@
     <path d="M 746 462 L 902 462"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-LEFT: amber — down then bend left -->
-    <path d="M 356 620 L 356 722 L 222 722"
+    <!-- BOTTOM-LEFT: amber — down then smooth curve left -->
+    <path d="M 356 620 L 356 682 Q 356 722 316 722 L 222 722"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- BOTTOM-RIGHT: amber — down then bend right -->
-    <path d="M 660 620 L 660 722 L 800 722"
+    <!-- BOTTOM-RIGHT: amber — down then smooth curve right -->
+    <path d="M 660 620 L 660 682 Q 660 722 700 722 L 800 722"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- Speech bubble: stroke-only gradient, tail left of centre -->
     <path d="M 278 408 Q 278 305 372 305 L 652 305 Q 746 305 746 408
              L 746 527 Q 746 620 652 620 L 458 620 L 424 682 L 404 620
              L 372 620 Q 278 620 278 527 Z"
-          fill="none" stroke="url(#bubbleGrad)" stroke-width="20" stroke-linejoin="round"/>
+          fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
 
     <!-- Solid filled endpoint circles -->
     <circle cx="200" cy="242" r="30" fill="#f59e0b"/>
