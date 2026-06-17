@@ -4,6 +4,7 @@
     "slug": "context-reply",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/contxt-logo-g-minimal-circuit.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
@@ -12,7 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0f0f0f"
+        "foregroundImage": "./assets/contxt-logo-g-minimal-circuit.png",
+        "backgroundColor": "#12102a"
       },
       "package": "com.contextreply.app"
     },
