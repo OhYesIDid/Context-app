@@ -6,9 +6,40 @@
 A mobile app (React Native + Expo) that suggests context-aware AI replies to incoming messages. It detects message intent (ETA, availability, general) and uses the Claude API + Google Calendar + Google Maps to generate smart replies.
 
 ## Current state
-- Expo SDK 52, managed workflow, React Native 0.76.5, New Architecture enabled
-- Single screen app (`App.tsx`) — user pastes a message, taps "Suggest Reply", gets one AI-generated reply
-- Stack: Expo + TypeScript + Claude API + Google Calendar API + Google Maps API + expo-clipboard
+
+### What's been built (Sprint 1 PoC — complete)
+- Expo SDK 52, managed workflow (no prebuild yet), React Native 0.76.5, New Architecture enabled
+- Stack: TypeScript + Claude API (`claude-sonnet-4-20250514`) + Google Calendar API + Google Maps API + `expo-clipboard`
+- **Single screen** (`App.tsx`): user pastes a message → detects intent → fetches real context → Claude drafts a reply → user copies it
+
+### Code structure
+```
+App.tsx                          — single screen UI (dark theme, indigo accent #6366f1)
+src/
+  services/
+    claude.ts                    — Claude API call (15s timeout, abort controller, prompt injection protection via XML delimiters)
+    googleCalendar.ts            — Google Calendar free/busy fetch
+    googleMaps.ts                — Google Maps distance/ETA fetch
+  types/index.ts                 — Intent, EtaData, AvailabilityData, SuggestReplyInput
+  utils/intentDetector.ts        — keyword-based intent classifier (eta | availability | other)
+assets/                          — logo concepts (SVG): thread-bars, reply-arc, glass, wordmark
+```
+
+### Key implementation decisions already in code
+- API key via `EXPO_PUBLIC_CLAUDE_API_KEY` env var (see `.env.example`)
+- Prompt injection guard: user message wrapped in `<message>` XML tags so Claude ignores any instructions inside it
+- 15 000 ms request timeout with `AbortController`
+- App title in UI is "ContextReply" (name not finalised — see candidates below)
+- No native extensions yet — next step is `npx expo prebuild` to unlock Android/iOS phases
+
+### What's next (in priority order)
+1. `npx expo prebuild` — generates `/android` and `/ios` native folders (required for overlay bubble)
+2. Android NotificationListenerService
+3. Android floating overlay bubble
+4. iOS notification reply action
+5. iOS Share Extension
+6. Cloudflare Worker proxy (move API key off device)
+7. Core app refactor (settings hub, 3-tone replies, history)
 
 ## App name candidates
 Leading options (all checked for availability):
