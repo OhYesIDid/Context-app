@@ -22,6 +22,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             .edit()
             .putBoolean("skip_group_messages", skip)
             .apply()
+        if (skip) ProTxtBgService.getInstance()?.dismissAllGroupBubbles()
     }
 
     @ReactMethod

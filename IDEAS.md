@@ -42,7 +42,9 @@ Features already live in the codebase — kept here for context.
 - **Calendar enrichment** — Google Calendar free/busy checked for availability replies
 - **Gmail bookings** — reservation lookup for travel/restaurant questions
 - **Show all buffered messages in the bubble** — `arrivalBuffer` collects every message that arrives during the debounce window; on fire, all buffered texts are deduped and joined with `\n` into both the worker context and the bubble's quote section (`ProTxtBgService.kt:357,407-411`). Capped at 3 visible lines before truncating.
-- **Error state + retry on failed reply generation** — a failed/timed-out worker call now shows a "Couldn't generate a reply" bubble with Retry/Dismiss actions instead of silently disappearing. Retry re-runs the same worker call via the cached `PendingBubble` (`ACTION_RETRY`, `ProTxtBgService.kt` `postErrorNotification`/`retry`/`runWorkerJob`). The general "regenerate any suggestion, even a good one" idea below is still unbuilt, but could now reuse this same `runWorkerJob` plumbing.
+- **Error state + retry on failed reply generation** — a failed/timed-out worker call now shows a "Couldn't generate a reply" bubble with Retry/Dismiss actions instead of silently disappearing. Retry re-runs the same worker call via the cached `PendingBubble` (`ACTION_RETRY`, `ProTxtBgService.kt` `postErrorNotification`/`retry`/`runWorkerJob`).
+- **Regenerate on the bubble** — circular arrow button in `BubbleSuggestionActivity` lets the user re-run the worker call on any suggestion, not just failed ones.
+- **Live-apply group message toggle** — toggling skip_group_messages on immediately calls `dismissAllGroupBubbles()` on the service, cancelling all active/pending group bubbles. Group convKeys tracked in `groupConvKeys` set since groups often use the group name (not a "group:" prefix) as the convKey.
 
 ---
 
@@ -52,9 +54,6 @@ High confidence, clear implementation path.
 
 ### Notification-shade suggestion
 Show the reply text inside the notification itself — not just the bubble. User reads and copies directly from the shade without tapping anything. Zero-friction path for people who don't want bubbles. Use `BigTextStyle` or a custom notification layout.
-
-### Regenerate action on the bubble
-Add a `🔄 Try again` notification action button alongside Send / Dismiss. Currently a bad suggestion means the user has to ignore it. A retry fires a new worker call without opening the app.
 
 ### Adaptive debounce window
 `DEBOUNCE_MS` (`ProTxtBgService.kt`) is a fixed 2.5s wait for every message before the worker call fires — collapses rapid-fire bursts into one API call/suggestion instead of one per message, but the fixed window is a guess: too short to catch slower double-texters, too long for someone who only ever sends one message at a time. Possible signals to make it adaptive instead, cheapest first:
@@ -75,9 +74,6 @@ One-tap canned replies for universal scenarios — running late, driving, in a m
 
 ### Proactive follow-up
 If a message arrived and the user hasn't replied in X hours, surface a reminder notification with a pre-generated reply ready to send. Opt-in per contact. High value for people who read and forget.
-
-### Live-apply group message toggle
-When `skip_group_messages` is switched on, immediately cancel any group bubbles currently showing in `activeBubbles` (cancel notification + remove from map). When switched off, no immediate action needed — the next group message will trigger normally. Toggle is set via `ProTxtSettingsModule.kt`; the dismiss logic mirrors what `ReplySendReceiver` already does on ACTION_DISMISS, so the main work is wiring the setting change event from the RN layer into a call on the `ProTxtBgService` instance.
 
 ### Calendar event — include contact as attendee
 When the user taps the "Add to Calendar" action button, pre-populate the sender as an attendee and add them to the event description. Implementation: pass `EXTRA_PERSON_NAME` / `EXTRA_PERSON_EMAIL` from `BubbleSuggestionActivity.postActionFollowUp` (resolved from `contactMatchJson` or `DeviceContactsResolver`); in `ActionReceiver.ACTION_CALENDAR_ADD`, set `CalendarContract.Attendees.ATTENDEE_EMAIL` on the INSERT intent if an email is available, otherwise append "with [Name]" to `CalendarContract.Events.DESCRIPTION`. No new permissions needed — the insert intent already opens the calendar app for confirmation.

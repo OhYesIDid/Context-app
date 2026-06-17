@@ -163,6 +163,10 @@ class ProTxtBgService : NotificationListenerService() {
     // Tracks convKeys that currently have a live bubble so we don't stack duplicates.
     // Cleared by ReplySendReceiver on send or dismiss.
     val activeBubbles = ConcurrentHashMap.newKeySet<String>()
+    // Tracks which convKeys belong to group conversations so we can bulk-dismiss them
+    // when skip_group_messages is toggled on. Groups often use the group name as convKey
+    // rather than a "group:" prefix, so we can't identify them by string alone.
+    val groupConvKeys = ConcurrentHashMap.newKeySet<String>()
     // Maps convKey → most recent WhatsApp/Telegram sbn.id for that conversation.
     // Stable per-conversation even when the notification title changes (e.g. "You" on outbound).
     val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
@@ -192,6 +196,21 @@ class ProTxtBgService : NotificationListenerService() {
         override fun onReceive(context: Context, intent: Intent) {
             if (pendingBubbles.isEmpty()) return
             Handler(Looper.getMainLooper()).postDelayed({ repostPendingBubbles() }, 600L)
+        }
+    }
+
+    internal fun dismissAllGroupBubbles() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        for (convKey in groupConvKeys.toList()) {
+            if (!activeBubbles.contains(convKey) && !pendingBubbles.containsKey(convKey)) continue
+            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+            nm.cancel(notifId)
+            activeBubbles.remove(convKey)
+            arrivalBuffer.remove(convKey)
+            pendingBubbles.remove(convKey)
+            pendingJobs[convKey]?.cancel(false)
+            pendingJobs.remove(convKey)
+            NotificationStore.getInstance(this).markReplied(convKey)
         }
     }
 
@@ -326,6 +345,7 @@ class ProTxtBgService : NotificationListenerService() {
 
         val convKey = buildConversationKey(sbn, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
+        if (isGroup) groupConvKeys.add(convKey)
 
         // ── Accumulate messages in local store ───────────────────────────────
         // Extract the structured thread from this notification's bundle.
