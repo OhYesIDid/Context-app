@@ -41,12 +41,8 @@ assets/                          — logo concepts (SVG): thread-bars, reply-arc
 6. Cloudflare Worker proxy (move API key off device)
 7. Core app refactor (settings hub, 3-tone replies, history)
 
-## App name candidates
-Leading options (all checked for availability):
-- **Promptly** — crowded (multiple apps + domains taken)
-- **Copy That** — clear, plays on clipboard copy feature
-- **Witxt** — clear, wit + text, short and brandable
-- **Contextual** — clear as an app name, `contextual.app` domain for sale
+## App name
+**ConTxt** — confirmed. Domain: www.get-contxt.app
 
 ---
 

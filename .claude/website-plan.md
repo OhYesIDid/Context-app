@@ -14,10 +14,9 @@ No app store yet → waitlist is the only conversion action.
 
 ---
 
-## Domain
-Leading candidate: `witxt.app` — short, brandable, memorable
-Fallback: `contextual.app` (domain for sale, more descriptive)
-Decide name before building → name goes everywhere on the site.
+## Name & Domain
+- **App name:** ConTxt
+- **Domain:** www.get-contxt.app
 
 ---
 
@@ -35,12 +34,12 @@ Single page (no multi-page navigation needed pre-launch):
 
 ### 1. Hero
 - **Headline:** "Reply instantly. Without switching apps."
-- **Subhead:** "ContextReply reads your ETA, checks your calendar, and drafts the right reply — delivered as a floating bubble over any messaging app."
+- **Subhead:** "ConTxt reads your ETA, checks your calendar, and drafts the right reply — delivered as a floating bubble over any app."
 - **CTA:** Email input + "Join the waitlist" button
 - **Visual:** Phone mockup showing the bubble bottom sheet (Brief / Casual / Formal tabs + suggested reply)
 
 ### 2. How it works (3 steps)
-1. A message arrives — ContextReply reads it silently in the background
+1. A message arrives — ConTxt reads it silently in the background
 2. It checks your real context (Maps ETA, Calendar, Gmail bookings)
 3. A reply suggestion appears as a floating bubble — tap to copy or send
 
@@ -94,7 +93,7 @@ Launch email: single email when internal test track opens on Play Store.
 ---
 
 ## Content to Write
-- [ ] Final app name confirmed → update all copy
+- [x] App name: **ConTxt**, domain: **www.get-contxt.app**
 - [ ] Hero headline / subhead (2–3 variants to A/B)
 - [ ] Privacy policy page (required before Play Store submission — covers NLS, Accessibility, Google data)
 - [ ] Waitlist confirmation email copy
@@ -102,8 +101,8 @@ Launch email: single email when internal test track opens on Play Store.
 ---
 
 ## Launch Checklist
-- [ ] Name decided
-- [ ] Domain purchased
+- [x] Name: **ConTxt**
+- [x] Domain: **www.get-contxt.app**
 - [ ] Site built and deployed to Cloudflare Pages
 - [ ] Waitlist Worker endpoint live
 - [ ] Privacy policy page live (needed for Play Store listing)
