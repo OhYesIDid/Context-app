@@ -673,24 +673,81 @@ class ProTxtBgService : NotificationListenerService() {
             }
             return
         }
-        if (reason != REASON_APP_CANCEL) return
 
-        lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
+        // Dismiss logic by reason code:
+        //
+        // REASON_CANCEL (2) / REASON_CANCEL_ALL (3): user explicitly swiped the WhatsApp
+        //   notification away in the shade — deliberate acknowledgement, dismiss the bubble.
+        //
+        // REASON_CLICK (1): user tapped the notification to open the app — they are now
+        //   reading the message but haven't replied yet. Keep the bubble alive; it's the
+        //   only surface that lets them send a reply without switching back to WhatsApp.
+        //   Reply detection happens in onNotificationPosted Gate 6 (outbound MessagingStyle
+        //   update) or via AccessibilityService send-button detection.
+        //
+        // REASON_APP_CANCEL (8): the messaging app cancelled the notification programmatically
+        //   (typically because the conversation came into focus inside the app). Same as
+        //   REASON_CLICK — user is in the app reading, not necessarily replying. Keep bubble.
+        //   A 10-minute auto-dismiss timeout prevents zombie bubbles if we never detect a reply.
+        //
+        // All other codes (REASON_APP_CANCEL_ALL, REASON_SNOOZED, etc.): conservative default
+        //   is to dismiss so we don't accumulate stale bubbles on unusual lifecycle events.
 
         val extras = sbn.notification?.extras ?: return
-
-        // Cancel our suggestion bubble whenever the messaging app dismisses the conversation
-        // notification (user opened the app, read the message, or replied directly).
-        // Guard: only act on conversations we're tracking to avoid reacting to read receipts,
-        // group summaries, or other notifications we never processed.
         val convKey = buildConversationKey(sbn, extras)
-        if (activeBubbles.contains(convKey) || pendingJobs.containsKey(convKey)) {
-            val notifId = convKey.hashCode().and(0x7FFFFFFF)
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
-            activeBubbles.remove(convKey)
-            arrivalBuffer.remove(convKey)
-            pendingJobs[convKey]?.cancel(false)
-            pendingJobs.remove(convKey)
+        val isTracked = activeBubbles.contains(convKey) || pendingJobs.containsKey(convKey)
+
+        when (reason) {
+            REASON_CLICK, REASON_APP_CANCEL -> {
+                // User opened the messaging app — keep the ConTxt bubble notification alive
+                // (don't cancel it) so the suggested reply remains accessible without
+                // switching back. Remove from activeBubbles so that a new incoming message
+                // in the same conversation is treated as fresh and generates an updated
+                // suggestion rather than being skipped by the active-bubble guard.
+                lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
+                if (isTracked) {
+                    activeBubbles.remove(convKey)
+                    // Schedule auto-dismiss keyed on pendingBubbles (not activeBubbles,
+                    // which we just cleared) as the zombie-bubble safety net. Gate 6 and
+                    // send-button detection clear pendingBubbles before this fires when a
+                    // reply is confirmed.
+                    scheduler.schedule({
+                        if (pendingBubbles.containsKey(convKey)) {
+                            if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
+                                "auto-dismiss after timeout: $convKey")
+                            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                            activeBubbles.remove(convKey)
+                            arrivalBuffer.remove(convKey)
+                            pendingBubbles.remove(convKey)
+                        }
+                    }, 10L, TimeUnit.MINUTES)
+                }
+            }
+            REASON_CANCEL, REASON_CANCEL_ALL -> {
+                // User swiped the notification away in the shade — explicit dismissal.
+                // Dismiss our bubble too.
+                if (isTracked) {
+                    val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                    activeBubbles.remove(convKey)
+                    arrivalBuffer.remove(convKey)
+                    pendingJobs[convKey]?.cancel(false)
+                    pendingJobs.remove(convKey)
+                }
+            }
+            else -> {
+                // REASON_APP_CANCEL_ALL (9), REASON_SNOOZED (18), REASON_TIMEOUT (19), etc.
+                // Conservatively dismiss to avoid stale bubbles on unusual lifecycle events.
+                if (isTracked) {
+                    val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                    activeBubbles.remove(convKey)
+                    arrivalBuffer.remove(convKey)
+                    pendingJobs[convKey]?.cancel(false)
+                    pendingJobs.remove(convKey)
+                }
+            }
         }
     }
 

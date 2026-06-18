@@ -77,6 +77,12 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 if (!targetVisible) {
                     activePackage = null
                     dismissOverlay()
+                    // Messaging app left the screen — bring any pending ConTxt bubble back
+                    // into view so the user sees it in the bubble column without unlocking.
+                    if (ProTxtBgService.pendingBubbles.isNotEmpty())
+                        mainHandler.postDelayed({
+                            ProTxtBgService.getInstance()?.repostPendingBubbles()
+                        }, 400L)
                 } else if (overlayView != null) {
                     updateOverlayPosition()
                 }
@@ -101,14 +107,54 @@ class ProTxtAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
 
         when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                if (pkg !in ProTxtBgService.TARGET_PACKAGES) return
+                // Detect when the user presses the send button inside the messaging app.
+                // This is the most real-time signal that the user replied via the original
+                // app rather than via ConTxt. We dismiss our bubble immediately on this event
+                // rather than waiting for onNotificationPosted Gate 6.
+                //
+                // Stable send-button resource IDs (confirmed across WhatsApp versions):
+                //   WhatsApp / WhatsApp Business: com.whatsapp:id/send
+                //   Telegram: Telegram sends on IME action (no dedicated send button), so
+                //     we cannot detect it this way — Gate 6 handles Telegram instead.
+                val source = event.source ?: return
+                val viewId = source.viewIdResourceName
+                @Suppress("DEPRECATION") source.recycle()
+                val sendButtonId = when (pkg) {
+                    "com.whatsapp"    -> "com.whatsapp:id/send"
+                    "com.whatsapp.w4b" -> "com.whatsapp.w4b:id/send"
+                    else -> null
+                }
+                if (viewId != null && viewId == sendButtonId) {
+                    if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
+                        "send button clicked in $pkg — dismissing bubble")
+                    val prefs = Prefs.main(this)
+                    val convKey = prefs.getString("last_suggestion_conv_$pkg", null)
+                    if (convKey != null) {
+                        val notifId = convKey.hashCode().and(0x7FFFFFFF)
+                        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+                        ProTxtBgService.getInstance()?.let { svc ->
+                            svc.activeBubbles.remove(convKey)
+                            svc.arrivalBuffer.remove(convKey)
+                            ProTxtBgService.pendingBubbles.remove(convKey)
+                        }
+                        NotificationStore.getInstance(this).markReplied(convKey)
+                        // Try to capture what was in the input field as the sent text.
+                        // WhatsApp may clear the field before this event fires, but attempt
+                        // it opportunistically — ContactMemory.saveLastSent is a no-op on blank.
+                        captureInputFieldText(pkg, convKey)
+                    }
+                }
+            }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg !in ProTxtBgService.TARGET_PACKAGES) return
-                if (overlayView != null) {
-                    // Dismiss if user navigated away from the correct conversation
-                    if (!isInCorrectConversation(pkg)) dismissOverlay()
-                } else {
+                if (overlayView == null) {
                     scheduleReshow(pkg)
                 }
+                // Don't dismiss on window state changes within the app — the accessibility
+                // text search is flaky (WhatsApp fires events during typing indicators etc.)
+                // and causes the overlay to flash. TYPE_WINDOWS_CHANGED handles app-exit dismissal.
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
                 val node = event.source ?: return
@@ -134,28 +180,59 @@ class ProTxtAccessibilityService : AccessibilityService() {
         }
     }
 
-    // Returns true if the contact name from the pending suggestion is visible in the
-    // action bar of the messaging app window — i.e. the user is in the right conversation.
-    // For group: / id: keys we can't verify so we allow the overlay through.
+    // Returns true if the user is currently in the conversation that triggered the pending
+    // suggestion. Uses findAccessibilityNodeInfosByText (system API, case-insensitive) rather
+    // than manual tree traversal — more reliable across apps and device skins.
+    // Returns false (don't show/keep overlay) when we can positively confirm a mismatch.
+    // Returns false if windows / root unavailable — scheduleReshow retries handle timing.
+    // Stable resource IDs for the conversation title node in each messaging app.
+    // These nodes only exist inside an open conversation — not on the chat list — so a hit
+    // means we are definitely in a conversation view (no false positives from list entries).
+    private val CONVERSATION_TITLE_VIEW_ID = mapOf(
+        "com.whatsapp"                   to "com.whatsapp:id/conversation_contact_name",
+        "com.whatsapp.w4b"               to "com.whatsapp.w4b:id/conversation_contact_name",
+        "org.telegram.messenger"         to "org.telegram.messenger:id/name_text",
+        "org.telegram.messenger.web"     to "org.telegram.messenger.web:id/name_text",
+    )
+
+    // Returns true when the user is inside the specific conversation that has the pending
+    // suggestion. Uses a stable per-app view-ID lookup rather than text search — the view ID
+    // only exists inside a conversation screen, eliminating false positives from the chat list,
+    // and is populated before the full accessibility tree is ready (no rebuild flakiness).
+    // Falls back to a top-bar text search for apps without a known view ID.
     private fun isInCorrectConversation(packageName: String): Boolean {
         val prefs = Prefs.main(this)
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return false
-        val contactRaw = convKey.substringAfter(":")
+        val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
+        if (age > MAX_AGE_MS) return false
+
+        val contactRaw = convKey.substringAfter(":").trim()
         if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
-        val contact = contactRaw.lowercase()
+        val contact = ProTxtBgService.stripAppPrefix(contactRaw).trim().lowercase()
+        if (contact.isEmpty()) return true
 
-        // Find the application window for the messaging app
-        var root: AccessibilityNodeInfo? = null
-        for (w in windows ?: return false) {
-            if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
-            val r = w.root ?: continue
-            if (r.packageName?.toString() == packageName) { root = r; break }
-            @Suppress("DEPRECATION") r.recycle()
+        val root = rootInActiveWindow ?: return false
+        if (root.packageName?.toString() != packageName) {
+            @Suppress("DEPRECATION") root.recycle()
+            return false
         }
-        root ?: return false
 
-        // Search only the action bar area (top 20% of screen) for the contact name
-        val topCutoff = (resources.displayMetrics.heightPixels * 0.20).toInt()
+        val viewId = CONVERSATION_TITLE_VIEW_ID[packageName]
+        if (viewId != null) {
+            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (nodes.isEmpty()) {
+                @Suppress("DEPRECATION") root.recycle()
+                return false  // Node absent → not inside a conversation view
+            }
+            val screenName = nodes[0].text?.toString()?.trim()?.lowercase() ?: ""
+            nodes.forEach { @Suppress("DEPRECATION") it.recycle() }
+            @Suppress("DEPRECATION") root.recycle()
+            return screenName.contains(contact) || contact.contains(screenName)
+        }
+
+        // Fallback for apps without a known stable view ID: restrict text search to the
+        // top 30% of the screen (action bar only) to avoid chat-list false positives.
+        val topCutoff = (resources.displayMetrics.heightPixels * 0.30).toInt()
         val found = findTextInTopBar(root, contact, topCutoff)
         @Suppress("DEPRECATION") root.recycle()
         return found
@@ -191,7 +268,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
             when {
                 key.startsWith("group:") -> "Group chat"
                 key.startsWith("id:") -> ""
-                else -> key.take(40)
+                else -> ProTxtBgService.stripAppPrefix(key).take(40)
             }
         }
 
@@ -212,23 +289,19 @@ class ProTxtAccessibilityService : AccessibilityService() {
     // Schedules an attempt to show the overlay for `pkg`. Uses `isInCorrectConversation` as
     // the sole gate — deliberately does NOT guard on `activePackage` because intermediate
     // TYPE_WINDOWS_CHANGED events during a gesture transition can clear it before the callback fires.
-    // Retries once after +500 ms in case the accessibility tree isn't populated yet.
-    private fun scheduleReshow(pkg: String) {
+    // Retries with increasing delays — the accessibility tree may not be populated immediately.
+    private fun scheduleReshow(pkg: String, attempt: Int = 0) {
         activePackage = pkg
+        val delay = when (attempt) { 0 -> 300L; 1 -> 500L; 2 -> 700L; else -> 1000L }
         mainHandler.postDelayed({
             if (overlayView != null) return@postDelayed
             if (isInCorrectConversation(pkg)) {
                 activePackage = pkg
                 maybeShowOverlay(pkg)
-            } else {
-                mainHandler.postDelayed({
-                    if (overlayView == null && isInCorrectConversation(pkg)) {
-                        activePackage = pkg
-                        maybeShowOverlay(pkg)
-                    }
-                }, 500)
+            } else if (attempt < 3) {
+                scheduleReshow(pkg, attempt + 1)
             }
-        }, 300)
+        }, delay)
     }
 
     private data class OverlayColors(
@@ -442,6 +515,25 @@ class ProTxtAccessibilityService : AccessibilityService() {
             focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
         }
         @Suppress("DEPRECATION") focused.recycle()
+    }
+
+    // Opportunistically reads the input field text just before (or just after) the user
+    // taps send in the messaging app. WhatsApp clears the field on send, so this may
+    // return empty — that's fine, saveLastSent is a no-op on blank.
+    private fun captureInputFieldText(packageName: String, convKey: String) {
+        val inputViewId = when (packageName) {
+            "com.whatsapp"     -> "com.whatsapp:id/entry"
+            "com.whatsapp.w4b" -> "com.whatsapp.w4b:id/entry"
+            else -> return
+        }
+        val root = rootInActiveWindow ?: return
+        val nodes = root.findAccessibilityNodeInfosByViewId(inputViewId)
+        val text = nodes.firstOrNull()?.text?.toString()
+        nodes.forEach { @Suppress("DEPRECATION") it.recycle() }
+        @Suppress("DEPRECATION") root.recycle()
+        if (!text.isNullOrBlank()) {
+            ContactMemory.saveLastSent(this, convKey, text)
+        }
     }
 
     private fun recordOverlaySend(packageName: String, replyText: String, tone: String) {
