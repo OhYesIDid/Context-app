@@ -23,27 +23,27 @@
   <g clip-path="url(#iconClip)">
 
     <!-- TOP-LEFT amber: up → left → up → right → up → left → top edge -->
-    <path d="M 432 314 L 432 240 L 300 240 L 300 150 L 410 150 L 410 60 L 340 60 L 340 0"
+    <path d="M 432 314 L 432 260 L 280 260 L 280 180 L 370 180 L 370 90 L 290 90 L 290 0"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- TOP-RIGHT sky-blue: up → right → up → left → top edge -->
-    <path d="M 592 314 L 592 210 L 700 210 L 700 110 L 620 110 L 620 0"
+    <!-- TOP-RIGHT sky-blue: up → right → up → left → up → right → top edge -->
+    <path d="M 592 314 L 592 240 L 720 240 L 720 160 L 650 160 L 650 80 L 750 80 L 750 0"
           fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- LEFT lavender: left → up → left → down → left edge -->
-    <path d="M 218 512 L 120 512 L 120 390 L 40 390 L 40 560 L 0 560"
+    <path d="M 218 512 L 150 512 L 150 380 L 80 380 L 80 620 L 0 620"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- RIGHT emerald: right → up → right → down → right edge -->
-    <path d="M 806 512 L 900 512 L 900 390 L 980 390 L 980 640 L 1024 640"
+    <path d="M 806 512 L 880 512 L 880 360 L 960 360 L 960 680 L 1024 680"
           fill="none" stroke="#34d399" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- BOTTOM-LEFT pink: down → left → down → right → bottom edge -->
-    <path d="M 432 710 L 432 810 L 290 810 L 290 930 L 400 930 L 400 1024"
+    <path d="M 432 710 L 432 800 L 300 800 L 300 920 L 420 920 L 420 1024"
           fill="none" stroke="#f472b6" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- BOTTOM-RIGHT violet: down → right → down → left → bottom edge -->
-    <path d="M 592 710 L 592 820 L 730 820 L 730 920 L 630 920 L 630 1024"
+    <path d="M 592 710 L 592 790 L 740 790 L 740 900 L 620 900 L 620 1024"
           fill="none" stroke="#a78bfa" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- Speech bubble: white stroke, tail at bottom-right corner -->
