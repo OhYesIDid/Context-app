@@ -42,13 +42,13 @@
     <path d="M 360 710 L 360 811 Q 360 854 317 854 L 138 854"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-RIGHT amber: mirror of bottom-left -->
-    <path d="M 664 710 L 664 811 Q 664 854 707 854 L 886 854"
+    <!-- BOTTOM-RIGHT amber: shifted left so it clears the tail base -->
+    <path d="M 575 710 L 575 811 Q 575 854 618 854 L 850 854"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- Speech bubble: white stroke, centred tail, fully symmetric -->
+    <!-- Speech bubble: white stroke, tail at bottom-right corner -->
     <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
-             L 806 594 Q 806 710 690 710 L 538 710 L 512 790 L 486 710
+             L 806 594 Q 806 710 690 710 L 748 792 L 638 710
              L 334 710 Q 218 710 218 594 Z"
           fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
 
@@ -58,7 +58,7 @@
     <circle cx="48"  cy="512" r="30" fill="#c4b5fd"/>   <!-- left      512−48=464  -->
     <circle cx="976" cy="512" r="30" fill="#c4b5fd"/>   <!-- right     976−512=464 ✓ -->
     <circle cx="108" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-left  512−108=404 -->
-    <circle cx="916" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-right 916−512=404 ✓ -->
+    <circle cx="880" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-right, shifted to match new trace -->
 
   </g>
 </svg>
