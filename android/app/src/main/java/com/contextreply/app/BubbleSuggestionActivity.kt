@@ -12,6 +12,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.view.Gravity
@@ -1080,10 +1082,18 @@ class BubbleSuggestionActivity : Activity() {
             if (replyText != null) putExtra(ProTxtBgService.EXTRA_REPLY_TEXT, replyText)
             if (remoteInputKey != null) putExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
             putExtra(ProTxtBgService.EXTRA_NOTIF_ID, notifId)
+            putExtra(ProTxtBgService.EXTRA_SKIP_CANCEL, true)
             if (convKey != null) putExtra(ProTxtBgService.EXTRA_CONV_KEY, convKey)
             if (intentExtra != null) putExtra(ProTxtBgService.EXTRA_INTENT, intentExtra)
             if (originalSuggestion != null) putExtra(ProTxtBgService.EXTRA_ORIGINAL_SUGGESTION, originalSuggestion)
             if (toneSelected != null) putExtra(ProTxtBgService.EXTRA_TONE_SELECTED, toneSelected)
         })
+        // Defer the cancel to the next Looper tick so finish() is always called first.
+        // Cancelling the notification while the bubble is still expanded sends it to the
+        // inactive overflow; deferring gives Android time to mark the activity as finishing.
+        if (notifId != -1) {
+            val nm = getSystemService(NotificationManager::class.java)
+            Handler(Looper.getMainLooper()).post { nm.cancel(notifId) }
+        }
     }
 }

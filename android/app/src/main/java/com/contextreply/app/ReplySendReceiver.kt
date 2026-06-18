@@ -69,7 +69,8 @@ class ReplySendReceiver : BroadcastReceiver() {
         }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (notifId != -1) nm.cancel(notifId)
+        val skipCancel = intent.getBooleanExtra(ProTxtBgService.EXTRA_SKIP_CANCEL, false)
+        if (notifId != -1 && !skipCancel) nm.cancel(notifId)
 
         // On both Send and Dismiss: clear the stored thread and active bubble tracking
         // so the next message from this contact starts fresh.
