@@ -200,9 +200,13 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     internal fun dismissAllGroupBubbles() {
+        // Reload from SharedPrefs in case the service restarted since group messages arrived
+        val prefs = Prefs.main(this)
+        val arr = try { JSONArray(prefs.getString("group_conv_keys", "[]") ?: "[]") } catch (_: Exception) { JSONArray() }
+        for (i in 0 until arr.length()) groupConvKeys.add(arr.optString(i))
+
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         for (convKey in groupConvKeys.toList()) {
-            if (!activeBubbles.contains(convKey) && !pendingBubbles.containsKey(convKey)) continue
             val notifId = convKey.hashCode().and(0x7FFFFFFF)
             nm.cancel(notifId)
             activeBubbles.remove(convKey)
@@ -212,6 +216,9 @@ class ProTxtBgService : NotificationListenerService() {
             pendingJobs.remove(convKey)
             NotificationStore.getInstance(this).markReplied(convKey)
         }
+        // Clear persisted set — cancelled bubbles no longer need tracking
+        prefs.edit().putString("group_conv_keys", "[]").apply()
+        groupConvKeys.clear()
     }
 
     internal fun repostPendingBubbles() {
@@ -220,13 +227,13 @@ class ProTxtBgService : NotificationListenerService() {
                 postLoadingNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
-                    b.markAsReadPendingIntent,
+                    b.markAsReadPendingIntent, repost = true,
                 )
             } else if (b.replyText == ERROR_PLACEHOLDER) {
                 postErrorNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
-                    b.markAsReadPendingIntent,
+                    b.markAsReadPendingIntent, repost = true,
                 )
             } else {
                 val sa = b.suggestedActionJson?.let { try { JSONObject(it) } catch (_: Exception) { null } }
@@ -234,7 +241,7 @@ class ProTxtBgService : NotificationListenerService() {
                     b.replyText, b.formalText, b.briefText,
                     b.replyPendingIntent, b.remoteInputKey, b.notifId, b.convKey,
                     b.intent, b.openChatIntent, b.message, b.detectedIntents, sa,
-                    markAsReadPendingIntent = b.markAsReadPendingIntent,
+                    markAsReadPendingIntent = b.markAsReadPendingIntent, repost = true,
                 )
             }
         }
@@ -345,7 +352,14 @@ class ProTxtBgService : NotificationListenerService() {
 
         val convKey = buildConversationKey(sbn, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
-        if (isGroup) groupConvKeys.add(convKey)
+        if (isGroup) {
+            groupConvKeys.add(convKey)
+            val prefs = Prefs.main(this)
+            val arr = try { JSONArray(prefs.getString("group_conv_keys", "[]") ?: "[]") } catch (_: Exception) { JSONArray() }
+            var found = false
+            for (i in 0 until arr.length()) { if (arr.optString(i) == convKey) { found = true; break } }
+            if (!found) prefs.edit().putString("group_conv_keys", arr.put(convKey).toString()).apply()
+        }
 
         // ── Accumulate messages in local store ───────────────────────────────
         // Extract the structured thread from this notification's bundle.
@@ -976,6 +990,7 @@ class ProTxtBgService : NotificationListenerService() {
         message: String,
         detectedIntents: String,
         markAsReadPendingIntent: PendingIntent? = null,
+        repost: Boolean = false,
     ) {
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
         if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
@@ -997,12 +1012,13 @@ class ProTxtBgService : NotificationListenerService() {
                 else -> key.take(30)
             }
         }
+        val priority = if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Drafting reply…")
             .setContentText("Drafting reply…")
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(priority)
             .setGroup("contextreply_suggestions")
         BubbleHelper.attach(
             this, builder,
@@ -1036,6 +1052,7 @@ class ProTxtBgService : NotificationListenerService() {
         message: String,
         detectedIntents: String,
         markAsReadPendingIntent: PendingIntent? = null,
+        repost: Boolean = false,
     ) {
         ReplySendReceiver.pendingReplyIntents[notifId] = replyPendingIntent
         if (markAsReadPendingIntent != null) ReplySendReceiver.pendingMarkReadIntents[notifId] = markAsReadPendingIntent
@@ -1072,7 +1089,7 @@ class ProTxtBgService : NotificationListenerService() {
             .setContentText("Couldn't generate a reply")
             .addAction(android.R.drawable.ic_menu_revert, "Retry", retryPi)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPi)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setGroup("contextreply_suggestions")
         BubbleHelper.attach(
@@ -1156,6 +1173,7 @@ class ProTxtBgService : NotificationListenerService() {
         detectedIntents: String = "",
         suggestedAction: org.json.JSONObject? = null,
         markAsReadPendingIntent: PendingIntent? = null,
+        repost: Boolean = false,
     ) {
         val preferredTone = preferredToneForContact(convKey)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -1227,7 +1245,7 @@ class ProTxtBgService : NotificationListenerService() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
             .addAction(sendAction)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
