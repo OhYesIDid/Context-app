@@ -115,10 +115,6 @@ class ProTxtBgService : NotificationListenerService() {
             "org.thoughtcrime.securesms",
             "com.google.android.apps.messaging",
             "com.instagram.android",
-            "co.hinge.app",
-            "com.bumble.app",
-            "com.tinder",
-            "com.okcupid.okcupid",
         )
 
         // Dialer packages whose ongoing call notification removal signals call-end.
@@ -587,20 +583,21 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                 }
                 val nowInApp = ProTxtAccessibilityService.activePackage == packageName
-                // If we posted a loading bubble (!userInApp), we must always update it
-                // with the real reply — even if the user entered the app while the worker
-                // was running. Skipping postSuggestionNotification leaves the bubble
-                // stuck on the loading placeholder and the activity blank.
-                // If the user left the app after an in-app debounce (userInApp && !nowInApp),
-                // post a fresh bubble so the suggestion isn't silently dropped.
-                if (!userInApp || !nowInApp) {
-                    postSuggestionNotification(
-                        primary, formal, brief,
-                        replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
-                        openChatIntent, latestMessage, detectedIntentsStr,
-                        suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent
-                    )
-                }
+                // Always post the suggestion notification so it lands in pendingBubbles.
+                // If we posted a loading bubble (!userInApp), we must update it with the real
+                // reply — skipping postSuggestionNotification leaves it stuck on the loading
+                // placeholder.
+                // If the user was in the app the whole time (userInApp && nowInApp), post
+                // silently (repost=true → PRIORITY_DEFAULT, no heads-up) so the bubble is
+                // available the moment they leave the messaging app. Without this the suggestion
+                // is discarded and no bubble ever appears after they close WhatsApp/Telegram.
+                postSuggestionNotification(
+                    primary, formal, brief,
+                    replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
+                    openChatIntent, latestMessage, detectedIntentsStr,
+                    suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent,
+                    repost = userInApp && nowInApp,
+                )
                 if (nowInApp) {
                     // Also cache for the overlay when user is currently in the app
                     cacheSuggestion(packageName, convKey, primary, formal, brief, finalAction?.toString())
@@ -697,20 +694,37 @@ class ProTxtBgService : NotificationListenerService() {
         // values (e.g. 11, then group:1) across unrelated conversations, which cross-
         // contaminated the message buffer/thread store between them. Title-based key is
         // back; the same-name collision is a rarer, lower-impact issue than that.
-        // title must be checked before isGroup: Instagram has been observed posting two
-        // notifications for the same sbn.id ~100ms apart with isGroup flapping true->false
-        // while conversationTitle stays null. Checking isGroup first meant the first post
-        // keyed on "group:<sbnId>" and the second on the title, splitting one conversation
-        // into two convKeys/jobs/notifIds — the stray "group:" job's bubble never gets
-        // updated/cancelled and the title-keyed one races it, leaving things stuck.
+        // Key selection priority:
+        // 1. Group + conversationTitle: WhatsApp/Telegram set EXTRA_CONVERSATION_TITLE to the
+        //    actual group name (e.g. "Ski - Val d'isere") — stable, no sender suffix.
+        // 2. title: for individual chats this is "WhatsApp: ContactName" — unique per contact.
+        //    Also handles Instagram's isGroup-flapping case: both notifications from the same
+        //    sbn.id end up with the same title → same convKey → no split.
+        //    NOTE: Do NOT use conversationTitle for individuals — WhatsApp sets it to "WhatsApp"
+        //    (the lockscreen-privacy placeholder) for ALL individual chats, which collapses every
+        //    1:1 chat into the same convKey "com.whatsapp:WhatsApp".
+        // 3. Fallback to conversationTitle alone, then sbn.id-based keys.
         val key = when {
-            conversationTitle != null -> conversationTitle
+            isGroup && conversationTitle != null -> conversationTitle
             title != null -> title
+            conversationTitle != null -> conversationTitle
             isGroup -> "group:${sbn.id}"
             else -> "id:${sbn.id}"
         }
         if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:[hashed]  isGroup=$isGroup  sbnId=${sbn.id}")
         return "$packageName:$key"
+    }
+
+    // Strips "AppName: " prefixes that messaging apps prepend to contact names in their
+    // notification titles (e.g. WhatsApp uses "WhatsApp: Maya Hinge"). The app name is
+    // already implied by the source package, so we show only the bare contact name.
+    private fun stripAppPrefix(key: String): String {
+        val colonSpace = key.indexOf(": ")
+        if (colonSpace <= 0) return key
+        val prefix = key.substring(0, colonSpace)
+        // Only strip single-word prefixes that look like an app name (no spaces, title-cased).
+        // This avoids stripping from group names like "Alice, Bob: last message".
+        return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
     }
 
     private fun shouldSkipGroupMessages(): Boolean =
@@ -1034,7 +1048,7 @@ class ProTxtBgService : NotificationListenerService() {
             when {
                 key.startsWith("group:") -> "Group chat"
                 key.startsWith("id:") -> null
-                else -> key.take(30)
+                else -> stripAppPrefix(key).take(30)
             }
         }
         val priority = if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH
@@ -1105,7 +1119,7 @@ class ProTxtBgService : NotificationListenerService() {
             when {
                 key.startsWith("group:") -> "Group chat"
                 key.startsWith("id:") -> null
-                else -> key.take(30)
+                else -> stripAppPrefix(key).take(30)
             }
         }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -1247,7 +1261,7 @@ class ProTxtBgService : NotificationListenerService() {
             when {
                 key.startsWith("group:") -> "Group chat"
                 key.startsWith("id:") -> null
-                else -> key.take(30)
+                else -> stripAppPrefix(key).take(30)
             }
         }
 
