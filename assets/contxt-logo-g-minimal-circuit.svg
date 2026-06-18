@@ -22,29 +22,29 @@
 
   <g clip-path="url(#iconClip)">
 
-    <!-- TOP-LEFT amber: up → left → up → right → up → left → top edge -->
-    <path d="M 432 314 L 432 260 L 280 260 L 280 180 L 370 180 L 370 90 L 290 90 L 290 0"
-          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- TOP-LEFT amber -->
+    <path d="M 432 314 L 432 213 Q 432 170 389 170 L 160 170"
+          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- TOP-RIGHT sky-blue: up → right → up → left → up → right → top edge -->
-    <path d="M 592 314 L 592 240 L 720 240 L 720 160 L 650 160 L 650 80 L 750 80 L 750 0"
-          fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- TOP-RIGHT sky-blue -->
+    <path d="M 592 314 L 592 213 Q 592 170 635 170 L 864 170"
+          fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- LEFT lavender: left → up → left → down → left edge -->
-    <path d="M 218 512 L 150 512 L 150 380 L 80 380 L 80 620 L 0 620"
-          fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- LEFT lavender -->
+    <path d="M 218 512 L 78 512"
+          fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- RIGHT emerald: right → up → right → down → right edge -->
-    <path d="M 806 512 L 880 512 L 880 360 L 960 360 L 960 680 L 1024 680"
-          fill="none" stroke="#34d399" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- RIGHT emerald -->
+    <path d="M 806 512 L 946 512"
+          fill="none" stroke="#34d399" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-LEFT pink: down → left → down → right → bottom edge -->
-    <path d="M 432 710 L 432 800 L 300 800 L 300 920 L 420 920 L 420 1024"
-          fill="none" stroke="#f472b6" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- BOTTOM-LEFT pink -->
+    <path d="M 432 710 L 432 811 Q 432 854 389 854 L 138 854"
+          fill="none" stroke="#f472b6" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-RIGHT violet: down → right → down → left → bottom edge -->
-    <path d="M 592 710 L 592 790 L 740 790 L 740 900 L 620 900 L 620 1024"
-          fill="none" stroke="#a78bfa" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- BOTTOM-RIGHT violet -->
+    <path d="M 592 710 L 592 811 Q 592 854 635 854 L 886 854"
+          fill="none" stroke="#a78bfa" stroke-width="20" stroke-linecap="round"/>
 
     <!-- Speech bubble: white stroke, tail at bottom-right corner -->
     <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
@@ -57,6 +57,13 @@
     <circle cx="512" cy="512" r="22" fill="white"/>
     <circle cx="572" cy="512" r="22" fill="white"/>
 
+    <!-- Endpoint circles, each matching its connector -->
+    <circle cx="130" cy="170" r="30" fill="#f59e0b"/>   <!-- top-left  amber   -->
+    <circle cx="894" cy="170" r="30" fill="#38bdf8"/>   <!-- top-right sky-blue -->
+    <circle cx="48"  cy="512" r="30" fill="#c4b5fd"/>   <!-- left      lavender -->
+    <circle cx="976" cy="512" r="30" fill="#34d399"/>   <!-- right     emerald  -->
+    <circle cx="108" cy="854" r="30" fill="#f472b6"/>   <!-- bot-left  pink     -->
+    <circle cx="916" cy="854" r="30" fill="#a78bfa"/>   <!-- bot-right violet   -->
 
   </g>
 </svg>
