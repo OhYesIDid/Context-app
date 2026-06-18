@@ -50,7 +50,7 @@
     <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
              L 806 594 Q 806 710 690 710 L 748 792 L 638 710
              L 334 710 Q 218 710 218 594 Z"
-          fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
+          fill="none" stroke="white" stroke-width="40" stroke-linejoin="round"/>
 
     <!-- Typing indicator: three dots centred in bubble body -->
     <circle cx="452" cy="512" r="22" fill="white"/>
