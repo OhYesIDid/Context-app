@@ -9,14 +9,6 @@
     <clipPath id="iconClip">
       <rect width="1024" height="1024" rx="232"/>
     </clipPath>
-
-    <!-- Gradient: amber at tail → violet → hot-pink at top -->
-    <linearGradient id="bubbleGrad" x1="512" y1="682" x2="512" y2="305"
-                    gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#f59e0b"/>
-      <stop offset="38%"  stop-color="#9333ea"/>
-      <stop offset="100%" stop-color="#ec4899"/>
-    </linearGradient>
   </defs>
 
   <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
@@ -24,42 +16,42 @@
   <g clip-path="url(#iconClip)">
 
     <!-- TOP-LEFT: amber — smooth arc up-left -->
-    <path d="M 396 305 Q 396 242 224 242"
+    <path d="M 368 228 Q 368 158 188 158"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
     <!-- TOP-RIGHT: sky-blue — smooth arc up-right -->
-    <path d="M 640 305 Q 640 242 802 242"
+    <path d="M 660 228 Q 660 158 836 158"
           fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round"/>
 
     <!-- LEFT: lavender — straight horizontal -->
-    <path d="M 278 462 L 122 462"
+    <path d="M 218 450 L 58 450"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
     <!-- RIGHT: lavender — straight horizontal -->
-    <path d="M 746 462 L 902 462"
+    <path d="M 806 450 L 966 450"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
     <!-- BOTTOM-LEFT: amber — down then smooth curve left -->
-    <path d="M 356 620 L 356 682 Q 356 722 316 722 L 222 722"
-          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 308 652 L 308 752 Q 308 796 264 796 L 130 796"
+          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
     <!-- BOTTOM-RIGHT: amber — down then smooth curve right -->
-    <path d="M 660 620 L 660 682 Q 660 722 700 722 L 800 722"
-          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 682 652 L 682 752 Q 682 796 726 796 L 878 796"
+          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- Speech bubble: stroke-only gradient, tail left of centre -->
-    <path d="M 278 408 Q 278 305 372 305 L 652 305 Q 746 305 746 408
-             L 746 527 Q 746 620 652 620 L 458 620 L 424 682 L 404 620
-             L 372 620 Q 278 620 278 527 Z"
+    <!-- Speech bubble: white stroke, tail left of centre -->
+    <path d="M 218 342 Q 218 228 332 228 L 692 228 Q 806 228 806 342
+             L 806 538 Q 806 652 692 652 L 450 652 L 415 730 L 392 652
+             L 332 652 Q 218 652 218 538 Z"
           fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
 
     <!-- Solid filled endpoint circles -->
-    <circle cx="200" cy="242" r="30" fill="#f59e0b"/>
-    <circle cx="824" cy="242" r="30" fill="#38bdf8"/>
-    <circle cx="98"  cy="462" r="30" fill="#c4b5fd"/>
-    <circle cx="926" cy="462" r="30" fill="#c4b5fd"/>
-    <circle cx="198" cy="722" r="30" fill="#f59e0b"/>
-    <circle cx="822" cy="722" r="30" fill="#f59e0b"/>
+    <circle cx="164" cy="158" r="30" fill="#f59e0b"/>
+    <circle cx="860" cy="158" r="30" fill="#38bdf8"/>
+    <circle cx="34"  cy="450" r="30" fill="#c4b5fd"/>
+    <circle cx="990" cy="450" r="30" fill="#c4b5fd"/>
+    <circle cx="106" cy="796" r="30" fill="#f59e0b"/>
+    <circle cx="902" cy="796" r="30" fill="#f59e0b"/>
 
   </g>
 </svg>
