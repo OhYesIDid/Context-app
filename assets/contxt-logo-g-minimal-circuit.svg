@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <!--
-    Fully symmetric around x=512.
+    Perfect left-right symmetry around x=512.
     Vertical centre of whole composition = y=512.
-    Bubble body: x 218–806 (±294),  y 278–674 (height 396)
-    Tail: centred at x=512, tip y=754
-    Top circles cy=206,  bottom circles cy=818  →  (206+818)/2 = 512 ✓
+      top circles  cy=170,  bottom circles cy=854  →  (170+854)/2 = 512 ✓
+    All six connectors share the same shape:
+      straight segment → Q-bezier corner (43 px radius) → horizontal to circle
+    Top two go UP then turn; bottom two go DOWN then turn.  Colours unchanged.
   -->
   <defs>
     <radialGradient id="bg" cx="50%" cy="50%" r="60%">
@@ -21,43 +22,43 @@
 
   <g clip-path="url(#iconClip)">
 
-    <!-- TOP-LEFT amber  x=370, arcs up-left to circle at cx=130 -->
-    <path d="M 370 278 Q 370 206 160 206"
+    <!-- TOP-LEFT amber: up 101 px → curve left → horizontal to circle -->
+    <path d="M 370 314 L 370 213 Q 370 170 327 170 L 160 170"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- TOP-RIGHT sky-blue  mirror: x=654, arcs up-right to circle at cx=894 -->
-    <path d="M 654 278 Q 654 206 864 206"
+    <!-- TOP-RIGHT sky-blue: mirror of top-left -->
+    <path d="M 654 314 L 654 213 Q 654 170 697 170 L 864 170"
           fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- LEFT lavender  exits x=218, y=476 (bubble vertical centre) -->
-    <path d="M 218 476 L 78 476"
+    <!-- LEFT lavender: straight horizontal (bubble vertical centre y=512) -->
+    <path d="M 218 512 L 78 512"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- RIGHT lavender  mirror -->
-    <path d="M 806 476 L 946 476"
+    <!-- RIGHT lavender: mirror -->
+    <path d="M 806 512 L 946 512"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-LEFT amber  x=360, curves down-left to circle at cx=108 -->
-    <path d="M 360 674 L 360 775 Q 360 818 317 818 L 138 818"
+    <!-- BOTTOM-LEFT amber: down 101 px → curve left → horizontal to circle -->
+    <path d="M 360 710 L 360 811 Q 360 854 317 854 L 138 854"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-RIGHT amber  mirror: x=664, curves down-right to circle at cx=916 -->
-    <path d="M 664 674 L 664 775 Q 664 818 707 818 L 886 818"
+    <!-- BOTTOM-RIGHT amber: mirror of bottom-left -->
+    <path d="M 664 710 L 664 811 Q 664 854 707 854 L 886 854"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
     <!-- Speech bubble: white stroke, centred tail, fully symmetric -->
-    <path d="M 218 394 Q 218 278 334 278 L 690 278 Q 806 278 806 394
-             L 806 558 Q 806 674 690 674 L 538 674 L 512 754 L 486 674
-             L 334 674 Q 218 674 218 558 Z"
+    <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
+             L 806 594 Q 806 710 690 710 L 538 710 L 512 790 L 486 710
+             L 334 710 Q 218 710 218 594 Z"
           fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
 
     <!-- Endpoint circles, all r=30 solid fill -->
-    <circle cx="130" cy="206" r="30" fill="#f59e0b"/>   <!-- top-left  512-130=382 -->
-    <circle cx="894" cy="206" r="30" fill="#38bdf8"/>   <!-- top-right 894-512=382 ✓ -->
-    <circle cx="48"  cy="476" r="30" fill="#c4b5fd"/>   <!-- left      512-48=464  -->
-    <circle cx="976" cy="476" r="30" fill="#c4b5fd"/>   <!-- right     976-512=464 ✓ -->
-    <circle cx="108" cy="818" r="30" fill="#f59e0b"/>   <!-- bot-left  512-108=404 -->
-    <circle cx="916" cy="818" r="30" fill="#f59e0b"/>   <!-- bot-right 916-512=404 ✓ -->
+    <circle cx="130" cy="170" r="30" fill="#f59e0b"/>   <!-- top-left  512−130=382 -->
+    <circle cx="894" cy="170" r="30" fill="#38bdf8"/>   <!-- top-right 894−512=382 ✓ -->
+    <circle cx="48"  cy="512" r="30" fill="#c4b5fd"/>   <!-- left      512−48=464  -->
+    <circle cx="976" cy="512" r="30" fill="#c4b5fd"/>   <!-- right     976−512=464 ✓ -->
+    <circle cx="108" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-left  512−108=404 -->
+    <circle cx="916" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-right 916−512=404 ✓ -->
 
   </g>
 </svg>
