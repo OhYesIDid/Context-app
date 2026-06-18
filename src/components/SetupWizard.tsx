@@ -95,6 +95,7 @@ export default function SetupWizard({ onComplete }: Props) {
       if (s === 1) {
         const ok: boolean = await ConTxtSettings.isNlsConnected().catch(() => false);
         setNlsConnected(ok);
+        if (ok) advance();
       }
       if (s === 4) {
         const ok: boolean = await ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false);
