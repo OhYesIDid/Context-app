@@ -200,6 +200,16 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
+    // Re-feed all active notifications through onNotificationPosted so that group messages
+    // already sitting in the shade get picked up as bubbles after skip is turned off.
+    internal fun activateGroupNotifications() {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                getActiveNotifications()?.forEach { sbn -> onNotificationPosted(sbn) }
+            } catch (_: Exception) {}
+        }
+    }
+
     internal fun dismissAllGroupBubbles() {
         // Reload from SharedPrefs in case the service restarted since group messages arrived
         val prefs = Prefs.main(this)
@@ -222,12 +232,18 @@ class ProTxtBgService : NotificationListenerService() {
         groupConvKeys.clear()
     }
 
-    // fromUnlock=true → PRIORITY_DEFAULT (avoids heads-up flash when restoring after screen unlock).
-    // fromUnlock=false → PRIORITY_HIGH (required to promote overflow/inactive bubbles back to active
-    //   when a slot frees up after a dismiss; setOnlyAlertOnce suppresses re-alerting for bubbles
-    //   that are already active).
+    // fromUnlock=true  → PRIORITY_DEFAULT, no cancel-before-repost (avoids heads-up flash on unlock).
+    // fromUnlock=false → cancel then re-post with PRIORITY_HIGH so Android treats the notification
+    //   as brand-new and promotes overflow/inactive bubbles back to active. setOnlyAlertOnce(true)
+    //   on suggestion notifications suppresses re-alerting for already-active ones, but that flag
+    //   only takes effect when the notification EXISTS — after a cancel the next post is always fresh.
+    //   Expanded bubbles (BubbleSuggestionActivity alive) are protected from cancel to avoid closing
+    //   the open activity.
     internal fun repostPendingBubbles(fromUnlock: Boolean = false) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         for ((_, b) in pendingBubbles) {
+            val isExpanded = BubbleSuggestionActivity.onReplyReady.containsKey(b.convKey)
+            if (!fromUnlock && !isExpanded) nm.cancel(b.notifId)
             if (b.replyText == LOADING_PLACEHOLDER) {
                 postLoadingNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
