@@ -70,6 +70,9 @@ export default function SetupWizard({ onComplete }: Props) {
   const stepRef = useRef(step);
   useEffect(() => { stepRef.current = step; }, [step]);
 
+  const hasOpenedBubblesRef = useRef(hasOpenedBubbles);
+  useEffect(() => { hasOpenedBubblesRef.current = hasOpenedBubbles; }, [hasOpenedBubbles]);
+
   // Mount — configure auth and read initial permission state
   useEffect(() => {
     configureGoogleSignin();
@@ -96,6 +99,9 @@ export default function SetupWizard({ onComplete }: Props) {
         const ok: boolean = await ConTxtSettings.isNlsConnected().catch(() => false);
         setNlsConnected(ok);
         if (ok) advance();
+      }
+      if (s === 3 && hasOpenedBubblesRef.current) {
+        advance();
       }
       if (s === 4) {
         const ok: boolean = await ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false);
