@@ -152,6 +152,16 @@ class ProTxtBgService : NotificationListenerService() {
             Regex("\\bInstagram\\b", RegexOption.IGNORE_CASE),
             Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
         )
+
+        // Strips "AppName: " prefixes that messaging apps prepend to contact names in their
+        // notification titles (e.g. "WhatsApp: Maya Hinge" → "Maya Hinge"). Only strips
+        // single-word prefixes so group names like "Ski - Val d'isere" are left intact.
+        fun stripAppPrefix(key: String): String {
+            val colonSpace = key.indexOf(": ")
+            if (colonSpace <= 0) return key
+            val prefix = key.substring(0, colonSpace)
+            return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
+        }
     }
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
@@ -715,17 +725,7 @@ class ProTxtBgService : NotificationListenerService() {
         return "$packageName:$key"
     }
 
-    // Strips "AppName: " prefixes that messaging apps prepend to contact names in their
-    // notification titles (e.g. WhatsApp uses "WhatsApp: Maya Hinge"). The app name is
-    // already implied by the source package, so we show only the bare contact name.
-    private fun stripAppPrefix(key: String): String {
-        val colonSpace = key.indexOf(": ")
-        if (colonSpace <= 0) return key
-        val prefix = key.substring(0, colonSpace)
-        // Only strip single-word prefixes that look like an app name (no spaces, title-cased).
-        // This avoids stripping from group names like "Alice, Bob: last message".
-        return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
-    }
+
 
     private fun shouldSkipGroupMessages(): Boolean =
         Prefs.main(this)

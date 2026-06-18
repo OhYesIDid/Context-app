@@ -69,7 +69,7 @@ class BubbleSuggestionActivity : Activity() {
         val preferredTone   = intent.getStringExtra(ProTxtBgService.EXTRA_PREFERRED_TONE)
         @Suppress("DEPRECATION")
         val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT)
-        val contact         = convKey?.substringAfter(":") ?: "Reply"
+        val contact         = convKey?.substringAfter(":")?.let { ProTxtBgService.stripAppPrefix(it) } ?: "Reply"
         val packageName     = convKey?.substringBefore(":") ?: ""
         val actionJson      = intent.getStringExtra(ProTxtBgService.EXTRA_ACTION_JSON)
 
