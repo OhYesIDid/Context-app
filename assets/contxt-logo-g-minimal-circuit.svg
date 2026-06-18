@@ -22,29 +22,29 @@
 
   <g clip-path="url(#iconClip)">
 
-    <!-- TOP-LEFT amber: up 101 px → curve left → horizontal to circle -->
+    <!-- TOP-LEFT amber -->
     <path d="M 432 314 L 432 213 Q 432 170 389 170 L 160 170"
           fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- TOP-RIGHT sky-blue: mirror of top-left -->
+    <!-- TOP-RIGHT sky-blue -->
     <path d="M 592 314 L 592 213 Q 592 170 635 170 L 864 170"
           fill="none" stroke="#38bdf8" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- LEFT lavender: straight horizontal (bubble vertical centre y=512) -->
+    <!-- LEFT lavender -->
     <path d="M 218 512 L 78 512"
           fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- RIGHT lavender: mirror -->
+    <!-- RIGHT emerald -->
     <path d="M 806 512 L 946 512"
-          fill="none" stroke="#c4b5fd" stroke-width="20" stroke-linecap="round"/>
+          fill="none" stroke="#34d399" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-LEFT amber: down 101 px → curve left → horizontal to circle -->
+    <!-- BOTTOM-LEFT pink -->
     <path d="M 432 710 L 432 811 Q 432 854 389 854 L 138 854"
-          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
+          fill="none" stroke="#f472b6" stroke-width="20" stroke-linecap="round"/>
 
-    <!-- BOTTOM-RIGHT amber: exits at x=592, clears tail base at x=638 -->
+    <!-- BOTTOM-RIGHT violet -->
     <path d="M 592 710 L 592 811 Q 592 854 635 854 L 886 854"
-          fill="none" stroke="#f59e0b" stroke-width="20" stroke-linecap="round"/>
+          fill="none" stroke="#a78bfa" stroke-width="20" stroke-linecap="round"/>
 
     <!-- Speech bubble: white stroke, tail at bottom-right corner -->
     <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
@@ -57,13 +57,13 @@
     <circle cx="512" cy="512" r="22" fill="white"/>
     <circle cx="572" cy="512" r="22" fill="white"/>
 
-    <!-- Endpoint circles, all r=30 solid fill -->
-    <circle cx="130" cy="170" r="30" fill="#f59e0b"/>   <!-- top-left  512−130=382 -->
-    <circle cx="894" cy="170" r="30" fill="#38bdf8"/>   <!-- top-right 894−512=382 ✓ -->
-    <circle cx="48"  cy="512" r="30" fill="#c4b5fd"/>   <!-- left      512−48=464  -->
-    <circle cx="976" cy="512" r="30" fill="#c4b5fd"/>   <!-- right     976−512=464 ✓ -->
-    <circle cx="108" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-left  512−108=404 -->
-    <circle cx="916" cy="854" r="30" fill="#f59e0b"/>   <!-- bot-right  916−512=404 ✓ -->
+    <!-- Endpoint circles, each matching its connector -->
+    <circle cx="130" cy="170" r="30" fill="#f59e0b"/>   <!-- top-left  amber   -->
+    <circle cx="894" cy="170" r="30" fill="#38bdf8"/>   <!-- top-right sky-blue -->
+    <circle cx="48"  cy="512" r="30" fill="#c4b5fd"/>   <!-- left      lavender -->
+    <circle cx="976" cy="512" r="30" fill="#34d399"/>   <!-- right     emerald  -->
+    <circle cx="108" cy="854" r="30" fill="#f472b6"/>   <!-- bot-left  pink     -->
+    <circle cx="916" cy="854" r="30" fill="#a78bfa"/>   <!-- bot-right violet   -->
 
   </g>
 </svg>
