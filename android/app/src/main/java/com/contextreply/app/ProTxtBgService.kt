@@ -115,6 +115,10 @@ class ProTxtBgService : NotificationListenerService() {
             "org.thoughtcrime.securesms",
             "com.google.android.apps.messaging",
             "com.instagram.android",
+            "co.hinge.app",
+            "com.bumble.app",
+            "com.tinder",
+            "com.okcupid.okcupid",
         )
 
         // Dialer packages whose ongoing call notification removal signals call-end.
