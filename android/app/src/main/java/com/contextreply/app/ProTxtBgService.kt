@@ -196,7 +196,7 @@ class ProTxtBgService : NotificationListenerService() {
     private val restoreBubblesReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (pendingBubbles.isEmpty()) return
-            Handler(Looper.getMainLooper()).postDelayed({ repostPendingBubbles() }, 600L)
+            Handler(Looper.getMainLooper()).postDelayed({ repostPendingBubbles(fromUnlock = true) }, 600L)
         }
     }
 
@@ -222,19 +222,23 @@ class ProTxtBgService : NotificationListenerService() {
         groupConvKeys.clear()
     }
 
-    internal fun repostPendingBubbles() {
+    // fromUnlock=true → PRIORITY_DEFAULT (avoids heads-up flash when restoring after screen unlock).
+    // fromUnlock=false → PRIORITY_HIGH (required to promote overflow/inactive bubbles back to active
+    //   when a slot frees up after a dismiss; setOnlyAlertOnce suppresses re-alerting for bubbles
+    //   that are already active).
+    internal fun repostPendingBubbles(fromUnlock: Boolean = false) {
         for ((_, b) in pendingBubbles) {
             if (b.replyText == LOADING_PLACEHOLDER) {
                 postLoadingNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
-                    b.markAsReadPendingIntent, repost = true,
+                    b.markAsReadPendingIntent, repost = fromUnlock,
                 )
             } else if (b.replyText == ERROR_PLACEHOLDER) {
                 postErrorNotification(
                     b.notifId, b.convKey, b.replyPendingIntent,
                     b.remoteInputKey, b.openChatIntent, b.message, b.detectedIntents,
-                    b.markAsReadPendingIntent, repost = true,
+                    b.markAsReadPendingIntent, repost = fromUnlock,
                 )
             } else {
                 val sa = b.suggestedActionJson?.let { try { JSONObject(it) } catch (_: Exception) { null } }
@@ -242,7 +246,7 @@ class ProTxtBgService : NotificationListenerService() {
                     b.replyText, b.formalText, b.briefText,
                     b.replyPendingIntent, b.remoteInputKey, b.notifId, b.convKey,
                     b.intent, b.openChatIntent, b.message, b.detectedIntents, sa,
-                    markAsReadPendingIntent = b.markAsReadPendingIntent, repost = true,
+                    markAsReadPendingIntent = b.markAsReadPendingIntent, repost = fromUnlock,
                 )
             }
         }
