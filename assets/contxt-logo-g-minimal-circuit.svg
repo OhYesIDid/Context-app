@@ -52,6 +52,11 @@
              L 334 710 Q 218 710 218 594 Z"
           fill="none" stroke="white" stroke-width="20" stroke-linejoin="round"/>
 
+    <!-- Typing indicator: three dots centred in bubble body -->
+    <circle cx="452" cy="512" r="22" fill="white"/>
+    <circle cx="512" cy="512" r="22" fill="white"/>
+    <circle cx="572" cy="512" r="22" fill="white"/>
+
     <!-- Endpoint circles, all r=30 solid fill -->
     <circle cx="130" cy="170" r="30" fill="#f59e0b"/>   <!-- top-left  512−130=382 -->
     <circle cx="894" cy="170" r="30" fill="#38bdf8"/>   <!-- top-right 894−512=382 ✓ -->
