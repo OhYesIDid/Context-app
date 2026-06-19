@@ -556,7 +556,7 @@ class ProTxtBgService : NotificationListenerService() {
         workerPool.submit {
             try {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
-                val enrichments = buildEnrichments(latestMessage)
+                val enrichments = buildEnrichments(latestMessage, fullThread)
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
                 val result = WorkerClient.call(
                     this, latestMessage, fullThread, enrichments,
@@ -865,12 +865,18 @@ class ProTxtBgService : NotificationListenerService() {
     private fun requiredEnrichments(message: String): List<String> =
         detectIntents(message).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
 
-    private fun buildEnrichments(message: String): JSONObject {
+    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject {
         val enrichments = JSONObject()
         for (key in requiredEnrichments(message)) {
             when (key) {
                 "maps" -> {
-                    val eta = fetchEtaData(message)
+                    // Search latest message first, then fall back to thread history so that
+                    // destinations mentioned in earlier messages ("meet me at Kings Cross")
+                    // are picked up even when the triggering message is just "are you close?".
+                    val eta = fetchEtaData(message) ?: run {
+                        thread.asReversed()
+                            .firstNotNullOfOrNull { (_, text) -> fetchEtaData(text) }
+                    }
                     if (eta != null) {
                         enrichments.put("maps", JSONObject().apply {
                             put("duration", eta.duration)
