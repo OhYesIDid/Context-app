@@ -6,9 +6,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/contxt-logo-g-minimal-circuit.png",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.contxt.app"
+      "bundleIdentifier": "com.contxt.app",
+      "icon": "./assets/contxt-logo-g-minimal-circuit.png"
     },
     "android": {
       "package": "com.contxt.app",
