@@ -2,11 +2,11 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <clipPath id="iconClip">
-      <rect width="1024" height="1024" rx="232"/>
+      <rect width="1024" height="1024"/>
     </clipPath>
   </defs>
 
-  <rect width="1024" height="1024" rx="232" fill="#f8f6ff"/>
+  <rect width="1024" height="1024" fill="#f8f6ff"/>
 
   <g clip-path="url(#iconClip)">
 
