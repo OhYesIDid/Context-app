@@ -168,8 +168,19 @@ class ProTxtAccessibilityService : AccessibilityService() {
                         "launcher" in className
                 when {
                     inChatList -> {
-                        // Navigated to chat list — dismiss immediately and don't scheduleReshow.
+                        // Navigated to chat list — dismiss overlay and silently repost any
+                        // pending bubble so it reappears without alerting. The bubble was
+                        // cancelled when the overlay was shown, so we must repost it here.
+                        // 150ms debounce: just enough to avoid double-firing if the user
+                        // exits WhatsApp immediately after reaching the chat list (which
+                        // would also trigger repost via TYPE_WINDOWS_CHANGED).
                         dismissOverlay()
+                        pendingRepostRunnable?.let { mainHandler.removeCallbacks(it) }
+                        if (ProTxtBgService.pendingBubbles.isNotEmpty()) {
+                            val r = Runnable { ProTxtBgService.getInstance()?.repostPendingBubbles(fromUnlock = true) }
+                            pendingRepostRunnable = r
+                            mainHandler.postDelayed(r, 150L)
+                        }
                         return
                     }
                     inConversation -> {

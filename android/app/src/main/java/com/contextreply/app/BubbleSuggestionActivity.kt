@@ -424,7 +424,8 @@ class BubbleSuggestionActivity : Activity() {
         // still alive — the system never recreates it via onNewIntent, so this is the
         // only way the quote reflects anything newer than what onCreate first saw.
         var quoteText: TextView? = null
-        if (messageExtra.isNotEmpty()) {
+        val quoteInitial = messageExtra.ifEmpty { null }
+        if (quoteInitial != null) {
             root.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -439,16 +440,31 @@ class BubbleSuggestionActivity : Activity() {
                 })
 
                 addView(TextView(this@BubbleSuggestionActivity).apply {
-                    text = messageExtra
+                    text = quoteInitial
                     setTextColor(MUTED)
                     textSize = 13f
-                    maxLines = 3
+                    maxLines = 4
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setLineSpacing(0f, 1.25f)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                     quoteText = this
                 })
             })
+
+            // Load the full thread from the store and replace the quote with the last
+            // few messages so the user always sees context, not just the burst text.
+            if (convKey != null) {
+                val tv = quoteText
+                Thread {
+                    val thread = NotificationStore.getInstance(this).getThread(convKey)
+                    val formatted = thread.takeLast(4).joinToString("\n") { (sender, text) ->
+                        if (sender == null) "You: $text" else "$sender: $text"
+                    }
+                    if (formatted.isNotEmpty() && tv != null) {
+                        runOnUiThread { tv.text = formatted }
+                    }
+                }.start()
+            }
         }
 
         // ── Contact match banner ──────────────────────────────────────────────
