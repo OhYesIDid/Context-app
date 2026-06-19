@@ -21,6 +21,7 @@ import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import androidx.core.content.ContextCompat
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import org.json.JSONArray
@@ -211,6 +212,21 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
+    // Fired by the ConTxt Keyboard (ConTxtBridge) when the user sends a message via the
+    // keyboard's IME send action. Clears the pending bubble/suggestion for that conversation.
+    private val keyboardSentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val convKey = intent.getStringExtra("conv_key") ?: return
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+            nm.cancel(notifId)
+            activeBubbles.remove(convKey)
+            arrivalBuffer.remove(convKey)
+            pendingBubbles.remove(convKey)
+            NotificationStore.getInstance(context).markReplied(convKey)
+        }
+    }
+
     // Re-feed all active notifications through onNotificationPosted so that group messages
     // already sitting in the shade get picked up as bubbles after skip is turned off.
     internal fun activateGroupNotifications() {
@@ -293,6 +309,7 @@ class ProTxtBgService : NotificationListenerService() {
             .putBoolean("nls_connected", true).apply()
         DeviceContactsResolver.populate(this)
         registerReceiver(restoreBubblesReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+        ContextCompat.registerReceiver(this, keyboardSentReceiver, IntentFilter("com.contxt.keyboard.ACTION_SENT"), ContextCompat.RECEIVER_EXPORTED)
         // Keep location live — short interval so lastLocation is always current.
         // No fallback to getLastKnownLocation(); stale cache is worse than no data.
         val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
@@ -318,6 +335,7 @@ class ProTxtBgService : NotificationListenerService() {
         Prefs.main(this).edit()
             .putBoolean("nls_connected", false).apply()
         try { unregisterReceiver(restoreBubblesReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(keyboardSentReceiver) } catch (_: Exception) {}
         try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
     }
 
@@ -1389,6 +1407,15 @@ class ProTxtBgService : NotificationListenerService() {
             notifId, convKey, intent, openChatIntent, message, detectedIntents,
             suggestedAction?.toString(), markAsReadPendingIntent,
         )
+
+        // Push suggestion to the ConTxt Keyboard. Always send (including reposts) so the
+        // keyboard stays in sync when the bubble refreshes after screen unlock / call end.
+        sendBroadcast(Intent("com.contxt.keyboard.ACTION_SUGGESTION").apply {
+            putExtra("suggestion_casual", replyText)
+            if (!formalText.isNullOrEmpty()) putExtra("suggestion_formal", formalText)
+            if (!briefText.isNullOrEmpty())  putExtra("suggestion_brief", briefText)
+            putExtra("conv_key", convKey)
+        })
     }
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {

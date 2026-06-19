@@ -198,4 +198,21 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
         reactApplicationContext.startActivity(intent)
     }
+
+    @ReactMethod
+    fun openInputMethodSettings() {
+        val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        reactApplicationContext.startActivity(intent)
+    }
+
+    @ReactMethod
+    fun isConTxtKeyboardDefault(promise: Promise) {
+        val defaultIme = Settings.Secure.getString(
+            reactApplicationContext.contentResolver,
+            Settings.Secure.DEFAULT_INPUT_METHOD
+        ) ?: ""
+        promise.resolve(defaultIme.startsWith("com.contxt.keyboard"))
+    }
 }

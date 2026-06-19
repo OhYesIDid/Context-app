@@ -97,6 +97,7 @@ export default function App() {
   const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
   const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
   const [serviceSettingsVisible, setServiceSettingsVisible] = useState(false);
+  const [keyboardDefault, setKeyboardDefault] = useState(false);
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
@@ -132,6 +133,7 @@ export default function App() {
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
+      ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
       ProTxtSettings.getSuggestAllMessages().then((all: boolean) => setSuggestAllMessagesState(all)).catch(() => {});
       ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
@@ -159,6 +161,7 @@ export default function App() {
       if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
+      ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
@@ -322,7 +325,7 @@ export default function App() {
                 {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
               </Pressable>
               <Pressable
-                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                style={styles.settingRow}
                 onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
               >
                 <View style={styles.settingLeft}>
@@ -333,6 +336,19 @@ export default function App() {
                   </View>
                 </View>
                 <Text style={styles.setupAction}>Open</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
+                  <View>
+                    <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
+                    <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
+                  </View>
+                </View>
+                {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
               </Pressable>
             </>
           )}
@@ -598,7 +614,7 @@ export default function App() {
               <Text style={styles.setupAction}>Open</Text>
             </Pressable>
             <Pressable
-              style={[styles.settingRow, { borderBottomWidth: 0 }]}
+              style={styles.settingRow}
               onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
             >
               <View style={styles.settingLeft}>
@@ -609,6 +625,19 @@ export default function App() {
                 </View>
               </View>
               <Text style={styles.setupAction}>Open</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.settingRow, { borderBottomWidth: 0 }]}
+              onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
+                <View>
+                  <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
+                  <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
+                </View>
+              </View>
+              {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
             </Pressable>
             <Pressable style={styles.modalClose} onPress={() => setServiceSettingsVisible(false)}>
               <Text style={styles.modalCloseText}>Done</Text>

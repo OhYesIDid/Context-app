@@ -67,10 +67,12 @@ class ProTxtAccessibilityService : AccessibilityService() {
         // TYPE_WINDOWS_CHANGED fires with a null packageName (it's a global window-list event),
         // so it must be handled before the pkg-null guard below.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            val allWindows = windows
+            val imeVisible = allWindows?.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
             val apkg = activePackage
             if (apkg != null) {
                 // Already tracking a messaging app — check if still on screen
-                val targetVisible = windows?.any { w ->
+                val targetVisible = allWindows?.any { w ->
                     val root = w.root
                     val match = w.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
                             root?.packageName?.toString() == apkg
@@ -94,7 +96,12 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 } else {
                     // App is still on screen — cancel any pending repost (it was in-app nav).
                     pendingRepostRunnable?.let { mainHandler.removeCallbacks(it); pendingRepostRunnable = null }
-                    if (overlayView != null) updateOverlayPosition()
+                    if (overlayView != null) {
+                        updateOverlayPosition(apkg)
+                    } else if (imeVisible && !imeWasVisible && isInCorrectConversation(apkg)) {
+                        // Keyboard just appeared — show overlay now that we have a position to anchor to.
+                        maybeShowOverlay(apkg)
+                    }
                 }
             } else {
                 // Not currently tracking — dismiss any stale overlay then check if the user
@@ -111,6 +118,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 } ?: return
                 scheduleReshow(returnedPkg)
             }
+            imeWasVisible = imeVisible
             return
         }
 
@@ -155,6 +163,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
                         // it opportunistically — ContactMemory.saveLastSent is a no-op on blank.
                         captureInputFieldText(pkg, convKey)
                     }
+                    clearAndDismiss(pkg)
                 }
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
@@ -316,6 +325,10 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private var pendingAction: org.json.JSONObject? = null
+    private var overlayPackage: String? = null
+    // Tracks whether the IME was visible last time TYPE_WINDOWS_CHANGED fired, so we
+    // can detect the keyboard appearing and show a deferred overlay at that moment.
+    private var imeWasVisible = false
 
     private fun maybeShowOverlay(packageName: String) {
         val prefs = Prefs.main(this)
@@ -419,6 +432,10 @@ class ProTxtAccessibilityService : AccessibilityService() {
     }
 
     private fun showOverlay(packageName: String) {
+        // Only show when the keyboard is open — this ensures the input bar is visible
+        // and gives us a reliable anchor position above it.
+        val imeOpen = windows?.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+        if (!imeOpen) return
         dismissOverlay()
         val d = resources.displayMetrics.density
         fun dp(n: Int) = (n * d).toInt()
@@ -564,22 +581,23 @@ class ProTxtAccessibilityService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM
-            y = keyboardHeight() + dp(8)
+            y = overlayAnchorY(packageName)
         }
 
         try {
             windowManager?.addView(root, params)
             overlayView = root
             overlayParams = params
+            overlayPackage = packageName
             cancelPendingNotification(packageName)
         } catch (_: Exception) {}
     }
 
-    private fun updateOverlayPosition() {
+    private fun updateOverlayPosition(packageName: String? = overlayPackage) {
+        val pkg = packageName ?: return
         val view = overlayView ?: return
         val params = overlayParams ?: return
-        val d = resources.displayMetrics.density
-        val newY = keyboardHeight() + (8 * d).toInt()
+        val newY = overlayAnchorY(pkg)
         if (newY != params.y) {
             params.y = newY
             try { windowManager?.updateViewLayout(view, params) } catch (_: Exception) {}
@@ -594,6 +612,30 @@ class ProTxtAccessibilityService : AccessibilityService() {
         imeWindow.getBoundsInScreen(bounds)
         val screenHeight = resources.displayMetrics.heightPixels
         return (screenHeight - bounds.top).coerceAtLeast((200 * d).toInt())
+    }
+
+    // Returns the distance from the bottom of the screen to the TOP of the messaging app's
+    // input field. The overlay is anchored here so it never covers the send button or input bar.
+    // Falls back to keyboardHeight() if the input field node isn't found.
+    private val INPUT_FIELD_VIEW_ID = mapOf(
+        "com.whatsapp"     to "com.whatsapp:id/entry",
+        "com.whatsapp.w4b" to "com.whatsapp.w4b:id/entry",
+        "org.telegram.messenger"     to "org.telegram.messenger:id/chatActivityEnterView_messageEditText",
+        "org.telegram.messenger.web" to "org.telegram.messenger.web:id/chatActivityEnterView_messageEditText",
+    )
+
+    private fun overlayAnchorY(packageName: String): Int {
+        val d = resources.displayMetrics.density
+        val viewId = INPUT_FIELD_VIEW_ID[packageName] ?: return keyboardHeight() + (8 * d).toInt()
+        val root = rootInActiveWindow ?: return keyboardHeight() + (8 * d).toInt()
+        val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+        val bounds = Rect()
+        val found = nodes.firstOrNull()?.getBoundsInScreen(bounds) != null && bounds.top > 0
+        nodes.forEach { @Suppress("DEPRECATION") it.recycle() }
+        @Suppress("DEPRECATION") root.recycle()
+        val screenHeight = resources.displayMetrics.heightPixels
+        return if (found) (screenHeight - bounds.top + (8 * d).toInt())
+               else keyboardHeight() + (8 * d).toInt()
     }
 
     private fun injectText(text: String) {
@@ -678,6 +720,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
             try { windowManager?.removeView(it) } catch (_: Exception) {}
             overlayView = null
             overlayParams = null
+            overlayPackage = null
         }
     }
 
