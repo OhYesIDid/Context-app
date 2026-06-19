@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#f0ecff"/>
+      <stop offset="100%" stop-color="#faf9ff"/>
+    </radialGradient>
+    <clipPath id="iconClip">
+      <rect width="1024" height="1024" rx="232"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <g clip-path="url(#iconClip)">
+
+    <!-- TOP-LEFT amber -->
+    <path d="M 432 314 L 432 213 Q 432 170 389 170 L 160 170"
+          fill="none" stroke="#d97706" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- TOP-RIGHT sky-blue -->
+    <path d="M 592 314 L 592 213 Q 592 170 635 170 L 864 170"
+          fill="none" stroke="#0284c7" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- LEFT lavender -->
+    <path d="M 218 512 L 78 512"
+          fill="none" stroke="#7c3aed" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- RIGHT emerald -->
+    <path d="M 806 512 L 946 512"
+          fill="none" stroke="#059669" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- BOTTOM-LEFT pink -->
+    <path d="M 432 710 L 432 811 Q 432 854 389 854 L 138 854"
+          fill="none" stroke="#db2777" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- BOTTOM-RIGHT violet -->
+    <path d="M 592 710 L 592 811 Q 592 854 635 854 L 886 854"
+          fill="none" stroke="#7c3aed" stroke-width="20" stroke-linecap="round"/>
+
+    <!-- Speech bubble: dark stroke -->
+    <path d="M 218 430 Q 218 314 334 314 L 690 314 Q 806 314 806 430
+             L 806 594 Q 806 710 690 710 L 748 792 L 638 710
+             L 334 710 Q 218 710 218 594 Z"
+          fill="none" stroke="#1a1033" stroke-width="40" stroke-linejoin="round"/>
+
+    <!-- Typing indicator dots: dark -->
+    <circle cx="452" cy="512" r="22" fill="#1a1033"/>
+    <circle cx="512" cy="512" r="22" fill="#1a1033"/>
+    <circle cx="572" cy="512" r="22" fill="#1a1033"/>
+
+    <!-- Endpoint circles -->
+    <circle cx="130" cy="170" r="30" fill="#d97706"/>
+    <circle cx="894" cy="170" r="30" fill="#0284c7"/>
+    <circle cx="48"  cy="512" r="30" fill="#7c3aed"/>
+    <circle cx="976" cy="512" r="30" fill="#059669"/>
+    <circle cx="108" cy="854" r="30" fill="#db2777"/>
+    <circle cx="916" cy="854" r="30" fill="#7c3aed"/>
+
+  </g>
+</svg>
