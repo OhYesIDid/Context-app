@@ -29,7 +29,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getSkipGroupMessages(promise: Promise) {
         val skip = Prefs.main(reactApplicationContext)
-            .getBoolean("skip_group_messages", false)
+            .getBoolean("skip_group_messages", true)
         promise.resolve(skip)
     }
 

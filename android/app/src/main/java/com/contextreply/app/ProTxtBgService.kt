@@ -787,7 +787,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     private fun shouldSkipGroupMessages(): Boolean =
         Prefs.main(this)
-            .getBoolean("skip_group_messages", false)
+            .getBoolean("skip_group_messages", true)
 
     private fun extractConversationThread(extras: Bundle): List<Pair<String?, String>> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return emptyList()
