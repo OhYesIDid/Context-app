@@ -44,6 +44,9 @@ class ProTxtAccessibilityService : AccessibilityService() {
     private var overlayView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    // Cancellable runnable for repostPendingBubbles — cleared if the app reappears
+    // within the debounce window (i.e. in-app navigation, not a real app-exit).
+    private var pendingRepostRunnable: Runnable? = null
 
     // Tone state for the currently shown overlay
     private var tones = mapOf<String, String>()   // key → text
@@ -77,14 +80,21 @@ class ProTxtAccessibilityService : AccessibilityService() {
                 if (!targetVisible) {
                     activePackage = null
                     dismissOverlay()
-                    // Messaging app left the screen — bring any pending ConTxt bubble back
-                    // into view so the user sees it in the bubble column without unlocking.
-                    if (ProTxtBgService.pendingBubbles.isNotEmpty())
-                        mainHandler.postDelayed({
-                            ProTxtBgService.getInstance()?.repostPendingBubbles()
-                        }, 400L)
-                } else if (overlayView != null) {
-                    updateOverlayPosition()
+                    // Schedule a repost, but only commit it if the app stays invisible for
+                    // 700ms — in-app navigation (HomeActivity → Conversation) causes a brief
+                    // visibility gap that should NOT trigger a repost.
+                    pendingRepostRunnable?.let { mainHandler.removeCallbacks(it) }
+                    if (ProTxtBgService.pendingBubbles.isNotEmpty()) {
+                        // fromUnlock=true: skips cancel+repost at PRIORITY_HIGH so the bubble
+                        // reappears silently — no vibration or heads-up for an existing suggestion.
+                        val r = Runnable { ProTxtBgService.getInstance()?.repostPendingBubbles(fromUnlock = true) }
+                        pendingRepostRunnable = r
+                        mainHandler.postDelayed(r, 700L)
+                    }
+                } else {
+                    // App is still on screen — cancel any pending repost (it was in-app nav).
+                    pendingRepostRunnable?.let { mainHandler.removeCallbacks(it); pendingRepostRunnable = null }
+                    if (overlayView != null) updateOverlayPosition()
                 }
             } else {
                 // Not currently tracking — dismiss any stale overlay then check if the user
@@ -149,12 +159,34 @@ class ProTxtAccessibilityService : AccessibilityService() {
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg !in ProTxtBgService.TARGET_PACKAGES) return
-                if (overlayView == null) {
-                    scheduleReshow(pkg)
+                val className = event.className?.toString()?.lowercase() ?: ""
+                // Use the activity/fragment class name to distinguish conversation screen
+                // from the chat list — this fires at navigation time, before the view
+                // hierarchy settles, which makes it more reliable than a delayed tree check.
+                val inConversation = "conversation" in className
+                val inChatList = "main" in className || "home" in className ||
+                        "launcher" in className
+                when {
+                    inChatList -> {
+                        // Navigated to chat list — dismiss immediately and don't scheduleReshow.
+                        dismissOverlay()
+                        return
+                    }
+                    inConversation -> {
+                        // Navigated into a conversation — show overlay if not already showing.
+                        if (overlayView == null) scheduleReshow(pkg)
+                        return
+                    }
+                    overlayView != null -> {
+                        // Unknown class (keyboard, typing indicator, etc.) — run a delayed
+                        // safety-net check in case something changed outside a navigation event.
+                        mainHandler.postDelayed({
+                            if (overlayView != null && !isInCorrectConversation(pkg)) dismissOverlay()
+                        }, 400L)
+                    }
+                    else -> scheduleReshow(pkg)
                 }
-                // Don't dismiss on window state changes within the app — the accessibility
-                // text search is flaky (WhatsApp fires events during typing indicators etc.)
-                // and causes the overlay to flash. TYPE_WINDOWS_CHANGED handles app-exit dismissal.
+                // TYPE_WINDOWS_CHANGED handles full app-exit dismissal.
             }
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
                 val node = event.source ?: return
@@ -195,47 +227,65 @@ class ProTxtAccessibilityService : AccessibilityService() {
         "org.telegram.messenger.web"     to "org.telegram.messenger.web:id/name_text",
     )
 
-    // Returns true when the user is inside the specific conversation that has the pending
-    // suggestion. Uses a stable per-app view-ID lookup rather than text search — the view ID
-    // only exists inside a conversation screen, eliminating false positives from the chat list,
-    // and is populated before the full accessibility tree is ready (no rebuild flakiness).
-    // Falls back to a top-bar text search for apps without a known view ID.
-    private fun isInCorrectConversation(packageName: String): Boolean {
-        val prefs = Prefs.main(this)
-        val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: return false
-        val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
-        if (age > MAX_AGE_MS) return false
-
-        val contactRaw = convKey.substringAfter(":").trim()
-        if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
-        val contact = ProTxtBgService.stripAppPrefix(contactRaw).trim().lowercase()
-        if (contact.isEmpty()) return true
-
-        val root = rootInActiveWindow ?: return false
+    // Returns the name of the conversation currently open in the messaging app's header,
+    // using the stable per-app view ID. Returns null if not in a conversation view.
+    private fun screenConversationName(packageName: String): String? {
+        val root = rootInActiveWindow ?: return null
         if (root.packageName?.toString() != packageName) {
             @Suppress("DEPRECATION") root.recycle()
-            return false
+            return null
         }
-
-        val viewId = CONVERSATION_TITLE_VIEW_ID[packageName]
-        if (viewId != null) {
-            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
-            if (nodes.isEmpty()) {
-                @Suppress("DEPRECATION") root.recycle()
-                return false  // Node absent → not inside a conversation view
-            }
-            val screenName = nodes[0].text?.toString()?.trim()?.lowercase() ?: ""
-            nodes.forEach { @Suppress("DEPRECATION") it.recycle() }
+        val viewId = CONVERSATION_TITLE_VIEW_ID[packageName] ?: run {
             @Suppress("DEPRECATION") root.recycle()
+            return null
+        }
+        val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+        val name = nodes.firstOrNull()?.text?.toString()?.trim()
+        nodes.forEach { @Suppress("DEPRECATION") it.recycle() }
+        @Suppress("DEPRECATION") root.recycle()
+        return name?.lowercase()?.ifEmpty { null }
+    }
+
+    // Returns true when the user is inside the specific conversation that has the pending
+    // suggestion. Checks prefs first; if prefs are missing or expired, falls back to
+    // matching any live pendingBubble against the conversation currently on screen.
+    // Age is NOT checked here — that is maybeShowOverlay's responsibility.
+    private fun isInCorrectConversation(packageName: String): Boolean {
+        val prefs = Prefs.main(this)
+
+        // Fast path: prefs have a convKey (set when suggestion was generated)
+        val prefsConvKey = prefs.getString("last_suggestion_conv_$packageName", null)
+        if (prefsConvKey != null) {
+            val contactRaw = prefsConvKey.substringAfter(":").trim()
+            if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
+            val contact = ProTxtBgService.stripAppPrefix(contactRaw).trim().lowercase()
+            if (contact.isEmpty()) return true
+
+            val screenName = screenConversationName(packageName) ?: run {
+                // No known view ID for this app — fall back to top-bar text search
+                val root = rootInActiveWindow ?: return false
+                if (root.packageName?.toString() != packageName) {
+                    @Suppress("DEPRECATION") root.recycle(); return false
+                }
+                val topCutoff = (resources.displayMetrics.heightPixels * 0.30).toInt()
+                val found = findTextInTopBar(root, contact, topCutoff)
+                @Suppress("DEPRECATION") root.recycle()
+                return found
+            }
             return screenName.contains(contact) || contact.contains(screenName)
         }
 
-        // Fallback for apps without a known stable view ID: restrict text search to the
-        // top 30% of the screen (action bar only) to avoid chat-list false positives.
-        val topCutoff = (resources.displayMetrics.heightPixels * 0.30).toInt()
-        val found = findTextInTopBar(root, contact, topCutoff)
-        @Suppress("DEPRECATION") root.recycle()
-        return found
+        // Slow path: prefs were cleared (e.g. overlay previously dismissed) but the
+        // ConTxt bubble is still alive. Check if any pending bubble matches the screen.
+        val screenName = screenConversationName(packageName) ?: return false
+        return ProTxtBgService.pendingBubbles.values.any { bubble ->
+            if (!bubble.convKey.startsWith("$packageName:")) return@any false
+            if (bubble.replyText == ProTxtBgService.LOADING_PLACEHOLDER) return@any false
+            val contact = ProTxtBgService.stripAppPrefix(
+                bubble.convKey.substringAfter(":")
+            ).trim().lowercase()
+            screenName.contains(contact) || contact.contains(screenName)
+        }
     }
 
     private fun findTextInTopBar(node: AccessibilityNodeInfo, target: String, topCutoff: Int): Boolean {
@@ -258,10 +308,37 @@ class ProTxtAccessibilityService : AccessibilityService() {
 
     private fun maybeShowOverlay(packageName: String) {
         val prefs = Prefs.main(this)
-        val casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
-            ?: return
+        var casual = prefs.getString("last_suggestion_$packageName", null)?.takeIf { it.isNotEmpty() }
         val age = System.currentTimeMillis() - prefs.getLong("last_suggestion_ts_$packageName", 0L)
-        if (age > MAX_AGE_MS) return
+
+        // If prefs are stale or missing, restore suggestion data from pendingBubbles.
+        // This handles the case where the original notification was dismissed (clearing prefs)
+        // but the ConTxt bubble is still alive — bubble and overlay must stay in sync.
+        if (casual == null || age > MAX_AGE_MS) {
+            val screenName = screenConversationName(packageName)?.lowercase()
+            val bubble = ProTxtBgService.pendingBubbles.values.firstOrNull { b ->
+                if (!b.convKey.startsWith("$packageName:")) return@firstOrNull false
+                if (b.replyText == ProTxtBgService.LOADING_PLACEHOLDER || b.replyText.isEmpty()) return@firstOrNull false
+                if (screenName != null) {
+                    val contact = ProTxtBgService.stripAppPrefix(
+                        b.convKey.substringAfter(":")
+                    ).trim().lowercase()
+                    screenName.contains(contact) || contact.contains(screenName)
+                } else true // no view ID for this app; accept any pending bubble
+            }
+            if (bubble != null) {
+                prefs.edit()
+                    .putString("last_suggestion_$packageName", bubble.replyText)
+                    .putString("last_suggestion_formal_$packageName", bubble.formalText ?: "")
+                    .putString("last_suggestion_brief_$packageName", bubble.briefText ?: "")
+                    .putLong("last_suggestion_ts_$packageName", System.currentTimeMillis())
+                    .putString("last_suggestion_conv_$packageName", bubble.convKey)
+                    .putString("last_suggestion_action_$packageName", bubble.suggestedActionJson ?: "")
+                    .apply()
+                casual = bubble.replyText
+            }
+        }
+        if (casual == null) return
 
         val convKey = prefs.getString("last_suggestion_conv_$packageName", null) ?: ""
         currentContact = convKey.substringAfter(":").let { key ->
@@ -295,6 +372,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
         val delay = when (attempt) { 0 -> 300L; 1 -> 500L; 2 -> 700L; else -> 1000L }
         mainHandler.postDelayed({
             if (overlayView != null) return@postDelayed
+            if (activePackage != pkg) return@postDelayed  // user left the app or navigated away
             if (isInCorrectConversation(pkg)) {
                 activePackage = pkg
                 maybeShowOverlay(pkg)

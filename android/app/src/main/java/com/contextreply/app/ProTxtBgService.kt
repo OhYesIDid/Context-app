@@ -44,6 +44,7 @@ class ProTxtBgService : NotificationListenerService() {
         fun getInstance(): ProTxtBgService? = instance
 
         const val CHANNEL_ID = "contextreply_suggestions"
+        const val CHANNEL_SILENT_ID = "contextreply_silent"
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
         const val ACTION_COPY = "com.contxt.app.ACTION_COPY_REPLY"
@@ -1109,7 +1110,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
         val priority = if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Drafting reply…")
             .setContentText("Drafting reply…")
@@ -1179,7 +1180,7 @@ class ProTxtBgService : NotificationListenerService() {
                 else -> stripAppPrefix(key).take(30)
             }
         }
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Couldn't generate a reply")
             .setContentText("Couldn't generate a reply")
@@ -1334,7 +1335,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Suggested reply")
             .setContentText(replyText)
@@ -1401,16 +1402,33 @@ class ProTxtBgService : NotificationListenerService() {
             // Only create if the channel doesn't exist — deleting and recreating resets
             // the user's bubble permission on OEM devices (OPPO, Samsung, etc.), which
             // is why we preserve the existing channel when present.
-            if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Reply Suggestions", NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Suggested replies for incoming messages"
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    setAllowBubbles(true)
+            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID, "Reply Suggestions", NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Suggested replies for incoming messages"
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        setAllowBubbles(true)
+                    }
                 }
+                nm.createNotificationChannel(channel)
             }
-            nm.createNotificationChannel(channel)
+            // Silent channel for reposts (unlock, leaving app etc.) — IMPORTANCE_LOW
+            // guarantees no sound/vibration at the audio-policy level, which is the only
+            // reliable approach on OEM skins that ignore setOnlyAlertOnce on updates.
+            if (nm.getNotificationChannel(CHANNEL_SILENT_ID) == null) {
+                val silent = NotificationChannel(
+                    CHANNEL_SILENT_ID, "Reply Suggestions (silent)", NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Silent updates for existing reply suggestions"
+                    setSound(null, null)
+                    enableVibration(false)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        setAllowBubbles(true)
+                    }
+                }
+                nm.createNotificationChannel(silent)
+            }
         }
     }
 }
