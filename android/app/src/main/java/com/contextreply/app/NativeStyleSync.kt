@@ -46,6 +46,9 @@ object NativeStyleSync {
             .edit()
             .putString(NATIVE_KEY, edits.joinToString("\n"))
             .apply()
+
+        // Rebuild the full style profile from the complete queue
+        StyleProfileBuilder.rebuild(context)
     }
 
     fun clear(context: Context) {

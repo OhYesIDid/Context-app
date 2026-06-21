@@ -32,7 +32,7 @@ object StyleEditQueue {
             put("original", originalSuggestion)
             put("edit", userSentText)
             put("platform", platformFromConvKey(convKey))
-            put("contact", convKey.substringAfter(":"))
+            put("contact", ProTxtBgService.stripAppPrefix(convKey.substringAfter(":")))
             if (intent != null) put("intent", intent)
             if (toneSelected != null) put("tone_selected", toneSelected)
             put("ts", System.currentTimeMillis())
