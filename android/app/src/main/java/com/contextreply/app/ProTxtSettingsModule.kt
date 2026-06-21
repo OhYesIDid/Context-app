@@ -6,6 +6,9 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Base64
 import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -218,22 +221,55 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(defaultIme.startsWith("com.contxt.keyboard"))
     }
 
-    // Returns a stable base64-encoded 32-byte AES key stored in EncryptedSharedPreferences.
-    // On first call a new key is generated via SecureRandom and persisted; subsequent calls
-    // return the same key. The key never leaves the device.
+    // ── AES-256-GCM field encryption ─────────────────────────────────────────
+    // Key is generated once via SecureRandom, stored in EncryptedSharedPreferences
+    // (Android Keystore-backed). IV is 12 random bytes prepended to the ciphertext.
+    // Wire format: "enc1:" + Base64(iv[12] + ciphertext)
+
+    private fun getOrCreateSecretKey(): SecretKeySpec {
+        val prefs = Prefs.main(reactApplicationContext)
+        val b64 = prefs.getString("db_encryption_key", null) ?: run {
+            val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            Base64.encodeToString(bytes, Base64.NO_WRAP).also { key ->
+                prefs.edit().putString("db_encryption_key", key).apply()
+            }
+        }
+        return SecretKeySpec(Base64.decode(b64, Base64.NO_WRAP), "AES")
+    }
+
+    @ReactMethod
+    fun encryptText(text: String, promise: Promise) {
+        try {
+            val key = getOrCreateSecretKey()
+            val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+            val ct = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+            promise.resolve("enc1:" + Base64.encodeToString(iv + ct, Base64.NO_WRAP))
+        } catch (e: Exception) {
+            promise.reject("ENC_ERROR", e.message ?: "encrypt failed", e)
+        }
+    }
+
+    @ReactMethod
+    fun decryptText(encrypted: String, promise: Promise) {
+        try {
+            if (!encrypted.startsWith("enc1:")) { promise.resolve(encrypted); return }
+            val combined = Base64.decode(encrypted.removePrefix("enc1:"), Base64.NO_WRAP)
+            val iv = combined.sliceArray(0..11)
+            val ct = combined.sliceArray(12 until combined.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
+            promise.resolve(String(cipher.doFinal(ct), Charsets.UTF_8))
+        } catch (e: Exception) {
+            promise.reject("DEC_ERROR", e.message ?: "decrypt failed", e)
+        }
+    }
+
+    // Kept for backwards compat — JS dbCrypto no longer calls this but old APKs might.
     @ReactMethod
     fun getOrCreateDbKey(promise: Promise) {
-        try {
-            val prefs = Prefs.main(reactApplicationContext)
-            val existing = prefs.getString("db_encryption_key", null)
-            if (existing != null) { promise.resolve(existing); return }
-            val bytes = ByteArray(32)
-            SecureRandom().nextBytes(bytes)
-            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            prefs.edit().putString("db_encryption_key", b64).apply()
-            promise.resolve(b64)
-        } catch (e: Exception) {
-            promise.reject("DB_KEY_ERROR", e.message ?: "failed to get db key", e)
-        }
+        try { promise.resolve(Base64.encodeToString(getOrCreateSecretKey().encoded, Base64.NO_WRAP)) }
+        catch (e: Exception) { promise.reject("DB_KEY_ERROR", e.message ?: "failed", e) }
     }
 }
