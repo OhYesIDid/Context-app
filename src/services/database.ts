@@ -1,5 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
+import { decryptField, encryptField } from './dbCrypto';
 import type {
   Contact,
   Memory,
@@ -14,6 +15,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
   _db = await SQLite.openDatabaseAsync('contextreply.db');
   await _migrate(_db);
+  try { await _encryptExistingRows(_db); } catch { /* non-fatal — rows stay plaintext until next open */ }
   return _db;
 }
 
@@ -130,6 +132,57 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN dismissal_context_json TEXT'); } catch (_) {}
 }
 
+// Re-encrypts any rows that still have plaintext in sensitive fields.
+// Idempotent: rows starting with 'enc1:' are skipped.
+async function _encryptExistingRows(db: SQLite.SQLiteDatabase): Promise<void> {
+  // style_edits
+  const styleRows = await db.getAllAsync<{ id: string; original_suggestion: string; user_edit: string }>(
+    "SELECT id, original_suggestion, user_edit FROM style_edits WHERE original_suggestion NOT LIKE 'enc1:%' OR user_edit NOT LIKE 'enc1:%'"
+  );
+  for (const r of styleRows) {
+    await db.runAsync(
+      'UPDATE style_edits SET original_suggestion = ?, user_edit = ? WHERE id = ?',
+      [await encryptField(r.original_suggestion), await encryptField(r.user_edit), r.id]
+    );
+  }
+
+  // contacts.notes
+  const contactRows = await db.getAllAsync<{ id: string; notes: string }>(
+    "SELECT id, notes FROM contacts WHERE notes IS NOT NULL AND notes NOT LIKE 'enc1:%'"
+  );
+  for (const r of contactRows) {
+    await db.runAsync('UPDATE contacts SET notes = ? WHERE id = ?', [await encryptField(r.notes), r.id]);
+  }
+
+  // memories
+  const memRows = await db.getAllAsync<{ id: string; content: string; entities_json: string | null }>(
+    "SELECT id, content, entities_json FROM memories WHERE content NOT LIKE 'enc1:%'"
+  );
+  for (const r of memRows) {
+    await db.runAsync('UPDATE memories SET content = ?, entities_json = ? WHERE id = ?', [
+      await encryptField(r.content),
+      await encryptField(r.entities_json),
+      r.id,
+    ]);
+  }
+
+  // saved_places.address
+  const placeRows = await db.getAllAsync<{ id: string; address: string }>(
+    "SELECT id, address FROM saved_places WHERE address NOT LIKE 'enc1:%'"
+  );
+  for (const r of placeRows) {
+    await db.runAsync('UPDATE saved_places SET address = ? WHERE id = ?', [await encryptField(r.address), r.id]);
+  }
+
+  // bookings.snippet
+  const bookingRows = await db.getAllAsync<{ id: string; snippet: string }>(
+    "SELECT id, snippet FROM bookings WHERE snippet NOT LIKE 'enc1:%'"
+  );
+  for (const r of bookingRows) {
+    await db.runAsync('UPDATE bookings SET snippet = ? WHERE id = ?', [await encryptField(r.snippet), r.id]);
+  }
+}
+
 // ── Saved places ──────────────────────────────────────────────────────────────
 
 export async function upsertSavedPlace(
@@ -146,7 +199,7 @@ export async function upsertSavedPlace(
        lat=excluded.lat, lng=excluded.lng, place_id=excluded.place_id,
        is_home=excluded.is_home, is_work=excluded.is_work,
        updated_at=excluded.updated_at, synced_at=NULL`,
-    [id, place.name, place.address, place.lat, place.lng, place.placeId ?? null,
+    [id, place.name, await encryptField(place.address), place.lat, place.lng, place.placeId ?? null,
      place.isHome ? 1 : 0, place.isWork ? 1 : 0, now, now]
   );
   return { ...place, id, createdAt: now, updatedAt: now };
@@ -159,7 +212,7 @@ export async function getSavedPlaces(): Promise<SavedPlace[]> {
     place_id: string | null; is_home: number; is_work: number;
     created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
   }>('SELECT * FROM saved_places WHERE deleted_at IS NULL ORDER BY name');
-  return rows.map(rowToSavedPlace);
+  return Promise.all(rows.map(rowToSavedPlace));
 }
 
 export async function getWorkPlace(): Promise<SavedPlace | null> {
@@ -169,7 +222,7 @@ export async function getWorkPlace(): Promise<SavedPlace | null> {
     place_id: string | null; is_home: number; is_work: number;
     created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
   }>('SELECT * FROM saved_places WHERE is_work = 1 AND deleted_at IS NULL LIMIT 1');
-  return row ? rowToSavedPlace(row) : null;
+  return row ? await rowToSavedPlace(row) : null;
 }
 
 export async function getHomePlace(): Promise<SavedPlace | null> {
@@ -179,16 +232,16 @@ export async function getHomePlace(): Promise<SavedPlace | null> {
     place_id: string | null; is_home: number; is_work: number;
     created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
   }>('SELECT * FROM saved_places WHERE is_home = 1 AND deleted_at IS NULL LIMIT 1');
-  return row ? rowToSavedPlace(row) : null;
+  return row ? await rowToSavedPlace(row) : null;
 }
 
-function rowToSavedPlace(row: {
+async function rowToSavedPlace(row: {
   id: string; name: string; address: string; lat: number; lng: number;
   place_id: string | null; is_home: number; is_work: number;
   created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-}): SavedPlace {
+}): Promise<SavedPlace> {
   return {
-    id: row.id, name: row.name, address: row.address,
+    id: row.id, name: row.name, address: (await decryptField(row.address)) ?? row.address,
     lat: row.lat, lng: row.lng, placeId: row.place_id ?? undefined,
     isHome: row.is_home === 1, isWork: row.is_work === 1,
     createdAt: row.created_at, updatedAt: row.updated_at,
@@ -207,7 +260,8 @@ export async function recordStyleEdit(
        (id, contact_id, original_suggestion, user_edit, platform, intent,
         tone_selected, edit_delta_json, subintent, dismissal_context_json, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [randomUUID(), edit.contactId ?? null, edit.originalSuggestion, edit.userEdit,
+    [randomUUID(), edit.contactId ?? null,
+     await encryptField(edit.originalSuggestion), await encryptField(edit.userEdit),
      edit.platform ?? null, edit.intent ?? null,
      edit.toneSelected ?? null, edit.editDeltaJson ?? null,
      edit.subintent ?? null, edit.dismissalContextJson ?? null,
@@ -223,11 +277,11 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
     edit_delta_json: string | null; subintent: string | null;
     dismissal_context_json: string | null; created_at: string; synced_at: string | null;
   }>('SELECT * FROM style_edits ORDER BY created_at DESC LIMIT ?', [limit]);
-  return rows.map((r) => ({
+  return Promise.all(rows.map(async (r) => ({
     id: r.id,
     contactId: r.contact_id ?? undefined,
-    originalSuggestion: r.original_suggestion,
-    userEdit: r.user_edit,
+    originalSuggestion: (await decryptField(r.original_suggestion)) ?? r.original_suggestion,
+    userEdit: (await decryptField(r.user_edit)) ?? r.user_edit,
     platform: (r.platform as StyleEdit['platform']) ?? undefined,
     intent: (r.intent as StyleEdit['intent']) ?? undefined,
     toneSelected: r.tone_selected ?? undefined,
@@ -236,7 +290,7 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
     dismissalContextJson: r.dismissal_context_json ?? undefined,
     createdAt: r.created_at,
     syncedAt: r.synced_at ?? undefined,
-  }));
+  })));
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
@@ -247,13 +301,13 @@ type ContactRow = {
   created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
 };
 
-function rowToContact(r: ContactRow): Contact {
+async function rowToContact(r: ContactRow): Promise<Contact> {
   return {
     id: r.id, displayName: r.display_name,
     relationship: (r.relationship as Contact['relationship']) ?? undefined,
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
     interactionCount: r.interaction_count ?? 0,
-    notes: r.notes ?? undefined,
+    notes: (await decryptField(r.notes)) ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
     syncedAt: r.synced_at ?? undefined, deletedAt: r.deleted_at ?? undefined,
   };
@@ -273,7 +327,7 @@ export async function upsertContact(
        preferred_tone=excluded.preferred_tone,
        notes=excluded.notes, updated_at=excluded.updated_at, synced_at=NULL`,
     [id, contact.displayName, contact.relationship ?? null,
-     contact.preferredTone ?? null, contact.notes ?? null, now, now]
+     contact.preferredTone ?? null, await encryptField(contact.notes ?? null), now, now]
   );
   return { ...contact, id, createdAt: now, updatedAt: now };
 }
@@ -283,7 +337,7 @@ export async function getAllContacts(): Promise<Contact[]> {
   const rows = await db.getAllAsync<ContactRow>(
     'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY interaction_count DESC, display_name ASC'
   );
-  return rows.map(rowToContact);
+  return Promise.all(rows.map(rowToContact));
 }
 
 export async function findContactByDisplayName(name: string): Promise<Contact | null> {
@@ -292,7 +346,7 @@ export async function findContactByDisplayName(name: string): Promise<Contact | 
     'SELECT * FROM contacts WHERE LOWER(display_name) = LOWER(?) AND deleted_at IS NULL LIMIT 1',
     [name]
   );
-  return row ? rowToContact(row) : null;
+  return row ? await rowToContact(row) : null;
 }
 
 // Migrates all style_edits, platform_identities, and memories from fromId to toId,
@@ -399,8 +453,10 @@ export async function insertMemory(
        (id, contact_id, type, content, entities_json, location_lat, location_lng, location_name,
         relevance_score, last_confirmed_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, memory.contactId ?? null, memory.type, memory.content,
-     memory.entitiesJson ?? null, memory.locationLat ?? null,
+    [id, memory.contactId ?? null, memory.type,
+     await encryptField(memory.content),
+     await encryptField(memory.entitiesJson ?? null),
+     memory.locationLat ?? null,
      memory.locationLng ?? null, memory.locationName ?? null,
      memory.relevanceScore, memory.lastConfirmedAt ?? null, now, now]
   );
@@ -424,14 +480,15 @@ export async function getPendingSyncItems(): Promise<{
     platform: string | null; intent: string | null; created_at: string; synced_at: string | null;
   }>('SELECT * FROM style_edits WHERE synced_at IS NULL');
   return {
-    saved_places: places.map(rowToSavedPlace),
-    style_edits: edits.map((r) => ({
+    saved_places: await Promise.all(places.map(rowToSavedPlace)),
+    style_edits: await Promise.all(edits.map(async (r) => ({
       id: r.id, contactId: r.contact_id ?? undefined,
-      originalSuggestion: r.original_suggestion, userEdit: r.user_edit,
+      originalSuggestion: (await decryptField(r.original_suggestion)) ?? r.original_suggestion,
+      userEdit: (await decryptField(r.user_edit)) ?? r.user_edit,
       platform: (r.platform as StyleEdit['platform']) ?? undefined,
       intent: (r.intent as StyleEdit['intent']) ?? undefined,
       createdAt: r.created_at, syncedAt: r.synced_at ?? undefined,
-    })),
+    }))),
   };
 }
 

@@ -1346,10 +1346,6 @@ class ProTxtBgService : NotificationListenerService() {
             .putString("last_suggestion_conv_$packageName", convKey)
             .apply()
 
-        val sendAction = NotificationCompat.Action.Builder(
-            android.R.drawable.ic_menu_send, "Send", sendPi
-        ).build()
-
         val contactLabel = convKey.substringAfter(":").let { key ->
             when {
                 key.startsWith("group:") -> "Group chat"
@@ -1358,16 +1354,17 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
-        // Build expanded text: show all available tone variants so the user can read
-        // and choose from the shade without opening the bubble.
-        val bigText = buildString {
-            if (!formalText.isNullOrEmpty() || !briefText.isNullOrEmpty()) {
-                append("Casual: $replyText")
-                if (!formalText.isNullOrEmpty()) append("\nFormal: $formalText")
-                if (!briefText.isNullOrEmpty()) append("\nBrief: $briefText")
-            } else {
-                append(replyText)
-            }
+        // Build expanded text: each tone on its own line so the user can read all
+        // variants from the shade and pick the one they want to send.
+        val availableTones = buildList {
+            add(Triple("Casual", replyText, notifId))
+            if (!formalText.isNullOrEmpty()) add(Triple("Formal", formalText!!, notifId + 3))
+            if (!briefText.isNullOrEmpty())  add(Triple("Brief",  briefText!!,  notifId + 4))
+        }
+        val bigText = if (availableTones.size > 1) {
+            availableTones.joinToString("\n") { (label, text, _) -> "$label: $text" }
+        } else {
+            replyText
         }
 
         val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
@@ -1375,12 +1372,39 @@ class ProTxtBgService : NotificationListenerService() {
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Suggested reply")
             .setContentText(replyText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
-            .addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
-            .addAction(sendAction)
             .setPriority(if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
+
+        // Per-tone send actions: one tap sends that variant directly from the shade.
+        // For a single tone, attach RemoteInput so the user can edit inline before sending.
+        if (availableTones.size == 1) {
+            val remoteInput = RemoteInput.Builder(REMOTE_INPUT_KEY)
+                .setLabel(replyText.take(60))
+                .build()
+            val replyAction = NotificationCompat.Action.Builder(
+                android.R.drawable.ic_menu_send, "Reply", sendPi
+            ).addRemoteInput(remoteInput).build()
+            builder.addAction(replyAction)
+            builder.addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
+        } else {
+            availableTones.take(3).forEach { (label, text, reqCode) ->
+                val toneIntent = Intent(this, ReplySendReceiver::class.java).apply {
+                    action = ACTION_SEND
+                    putExtra(EXTRA_REPLY_TEXT, text)
+                    putExtra(EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
+                    putExtra(EXTRA_NOTIF_ID, notifId)
+                    putExtra(EXTRA_CONV_KEY, convKey)
+                    if (intent != null) putExtra(EXTRA_INTENT, intent)
+                    putExtra(EXTRA_TONE_SELECTED, label.lowercase())
+                }
+                val tonePi = PendingIntent.getBroadcast(this, reqCode, toneIntent, flags)
+                builder.addAction(NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_send, "$label ↩", tonePi
+                ).build())
+            }
+        }
 
         // Action button (calendar, maps, etc.) when Claude detected a structured action
         if (suggestedAction != null) {

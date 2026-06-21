@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import android.util.Base64
+import java.security.SecureRandom
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -214,5 +216,24 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             Settings.Secure.DEFAULT_INPUT_METHOD
         ) ?: ""
         promise.resolve(defaultIme.startsWith("com.contxt.keyboard"))
+    }
+
+    // Returns a stable base64-encoded 32-byte AES key stored in EncryptedSharedPreferences.
+    // On first call a new key is generated via SecureRandom and persisted; subsequent calls
+    // return the same key. The key never leaves the device.
+    @ReactMethod
+    fun getOrCreateDbKey(promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val existing = prefs.getString("db_encryption_key", null)
+            if (existing != null) { promise.resolve(existing); return }
+            val bytes = ByteArray(32)
+            SecureRandom().nextBytes(bytes)
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            prefs.edit().putString("db_encryption_key", b64).apply()
+            promise.resolve(b64)
+        } catch (e: Exception) {
+            promise.reject("DB_KEY_ERROR", e.message ?: "failed to get db key", e)
+        }
     }
 }
