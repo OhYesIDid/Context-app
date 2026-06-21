@@ -491,9 +491,15 @@ class ProTxtBgService : NotificationListenerService() {
             }
         } else {
             // Ongoing conversation, no direct reply detected — append only the new trigger
-            // message to avoid duplicating the history already in the store.
+            // message, but only if it differs from the last stored entry. WhatsApp sometimes
+            // fires multiple onNotificationPosted events for the same chat (delivery updates,
+            // badge refresh) with identical EXTRA_MESSAGES content, which would cause the
+            // last message to be stored twice and appear duplicated in the bubble thread view.
             notifThread.lastOrNull()?.let { (sender, msgText) ->
-                store.appendMessage(convKey, sender, msgText)
+                val lastStored = store.getThread(convKey).lastOrNull()
+                if (lastStored?.second != msgText) {
+                    store.appendMessage(convKey, sender, msgText)
+                }
             }
         }
 
