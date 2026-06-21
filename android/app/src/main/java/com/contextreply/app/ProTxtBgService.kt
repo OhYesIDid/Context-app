@@ -1259,10 +1259,15 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) { JSONObject() }
         if (confirmed.has(convKey)) return null  // already confirmed, no banner needed
         val senderName = stripAppPrefix(convKey.substringAfter(":"))
-        // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching
+        // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching.
+        // Phone lookup is definitive — auto-confirm silently, no banner needed.
         val phoneMatch = ContactMatcher.bestMatchByPhone(this, senderName)
-        val candidates = if (phoneMatch != null) listOf(phoneMatch)
-                         else ContactMatcher.bestMatches(this, senderName, 3)
+        if (phoneMatch != null) {
+            confirmed.put(convKey, phoneMatch.contactId)
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            return null
+        }
+        val candidates = ContactMatcher.bestMatches(this, senderName, 3)
         val primary = candidates.firstOrNull() ?: return null
         return JSONObject().apply {
             put("contactId",    primary.contactId)
