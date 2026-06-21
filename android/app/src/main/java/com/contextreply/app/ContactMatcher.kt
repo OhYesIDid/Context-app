@@ -27,13 +27,14 @@ object ContactMatcher {
      */
     fun bestMatchByPhone(context: Context, phone: String): MatchResult? {
         if (!isPhoneNumber(phone)) return null
-        val displayName = DeviceContactsResolver.phoneToDisplayName(context, phone) ?: return null
+        val raw = DeviceContactsResolver.phoneToDisplayName(context, phone) ?: return null
+        val displayName = ProTxtBgService.stripAppPrefix(raw)
         val toneMatch = bestMatch(context, displayName)
         return MatchResult(
-            contactId    = toneMatch?.contactId ?: "device:phone",
-            displayName  = displayName,
+            contactId     = toneMatch?.contactId ?: "device:phone",
+            displayName   = displayName,
             preferredTone = toneMatch?.preferredTone,
-            confidence   = 1.0,
+            confidence    = 1.0,
         )
     }
 
@@ -64,10 +65,12 @@ object ContactMatcher {
             if (displayName.isEmpty()) continue
             val tone = obj.optString("preferred_tone").takeIf { it.isNotEmpty() }
 
-            val haystack = displayName.trim().lowercase()
+            // Strip app prefixes from cached names (e.g. WhatsApp contacts saved as "WhatsApp: Name")
+            val cleanName = ProTxtBgService.stripAppPrefix(displayName.trim())
+            val haystack = cleanName.lowercase()
             val score = max(jaroWinkler(needle, haystack), tokenSortJaroWinkler(needle, haystack))
 
-            if (score >= MIN_MATCH) results.add(MatchResult(id, displayName, tone, score))
+            if (score >= MIN_MATCH) results.add(MatchResult(id, cleanName, tone, score))
         }
 
         return results.sortedByDescending { it.confidence }.take(limit)
