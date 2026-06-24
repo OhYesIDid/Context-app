@@ -426,6 +426,7 @@ class BubbleSuggestionActivity : Activity() {
         // still alive — the system never recreates it via onNewIntent, so this is the
         // only way the quote reflects anything newer than what onCreate first saw.
         var quoteText: TextView? = null
+        var quoteScroll: ScrollView? = null
         val quoteInitial = messageExtra.ifEmpty { null }
         if (quoteInitial != null) {
             root.addView(LinearLayout(this).apply {
@@ -442,8 +443,14 @@ class BubbleSuggestionActivity : Activity() {
                 })
 
                 addView(ScrollView(this@BubbleSuggestionActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, dp(96), 1f)
+                    layoutParams = LinearLayout.LayoutParams(0, dp(80), 1f)
                     isVerticalScrollBarEnabled = false
+                    // Fading edges act as the scroll indicator — the top edge fades in
+                    // once the user has scrolled up, the bottom fades when there's more below.
+                    isVerticalFadingEdgeEnabled = true
+                    setFadingEdgeLength(dp(20))
+                    setBackgroundColor(BG)
+                    quoteScroll = this
                     addView(TextView(this@BubbleSuggestionActivity).apply {
                         text = quoteInitial
                         setTextColor(MUTED)
@@ -455,17 +462,23 @@ class BubbleSuggestionActivity : Activity() {
                 })
             })
 
-            // Load the full thread from the store and replace the quote with the last
-            // few messages so the user always sees context, not just the burst text.
+            // Load the full thread, show only the last message initially so the most
+            // recent context is visible at a glance. User scrolls up to see the full thread.
             if (convKey != null) {
                 val tv = quoteText
+                val sv = quoteScroll
                 Thread {
                     val thread = NotificationStore.getInstance(this).getThread(convKey)
-                    val formatted = thread.takeLast(4).joinToString("\n") { (sender, text) ->
+                    val messages = thread.takeLast(6)
+                    val formatted = messages.joinToString("\n") { (sender, text) ->
                         if (sender == null) "You: $text" else "$sender: $text"
                     }
                     if (formatted.isNotEmpty() && tv != null) {
-                        runOnUiThread { tv.text = formatted }
+                        runOnUiThread {
+                            tv.text = formatted
+                            // Scroll to bottom so the latest message is visible first
+                            sv?.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }
+                        }
                     }
                 }.start()
             }
