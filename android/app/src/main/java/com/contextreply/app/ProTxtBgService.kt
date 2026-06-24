@@ -947,7 +947,8 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\b(meeting|catch.?up)\b""", RegexOption.IGNORE_CASE),
         // Day name alone is too noisy ("had a great Saturday"). Require scheduling context around it.
         Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|work[s]?)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(meet|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        Regex("""(meet(?:\s+up)?|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bmeet[\s-]?up\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(this|next) (week|weekend|morning|afternoon|evening)\b""", RegexOption.IGNORE_CASE),
         Regex("""\btomorrow\b""", RegexOption.IGNORE_CASE),
         Regex("""\btonight\b""", RegexOption.IGNORE_CASE),
