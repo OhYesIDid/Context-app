@@ -282,7 +282,10 @@ class ProTxtAccessibilityService : AccessibilityService() {
             if (contact.isEmpty()) return true
 
             val screenName = screenConversationName(packageName) ?: run {
-                // No known view ID for this app — fall back to top-bar text search
+                // If a view ID is registered for this app, null means the conversation header
+                // isn't on screen (user is on the chat list, settings, etc.) — not a match.
+                if (CONVERSATION_TITLE_VIEW_ID.containsKey(packageName)) return false
+                // No known view ID — fall back to top-bar text search for other apps.
                 val root = rootInActiveWindow ?: return false
                 if (root.packageName?.toString() != packageName) {
                     @Suppress("DEPRECATION") root.recycle(); return false
