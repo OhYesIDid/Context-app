@@ -38,6 +38,7 @@ interface SuggestRequest {
   contactMemory?: string;
   lastSentReply?: string;
   contactContext?: string;
+  contactName?: string;
 }
 
 interface ReplyOptions {
@@ -329,6 +330,16 @@ export default {
     const replies = parseReplies(raw);
 
     const { contextUpdate, snippets, action, ...replyTones } = replies;
+
+    // Enrich calendar_add title with the contact name ("Dinner" → "Dinner with Maya")
+    // when a name is available and not already present in the title.
+    if (action?.type === 'calendar_add' && action.title && body.contactName) {
+      const name = body.contactName.split(' ')[0]; // first name only
+      if (!action.title.toLowerCase().includes(name.toLowerCase())) {
+        action.title = `${action.title} with ${name}`;
+      }
+    }
+
     const responseBody: Record<string, unknown> = { replies: replyTones, intents };
     if (contextUpdate) responseBody.contextUpdate = contextUpdate;
     if (snippets && snippets.length > 0) responseBody.snippets = snippets;

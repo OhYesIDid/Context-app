@@ -625,6 +625,7 @@ class ProTxtBgService : NotificationListenerService() {
         val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
         val contactContext = ContactSignals.getContactContext(this, convKey)
+        val senderName = stripAppPrefix(convKey.substringAfter(":"))
         // Tracks whether THIS job has finished — distinct from activeBubbles, which stays
         // true for any live, un-actioned bubble (including a successful suggestion the user
         // just hasn't tapped yet). The watchdog must not mistake "still live" for "still
@@ -641,6 +642,7 @@ class ProTxtBgService : NotificationListenerService() {
                     contactMemory = contactMemory,
                     lastSentReply = lastSent,
                     contactContext = contactContext,
+                    contactName = senderName,
                 ) ?: run {
                     android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                     if (activeBubbles.contains(convKey)) {

@@ -31,6 +31,7 @@ object WorkerClient {
         contactMemory: String? = null,
         lastSentReply: String? = null,
         contactContext: String? = null,
+        contactName: String? = null,
     ): WorkerResult? {
         val prefs = Prefs.main(context)
         val styleProfile      = prefs.getString("style_profile", null)
@@ -59,6 +60,7 @@ object WorkerClient {
             if (contactMemory != null) put("contactMemory", contactMemory)
             if (lastSentReply != null) put("lastSentReply", lastSentReply)
             if (contactContext != null) put("contactContext", contactContext)
+            if (contactName != null) put("contactName", contactName)
         }.toString()
 
         var lastException: Exception? = null
