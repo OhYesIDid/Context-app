@@ -24,6 +24,8 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 const { ProTxtSettings } = NativeModules;
 
 import { suggestReply } from './src/services/claude';
+import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchOfferings, purchasePkg, restorePurchases } from './src/services/purchases';
+import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
@@ -98,6 +100,13 @@ export default function App() {
   const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
   const [serviceSettingsVisible, setServiceSettingsVisible] = useState(false);
   const [keyboardDefault, setKeyboardDefault] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const [paywallOfferings, setPaywallOfferings] = useState<PurchasesOfferings | null>(null);
+  const [paywallSelectedPkg, setPaywallSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [paywallLoading, setPaywallLoading] = useState(false);
+  const [paywallRestoring, setPaywallRestoring] = useState(false);
+  const [paywallError, setPaywallError] = useState<string | null>(null);
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
@@ -154,6 +163,8 @@ export default function App() {
       syncStyleProfile();
     }
     getAllContacts().then(setContacts).catch(() => {});
+    configurePurchases();
+    checkProEntitlement().then(setIsPro);
   }, []);
 
   useEffect(() => {
@@ -166,7 +177,8 @@ export default function App() {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
     });
-    return () => sub.remove();
+    const removeEntitlementListener = addEntitlementListener(setIsPro);
+    return () => { sub.remove(); removeEntitlementListener(); };
   }, []);
 
   useEffect(() => {
@@ -248,6 +260,55 @@ export default function App() {
       if (err instanceof Error && err.message === 'Cancelled') { setSetupLoading(null); return; }
       Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
     } finally { setSetupLoading(null); }
+  };
+
+  const openPaywall = async () => {
+    setPaywallError(null);
+    setPaywallSelectedPkg(null);
+    setPaywallVisible(true);
+    const offerings = await fetchOfferings();
+    setPaywallOfferings(offerings);
+    const pkgs = offerings?.current?.availablePackages ?? [];
+    if (pkgs.length > 0) setPaywallSelectedPkg(pkgs[pkgs.length - 1]); // default to last (usually annual)
+  };
+
+  const handlePurchase = async () => {
+    if (!paywallSelectedPkg) return;
+    setPaywallLoading(true);
+    setPaywallError(null);
+    try {
+      const granted = await purchasePkg(paywallSelectedPkg);
+      if (granted) {
+        setIsPro(true);
+        setSuggestAllMessagesState(true);
+        ProTxtSettings?.setSuggestAllMessages?.(true);
+        setPaywallVisible(false);
+      }
+    } catch (e: any) {
+      if (!e?.userCancelled) setPaywallError('Purchase failed. Please try again.');
+    } finally {
+      setPaywallLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setPaywallRestoring(true);
+    setPaywallError(null);
+    try {
+      const granted = await restorePurchases();
+      if (granted) {
+        setIsPro(true);
+        setSuggestAllMessagesState(true);
+        ProTxtSettings?.setSuggestAllMessages?.(true);
+        setPaywallVisible(false);
+      } else {
+        setPaywallError('No previous purchase found.');
+      }
+    } catch {
+      setPaywallError('Restore failed. Please try again.');
+    } finally {
+      setPaywallRestoring(false);
+    }
   };
 
   const handleSetupComplete = (result: SetupResult) => {
@@ -385,18 +446,31 @@ export default function App() {
               thumbColor={skipGroupMessages ? PURPLE : MUTED}
             />
           </View>
-          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => { if (!isPro) { openPaywall(); } }}>
             <View style={{ flex: 1, marginRight: 16 }}>
-              <Text style={styles.settingText}>Suggest replies for all messages</Text>
-              <Text style={styles.setupStatus}>Off: only when ETA, availability, or plans detected</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.settingText}>Suggest replies for all messages</Text>
+                {!isPro && (
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.setupStatus}>
+                {isPro ? 'Suggesting replies for every incoming message' : 'Upgrade to suggest replies for every message'}
+              </Text>
             </View>
             <Switch
               value={suggestAllMessages}
-              onValueChange={(v) => { setSuggestAllMessagesState(v); ProTxtSettings?.setSuggestAllMessages?.(v); }}
+              onValueChange={(v) => {
+                if (v && !isPro) { openPaywall(); return; }
+                setSuggestAllMessagesState(v);
+                ProTxtSettings?.setSuggestAllMessages?.(v);
+              }}
               trackColor={{ false: BORDER, true: PURPLE + '99' }}
               thumbColor={suggestAllMessages ? PURPLE : MUTED}
             />
-          </View>
+          </Pressable>
         </View>
 
         {/* CONTACTS */}
@@ -802,6 +876,96 @@ export default function App() {
         </Pressable>
       </Modal>
 
+      {/* Paywall modal */}
+      <Modal visible={paywallVisible} transparent animationType="slide" onRequestClose={() => setPaywallVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPaywallVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+
+            <View style={{ alignItems: 'center', marginBottom: 20 }}>
+              <View style={styles.paywallIconRing}>
+                <Text style={{ fontSize: 28 }}>✦</Text>
+              </View>
+              <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 4 }]}>Protxt Pro</Text>
+              <Text style={[styles.setupStatus, { textAlign: 'center' }]}>Reply smarter, to every message</Text>
+            </View>
+
+            <View style={styles.paywallFeatureList}>
+              {[
+                'Suggestions for every incoming message',
+                'Not just ETA, availability, or plans',
+                'First access to new Pro features',
+              ].map((f) => (
+                <View key={f} style={styles.paywallFeatureRow}>
+                  <Text style={styles.paywallFeatureCheck}>✓</Text>
+                  <Text style={styles.paywallFeatureText}>{f}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Package selection */}
+            {paywallOfferings === null ? (
+              <ActivityIndicator color={PURPLE} style={{ marginVertical: 24 }} />
+            ) : (paywallOfferings.current?.availablePackages ?? []).length === 0 ? (
+              <Text style={[styles.setupStatus, { textAlign: 'center', marginVertical: 24 }]}>
+                Pricing not available right now. Try again later.
+              </Text>
+            ) : (
+              <View style={{ gap: 10, marginVertical: 20 }}>
+                {(paywallOfferings.current?.availablePackages ?? []).map((pkg) => {
+                  const selected = paywallSelectedPkg?.identifier === pkg.identifier;
+                  const isAnnual = pkg.packageType === 'ANNUAL' || pkg.identifier.toLowerCase().includes('annual');
+                  return (
+                    <Pressable
+                      key={pkg.identifier}
+                      style={[styles.paywallPkgCard, selected && styles.paywallPkgCardSelected]}
+                      onPress={() => setPaywallSelectedPkg(pkg)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.paywallPkgName, selected && { color: TEXT }]}>
+                          {pkg.product.title || (isAnnual ? 'Annual' : 'Monthly')}
+                        </Text>
+                        <Text style={[styles.setupStatus, { marginTop: 1 }]}>
+                          {pkg.product.priceString}{isAnnual ? ' / year' : ' / month'}
+                        </Text>
+                      </View>
+                      {isAnnual && (
+                        <View style={styles.paywallBestValue}>
+                          <Text style={styles.paywallBestValueText}>Best value</Text>
+                        </View>
+                      )}
+                      <View style={[styles.paywallRadio, selected && styles.paywallRadioSelected]}>
+                        {selected && <View style={styles.paywallRadioDot} />}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {paywallError && (
+              <Text style={{ color: '#f87171', fontSize: 13, textAlign: 'center', marginBottom: 12 }}>{paywallError}</Text>
+            )}
+
+            <Pressable
+              style={[styles.modalClose, { opacity: paywallLoading || !paywallSelectedPkg ? 0.6 : 1 }]}
+              onPress={handlePurchase}
+              disabled={paywallLoading || !paywallSelectedPkg}
+            >
+              {paywallLoading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.modalCloseText}>Subscribe</Text>}
+            </Pressable>
+
+            <Pressable onPress={handleRestore} disabled={paywallRestoring} style={{ marginTop: 16, alignItems: 'center' }}>
+              <Text style={{ color: MUTED, fontSize: 13 }}>
+                {paywallRestoring ? 'Restoring…' : 'Restore purchases'}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Share intent modal */}
       <Modal visible={shareText !== null} transparent animationType="slide" onRequestClose={() => setShareText(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShareText(null)}>
@@ -916,4 +1080,21 @@ const styles = StyleSheet.create({
   contactCard: { paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: BORDER },
   contactName: { color: TEXT, fontSize: 14, fontWeight: '600', marginBottom: 8 },
   chipLabel: { color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+
+  proBadge: { backgroundColor: PURPLE + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: PURPLE + '55' },
+  proBadgeText: { color: '#a78bfa', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+
+  paywallIconRing: { width: 64, height: 64, borderRadius: 32, backgroundColor: PURPLE + '22', borderWidth: 1, borderColor: PURPLE + '55', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  paywallFeatureList: { gap: 10, marginBottom: 4 },
+  paywallFeatureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  paywallFeatureCheck: { color: PURPLE, fontSize: 15, fontWeight: '700', width: 18 },
+  paywallFeatureText: { color: TEXT, fontSize: 15, flex: 1, lineHeight: 22 },
+  paywallPkgCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BORDER, borderRadius: 12, padding: 14, backgroundColor: SURFACE, gap: 12 },
+  paywallPkgCardSelected: { borderColor: PURPLE, backgroundColor: PURPLE + '11' },
+  paywallPkgName: { fontSize: 15, fontWeight: '600', color: MUTED },
+  paywallBestValue: { backgroundColor: PURPLE + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
+  paywallBestValueText: { color: '#a78bfa', fontSize: 11, fontWeight: '700' },
+  paywallRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
+  paywallRadioSelected: { borderColor: PURPLE },
+  paywallRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: PURPLE },
 });
