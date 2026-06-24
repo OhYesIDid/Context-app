@@ -14,7 +14,7 @@ data class MatchResult(
 
 object ContactMatcher {
 
-    private const val AUTO_APPLY  = 0.88
+    internal const val AUTO_APPLY  = 0.88
     private const val MIN_MATCH   = 0.70
 
     private val PHONE_RE = Regex("""^[+\d][\d\s\-().]{5,}$""")
@@ -79,8 +79,22 @@ object ContactMatcher {
     private fun loadCache(context: Context): JSONArray = try {
         val prefs = Prefs.main(context)
         val appCache = JSONArray(prefs.getString("contact_cache", "[]") ?: "[]")
-        if (appCache.length() > 0) appCache
-        else JSONArray(prefs.getString("device_contact_cache", "[]") ?: "[]")
+        val deviceCache = JSONArray(prefs.getString("device_contact_cache", "[]") ?: "[]")
+        when {
+            appCache.length() == 0 -> deviceCache
+            deviceCache.length() == 0 -> appCache
+            else -> JSONArray().also { merged ->
+                // App cache first — has tone + interaction data.
+                // Device cache fills gaps for contacts not yet imported into the app.
+                val appIds = (0 until appCache.length())
+                    .mapNotNull { appCache.optJSONObject(it)?.optString("id") }.toSet()
+                for (i in 0 until appCache.length()) merged.put(appCache.get(i))
+                for (i in 0 until deviceCache.length()) {
+                    val obj = deviceCache.optJSONObject(i) ?: continue
+                    if (!appIds.contains(obj.optString("id"))) merged.put(obj)
+                }
+            }
+        }
     } catch (_: Exception) { JSONArray() }
 
     // ── Jaro-Winkler ────────────────────────────────────────────────────────

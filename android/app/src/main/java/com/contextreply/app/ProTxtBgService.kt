@@ -1277,6 +1277,12 @@ class ProTxtBgService : NotificationListenerService() {
         }
         val candidates = ContactMatcher.bestMatches(this, senderName, 3)
         val primary = candidates.firstOrNull() ?: return null
+        // High-confidence name match — auto-confirm silently, same as phone lookup.
+        if (primary.confidence >= ContactMatcher.AUTO_APPLY) {
+            confirmed.put(convKey, primary.contactId)
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            return null
+        }
         return JSONObject().apply {
             put("contactId",    primary.contactId)
             put("displayName",  primary.displayName)
