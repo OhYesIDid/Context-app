@@ -917,6 +917,8 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\bwhen (are you|do you|can you|will you)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwhat (?:day|date|time) (?:is|are|works)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
     )
 
     private val LOCATION_SHARE_PATTERNS = listOf(

@@ -80,6 +80,8 @@ const AVAILABILITY_PATTERNS = [
   /\bwhen (are you|do you|can you|will you)\b/i,
   /\bwhat (day|date|time) (is|are|works)\b/i,
   /\bwhat (is|are) the (date|day|time)\b/i,
+  /\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+  /\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
 ];
 
 function detectIntents(message: string): string[] {
