@@ -528,7 +528,7 @@ class ProTxtBgService : NotificationListenerService() {
             ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
-            val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", true) } catch (_: Exception) { true }
+            val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // If this convKey's bubble Activity is already open (the system never recreates
