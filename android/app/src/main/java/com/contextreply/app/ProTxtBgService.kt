@@ -527,7 +527,8 @@ class ProTxtBgService : NotificationListenerService() {
 
             ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
-            val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
+            val srcPkg = convKey.substringBefore(":")
+            val detectedIntentsStr = detectIntents(latestMessage, srcPkg).joinToString(",")
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
@@ -581,7 +582,7 @@ class ProTxtBgService : NotificationListenerService() {
         workerPool.submit {
             try {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
-                val enrichments = buildEnrichments(latestMessage, fullThread)
+                val enrichments = buildEnrichments(latestMessage, fullThread, packageName)
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
                 val result = WorkerClient.call(
                     this, latestMessage, fullThread, enrichments,
@@ -880,20 +881,31 @@ class ProTxtBgService : NotificationListenerService() {
         "other"          to listOf<String>(),
     )
 
-    private fun detectIntents(message: String): List<String> {
+    private val DATING_PACKAGES = setOf(
+        "co.hinge.app", "com.hinge.app",
+        "com.tinder",
+        "com.bumble.app",
+        "com.okcupid.okcupid",
+        "com.grindr.android",
+        "com.match.android.matchmobile",
+        "com.happn.android",
+    )
+
+    private fun detectIntents(message: String, srcPkg: String = ""): List<String> {
         val intents = mutableListOf<String>()
         if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
-        if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
+        // Dating apps: "this weekend" / "tonight" are social, not calendar scheduling.
+        if (!DATING_PACKAGES.contains(srcPkg) && AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
         if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
         return intents.ifEmpty { listOf("other") }
     }
 
-    private fun requiredEnrichments(message: String): List<String> =
-        detectIntents(message).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
+    private fun requiredEnrichments(message: String, srcPkg: String = ""): List<String> =
+        detectIntents(message, srcPkg).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
 
-    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject {
+    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), srcPkg: String = ""): JSONObject {
         val enrichments = JSONObject()
-        for (key in requiredEnrichments(message)) {
+        for (key in requiredEnrichments(message, srcPkg)) {
             when (key) {
                 "maps" -> {
                     // Search latest message first, then fall back to thread history so that
@@ -1276,7 +1288,13 @@ class ProTxtBgService : NotificationListenerService() {
             return null
         }
         val candidates = ContactMatcher.bestMatches(this, senderName, 3)
-        val primary = candidates.firstOrNull() ?: return null
+        val primary = candidates.firstOrNull() ?: run {
+            // No contact found anywhere — auto-register so the banner never repeats.
+            val autoId = "auto:${senderName.lowercase().replace(Regex("[^a-z0-9]"), "_").take(40)}"
+            confirmed.put(convKey, autoId)
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            return null
+        }
         // High-confidence name match — auto-confirm silently, same as phone lookup.
         if (primary.confidence >= ContactMatcher.AUTO_APPLY) {
             confirmed.put(convKey, primary.contactId)

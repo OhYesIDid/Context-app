@@ -623,41 +623,6 @@ class BubbleSuggestionActivity : Activity() {
                 }
             })
             root.addView(banner)
-        } else if (contactMatch == null) {
-            // Unknown sender — offer to save to contacts
-            val saveBanner = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#27272a"))
-                    cornerRadius = dp(8).toFloat()
-                    setStroke(1, BORDER)
-                }
-                setPadding(dp(10), dp(7), dp(10), dp(7))
-                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                lp.bottomMargin = dp(10)
-                layoutParams = lp
-            }
-            saveBanner.addView(TextView(this).apply {
-                text = "Unknown contact"
-                setTextColor(MUTED)
-                textSize = 12f
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            saveBanner.addView(TextView(this).apply {
-                text = "+ Save"
-                setTextColor(PURPLE)
-                textSize = 12f
-                setTypeface(null, Typeface.BOLD)
-                setPadding(dp(12), dp(4), 0, dp(4))
-                setOnClickListener {
-                    startActivity(Intent(ContactsContract.Intents.Insert.ACTION).apply {
-                        putExtra(ContactsContract.Intents.Insert.NAME, contact)
-                    })
-                    saveBanner.visibility = View.GONE
-                }
-            })
-            root.addView(saveBanner)
         }
 
         // ── Reply area: edit text (ready) or skeleton (loading) ───────────────
