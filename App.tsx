@@ -452,9 +452,9 @@ export default function App() {
           >
             <View style={{ flex: 1, marginRight: 16 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.settingText}>Suggest replies for all messages</Text>
+                <Text style={[styles.settingText, { flexShrink: 1 }]}>Suggest replies for all messages</Text>
                 {!isPro && (
-                  <View style={styles.proBadge}>
+                  <View style={[styles.proBadge, { flexShrink: 0 }]}>
                     <Text style={styles.proBadgeText}>PRO</Text>
                   </View>
                 )}
