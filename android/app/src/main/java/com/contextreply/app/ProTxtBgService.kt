@@ -527,8 +527,7 @@ class ProTxtBgService : NotificationListenerService() {
 
             ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
-            val srcPkg = convKey.substringBefore(":")
-            val detectedIntentsStr = detectIntents(latestMessage, srcPkg).joinToString(",")
+            val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
@@ -582,7 +581,7 @@ class ProTxtBgService : NotificationListenerService() {
         workerPool.submit {
             try {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
-                val enrichments = buildEnrichments(latestMessage, fullThread, packageName)
+                val enrichments = buildEnrichments(latestMessage, fullThread)
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
                 val result = WorkerClient.call(
                     this, latestMessage, fullThread, enrichments,
@@ -850,15 +849,20 @@ class ProTxtBgService : NotificationListenerService() {
     private val AVAILABILITY_PATTERNS = listOf(
         Regex("""\b(free|available|availability)\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(busy|schedule|calendar)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(meeting|catch.?up|call|chat)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        // "chat" and "call" alone are too broad (casual social use). Require scheduling context.
+        Regex("""\b(meeting|catch.?up)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(quick call|hop on a call|jump on a call|scheduled? call)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(quick chat|have a chat|schedule.{0,10}chat)\b""", RegexOption.IGNORE_CASE),
+        // Day name alone is too noisy ("had a great Saturday"). Require scheduling context around it.
+        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|work[s]?)\b""", RegexOption.IGNORE_CASE),
+        Regex("""(meet|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(this|next) (week|weekend|morning|afternoon|evening)\b""", RegexOption.IGNORE_CASE),
         Regex("""\btomorrow\b""", RegexOption.IGNORE_CASE),
         Regex("""\btonight\b""", RegexOption.IGNORE_CASE),
         Regex("""are you (around|up for|down for)""", RegexOption.IGNORE_CASE),
-        // event-lookup: "when is X?", "what day/date/time is X?"
-        Regex("""\bwhen (?:is|are)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bwhat (?:day|date|time) (?:is|are)\b""", RegexOption.IGNORE_CASE),
+        // event-lookup: "when are you free/available/back?" — not just any "when is/are"
+        Regex("""\bwhen (are you|do you|can you|will you)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwhat (?:day|date|time) (?:is|are|works)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
     )
 
@@ -881,31 +885,20 @@ class ProTxtBgService : NotificationListenerService() {
         "other"          to listOf<String>(),
     )
 
-    private val DATING_PACKAGES = setOf(
-        "co.hinge.app", "com.hinge.app",
-        "com.tinder",
-        "com.bumble.app",
-        "com.okcupid.okcupid",
-        "com.grindr.android",
-        "com.match.android.matchmobile",
-        "com.happn.android",
-    )
-
-    private fun detectIntents(message: String, srcPkg: String = ""): List<String> {
+    private fun detectIntents(message: String): List<String> {
         val intents = mutableListOf<String>()
         if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
-        // Dating apps: "this weekend" / "tonight" are social, not calendar scheduling.
-        if (!DATING_PACKAGES.contains(srcPkg) && AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
+        if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
         if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
         return intents.ifEmpty { listOf("other") }
     }
 
-    private fun requiredEnrichments(message: String, srcPkg: String = ""): List<String> =
-        detectIntents(message, srcPkg).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
+    private fun requiredEnrichments(message: String): List<String> =
+        detectIntents(message).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
 
-    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), srcPkg: String = ""): JSONObject {
+    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject {
         val enrichments = JSONObject()
-        for (key in requiredEnrichments(message, srcPkg)) {
+        for (key in requiredEnrichments(message)) {
             when (key) {
                 "maps" -> {
                     // Search latest message first, then fall back to thread history so that
