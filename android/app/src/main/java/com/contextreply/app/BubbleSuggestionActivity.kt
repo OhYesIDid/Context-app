@@ -15,7 +15,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
+import android.provider.ContactsContract
 import android.provider.Settings
+import android.widget.ScrollView
 import android.view.Gravity
 import android.view.View
 import android.widget.EditText
@@ -439,15 +441,17 @@ class BubbleSuggestionActivity : Activity() {
                     }
                 })
 
-                addView(TextView(this@BubbleSuggestionActivity).apply {
-                    text = quoteInitial
-                    setTextColor(MUTED)
-                    textSize = 13f
-                    maxLines = 4
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                    setLineSpacing(0f, 1.25f)
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    quoteText = this
+                addView(ScrollView(this@BubbleSuggestionActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, dp(96), 1f)
+                    isVerticalScrollBarEnabled = false
+                    addView(TextView(this@BubbleSuggestionActivity).apply {
+                        text = quoteInitial
+                        setTextColor(MUTED)
+                        textSize = 13f
+                        setLineSpacing(0f, 1.25f)
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                        quoteText = this
+                    })
                 })
             })
 
@@ -592,15 +596,55 @@ class BubbleSuggestionActivity : Activity() {
                         })
                     }
                     banner.addView(TextView(this@BubbleSuggestionActivity).apply {
-                        text = "Not in my contacts"
+                        text = "+ Save to contacts"
                         setTextColor(MUTED)
                         textSize = 12f
                         setPadding(0, dp(6), 0, 0)
-                        setOnClickListener { banner.visibility = View.GONE }
+                        setOnClickListener {
+                            startActivity(Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                                putExtra(ContactsContract.Intents.Insert.NAME, contact)
+                            })
+                            banner.visibility = View.GONE
+                        }
                     })
                 }
             })
             root.addView(banner)
+        } else if (contactMatch == null) {
+            // Unknown sender — offer to save to contacts
+            val saveBanner = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#27272a"))
+                    cornerRadius = dp(8).toFloat()
+                    setStroke(1, BORDER)
+                }
+                setPadding(dp(10), dp(7), dp(10), dp(7))
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(10)
+                layoutParams = lp
+            }
+            saveBanner.addView(TextView(this).apply {
+                text = "Unknown contact"
+                setTextColor(MUTED)
+                textSize = 12f
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            saveBanner.addView(TextView(this).apply {
+                text = "+ Save"
+                setTextColor(PURPLE)
+                textSize = 12f
+                setTypeface(null, Typeface.BOLD)
+                setPadding(dp(12), dp(4), 0, dp(4))
+                setOnClickListener {
+                    startActivity(Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                        putExtra(ContactsContract.Intents.Insert.NAME, contact)
+                    })
+                    saveBanner.visibility = View.GONE
+                }
+            })
+            root.addView(saveBanner)
         }
 
         // ── Reply area: edit text (ready) or skeleton (loading) ───────────────
