@@ -311,7 +311,7 @@ class BubbleSuggestionActivity : Activity() {
                     NotificationStore.getInstance(this@BubbleSuggestionActivity).getThread(convKey)
                 else emptyList()
                 val contactMemory = if (convKey != null)
-                    ContactMemory.getMemory(this@BubbleSuggestionActivity, convKey) else null
+                    ContactMemory.buildMemoryBlock(this@BubbleSuggestionActivity, convKey) else null
                 val lastSent = if (convKey != null)
                     ContactMemory.getLastSent(this@BubbleSuggestionActivity, convKey) else null
                 val result = WorkerClient.call(

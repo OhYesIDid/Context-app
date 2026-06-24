@@ -9,7 +9,13 @@ import java.net.URL
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-data class WorkerResult(val replies: JSONObject, val intent: String?, val contextUpdate: String?, val action: JSONObject? = null)
+data class WorkerResult(
+    val replies: JSONObject,
+    val intent: String?,
+    val contextUpdate: String?,
+    val action: JSONObject? = null,
+    val snippets: List<String> = emptyList(),
+)
 
 object WorkerClient {
 
@@ -116,7 +122,13 @@ object WorkerClient {
             val intent = obj.optString("intent").ifEmpty { null }
             val contextUpdate = obj.optString("contextUpdate").ifEmpty { null }
             val action = obj.optJSONObject("action")
-            WorkerResult(replies, intent, contextUpdate, action)
+            val snippetsArr = obj.optJSONArray("snippets")
+            val snippets = if (snippetsArr != null) {
+                (0 until snippetsArr.length()).mapNotNull {
+                    snippetsArr.optString(it).ifEmpty { null }
+                }
+            } else emptyList()
+            WorkerResult(replies, intent, contextUpdate, action, snippets)
         } finally {
             conn.disconnect()
         }

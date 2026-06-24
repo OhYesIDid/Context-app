@@ -569,7 +569,7 @@ class ProTxtBgService : NotificationListenerService() {
         userInApp: Boolean,
     ) {
         val fullThread = store.getThread(convKey)
-        val contactMemory = ContactMemory.getMemory(this, convKey)
+        val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
         val contactContext = ContactSignals.getContactContext(this, convKey)
         // Tracks whether THIS job has finished — distinct from activeBubbles, which stays
@@ -596,8 +596,8 @@ class ProTxtBgService : NotificationListenerService() {
                     return@submit
                 }
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "worker call returned")
-                // Persist context update for future conversations with this contact
-                result.contextUpdate?.let { ContactMemory.saveMemory(this, convKey, it) }
+                // Persist context update + snippets, keyed by contactId where available
+                ContactMemory.save(this, convKey, result.contextUpdate, result.snippets)
                 // User may have dismissed the loading bubble — don't post a stale result
                 if (!activeBubbles.contains(convKey)) return@submit
                 val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
