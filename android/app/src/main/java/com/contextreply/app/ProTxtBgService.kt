@@ -206,6 +206,17 @@ class ProTxtBgService : NotificationListenerService() {
     val recentlySentAt = ConcurrentHashMap<String, Long>()
     private val SENT_COOLDOWN_MS = 5_000L
     private val lastOpenedTimestamp = ConcurrentHashMap<String, Long>()
+    // Tracks the most recently detected non-other intent per conversation.
+    // Used for intent inheritance: a follow-up message ("what time works?") that
+    // doesn't independently match intent patterns can inherit the intent from a
+    // recent context message ("are you free saturday?") in the same thread.
+    // Session-scoped (in-memory only) — if the service restarts, the window is lost,
+    // which is acceptable since a restart takes longer than a typical follow-up gap.
+    private val conversationIntents = ConcurrentHashMap<String, Pair<String, Long>>()
+    // How many messages back in the notification bundle to scan for intent context.
+    private val INTENT_LOOKBACK_COUNT = 6
+    // How long (ms) a detected intent remains eligible for inheritance.
+    private val INTENT_LOOKBACK_WINDOW_MS = 30 * 60 * 1000L
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val workerPool = Executors.newFixedThreadPool(3)
     private lateinit var store: NotificationStore
@@ -556,6 +567,22 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
+        // Scan inbound messages from the notification bundle for intent context.
+        // This captures intent signals from thread history (e.g. "are you free saturday?"
+        // in the same thread as the arriving "what time works?" follow-up). The bundle
+        // includes recent conversation history so this covers messages the user hasn't
+        // yet replied to alongside new arrivals. Save with current timestamp so the
+        // debounce block can inherit within the lookback window.
+        val bundleInboundIntents = notifThread
+            .takeLast(INTENT_LOOKBACK_COUNT)
+            .filter { (sender, _) -> sender != null }
+            .flatMap { (_, msgText) -> detectIntents(msgText) }
+            .filter { it != "other" }
+            .distinct()
+        if (bundleInboundIntents.isNotEmpty()) {
+            conversationIntents[convKey] = Pair(bundleInboundIntents.joinToString(","), System.currentTimeMillis())
+        }
+
         // Debounce: cancel any existing scheduled call for this conversation and
         // reschedule. A burst of messages waits for the last one to settle.
         val packageName = sbn.packageName
@@ -580,9 +607,21 @@ class ProTxtBgService : NotificationListenerService() {
 
             ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
-            val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
+            val directIntentsStr = detectIntents(latestMessage).joinToString(",")
+            // Inherit intent from recent conversation context when the latest message
+            // doesn't independently trigger one. E.g. "what time works?" (other intent)
+            // inherits "availability" from "are you free saturday?" in the same thread
+            // if that message was processed within the lookback window.
+            val savedIntent = conversationIntents[convKey]
+            val effectiveIntentsStr = if (directIntentsStr == "other" &&
+                savedIntent != null &&
+                System.currentTimeMillis() - savedIntent.second < INTENT_LOOKBACK_WINDOW_MS) {
+                if (BuildConfig.DEBUG) android.util.Log.d("ProTxt",
+                    "inheriting intent '${savedIntent.first}' from conversation context for $convKey")
+                savedIntent.first
+            } else directIntentsStr
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
-            if (!suggestAll && detectedIntentsStr == "other") return@schedule
+            if (!suggestAll && effectiveIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // If this convKey's bubble Activity is already open (the system never recreates
             // it to deliver a fresh Intent for later messages), push it back into a loading
@@ -593,13 +632,13 @@ class ProTxtBgService : NotificationListenerService() {
             val userInApp = ProTxtAccessibilityService.activePackage == packageName
             if (!userInApp) {
                 try {
-                    postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
+                    postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, effectiveIntentsStr, markAsReadPendingIntent)
                 } catch (e: Exception) {
                     android.util.Log.e("ProTxt", "postLoadingNotification threw: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
             runWorkerJob(
-                convKey, notifId, latestMessage, detectedIntentsStr,
+                convKey, notifId, latestMessage, effectiveIntentsStr,
                 replyPendingIntent, remoteInputKey, openChatIntent,
                 markAsReadPendingIntent, packageName, userInApp,
             )
