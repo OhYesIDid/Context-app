@@ -264,6 +264,24 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
+    // Dismiss bubbles that were posted purely because suggest_all was on (intent == "other").
+    // Called when the toggle is turned off so non-context-matched bubbles disappear immediately.
+    internal fun dismissOtherIntentBubbles() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val toRemove = pendingBubbles.entries
+            .filter { (_, b) -> b.detectedIntents == "other" }
+            .map { it.key }
+        for (convKey in toRemove) {
+            val notifId = convKey.hashCode().and(0x7FFFFFFF)
+            nm.cancel(notifId)
+            activeBubbles.remove(convKey)
+            arrivalBuffer.remove(convKey)
+            pendingBubbles.remove(convKey)
+            pendingJobs[convKey]?.cancel(false)
+            pendingJobs.remove(convKey)
+        }
+    }
+
     internal fun dismissAllGroupBubbles() {
         // Reload from SharedPrefs in case the service restarted since group messages arrived
         val prefs = Prefs.main(this)
@@ -493,16 +511,24 @@ class ProTxtBgService : NotificationListenerService() {
         // inside the messaging app (not via the bubble). WhatsApp cancels the notification on
         // direct reply rather than posting an update, so Gate 6 never fires. The NEXT inbound
         // notification carries the full updated EXTRA_MESSAGES bundle including the user's reply
-        // with sender=null in the middle of the thread. We detect this case here and reseed from
+        // with sender=null (or selfName) in the thread. We detect this case here and reseed from
         // after that reply so Claude only sees post-reply context.
-        // Guard: lastOutboundIdx > 0 — if the first message has null sender the app likely doesn't
-        // set sender at all (non-MessagingStyle format); don't treat that as an outbound reply.
-        val lastOutboundIdx = notifThread.indexOfLast { (sender, _) -> sender == null || (selfName != null && sender == selfName) }
-        if (lastOutboundIdx > 0) {
+        //
+        // Guard: require at least one inbound message with a named sender. This confirms the app
+        // uses proper MessagingStyle so a null/selfName sender can safely be read as outbound.
+        // Without this check an app that never sets sender (non-MessagingStyle) would always
+        // register the first null-sender message as an outbound reply and lose thread context.
+        // We allow lastOutboundIdx == 0 (unlike the old > 0 guard) because WhatsApp often only
+        // bundles [outbound, new-incoming] — the outbound at index 0 is still a valid signal.
+        val lastOutboundIdx = notifThread.indexOfLast { (sender, _) ->
+            sender == null || (selfName != null && sender == selfName)
+        }
+        val anyInboundNamed = notifThread.any { (sender, _) ->
+            sender != null && (selfName == null || sender != selfName)
+        }
+        if (anyInboundNamed && lastOutboundIdx >= 0) {
             // User replied directly since our last cached snapshot — record what they sent, clear
             // the store, and reseed with only the inbound messages that came after their reply.
-            // The outbound text is captured in ContactMemory (sent as lastSentReply to the worker)
-            // so it doesn't need to be in the thread itself.
             val outboundText = notifThread[lastOutboundIdx].second
             ContactMemory.saveLastSent(this, convKey, outboundText)
             store.markReplied(convKey)
@@ -761,6 +787,12 @@ class ProTxtBgService : NotificationListenerService() {
                 lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
                 if (isTracked) {
                     activeBubbles.remove(convKey)
+                    // Clear the stored thread: the user is reading/replying in the app.
+                    // If they reply, the outbound detection in onNotificationPosted will
+                    // handle the next bundle; if it doesn't (app bundles only the new
+                    // inbound without the outbound), this ensures the next suggestion
+                    // doesn't reference messages that predated the user's reply.
+                    NotificationStore.getInstance(this).markReplied(convKey)
                     // Schedule auto-dismiss keyed on pendingBubbles (not activeBubbles,
                     // which we just cleared) as the zombie-bubble safety net. Gate 6 and
                     // send-button detection clear pendingBubbles before this fires when a

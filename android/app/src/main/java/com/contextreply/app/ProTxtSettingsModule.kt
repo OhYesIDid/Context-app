@@ -44,9 +44,9 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             .edit()
             .putBoolean("suggest_all_messages", all)
             .apply()
-        // When enabling, replay any notifications already on screen that were skipped
-        // while the toggle was off (they had 'other' intent and hit the early return).
-        if (all) ProTxtBgService.getInstance()?.replayActiveNotifications()
+        val svc = ProTxtBgService.getInstance()
+        if (all) svc?.replayActiveNotifications()
+        else svc?.dismissOtherIntentBubbles()
     }
 
     @ReactMethod
