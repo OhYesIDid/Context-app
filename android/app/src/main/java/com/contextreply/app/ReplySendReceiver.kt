@@ -140,10 +140,15 @@ class ReplySendReceiver : BroadcastReceiver() {
         val toneSelected = intent.getStringExtra(ProTxtBgService.EXTRA_TONE_SELECTED)
 
         val remoteResults = RemoteInput.getResultsFromIntent(intent)
+        // Priority: (1) RemoteInput text (notification-shade inline reply or keyboard),
+        // (2) EXTRA_REPLY_TEXT which carries the user's edited text from the bubble activity,
+        // (3) originalSuggestion as final fallback.
         val replyText = remoteResults
             ?.getCharSequence(ProTxtBgService.REMOTE_INPUT_KEY)
             ?.toString()
             ?.takeIf { it.isNotBlank() }
+            ?: intent.getStringExtra(ProTxtBgService.EXTRA_REPLY_TEXT)
+                ?.takeIf { it.isNotBlank() }
             ?: originalSuggestion
             ?: return
 
