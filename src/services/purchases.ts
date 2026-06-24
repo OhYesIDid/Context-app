@@ -1,13 +1,9 @@
-import Purchases, {
-  LOG_LEVEL,
-  type PurchasesOfferings,
-  type PurchasesPackage,
-} from 'react-native-purchases';
+import Purchases, { LOG_LEVEL, type CustomerInfo, type PurchasesOfferings, type PurchasesPackage } from 'react-native-purchases';
+import RevenueCatUI from 'react-native-purchases-ui';
 
-// Get this from the RevenueCat dashboard → Apps → Android → API key (starts with "goog_")
-const RC_API_KEY_ANDROID = 'REVENUECAT_ANDROID_API_KEY_PLACEHOLDER';
+const RC_API_KEY_ANDROID = 'test_roUNgKztgiwojQesGuqSdqagSfg';
 
-export const PRO_ENTITLEMENT = 'pro';
+export const PRO_ENTITLEMENT = 'ConTxt Pro';
 
 export function configurePurchases() {
   if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
@@ -24,9 +20,7 @@ export async function checkProEntitlement(): Promise<boolean> {
 }
 
 export function addEntitlementListener(cb: (isPro: boolean) => void): () => void {
-  const handler = (info: import('react-native-purchases').CustomerInfo) => {
-    cb(!!info.entitlements.active[PRO_ENTITLEMENT]);
-  };
+  const handler = (info: CustomerInfo) => cb(!!info.entitlements.active[PRO_ENTITLEMENT]);
   Purchases.addCustomerInfoUpdateListener(handler);
   return () => Purchases.removeCustomerInfoUpdateListener(handler);
 }
@@ -51,4 +45,11 @@ export async function restorePurchases(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Opens RC's Customer Center so Pro users can manage or cancel their subscription.
+export async function presentCustomerCenter(): Promise<void> {
+  try {
+    await RevenueCatUI.presentCustomerCenter();
+  } catch {}
 }

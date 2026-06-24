@@ -24,7 +24,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 const { ProTxtSettings } = NativeModules;
 
 import { suggestReply } from './src/services/claude';
-import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchOfferings, purchasePkg, restorePurchases } from './src/services/purchases';
+import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchOfferings, presentCustomerCenter, purchasePkg, restorePurchases } from './src/services/purchases';
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
@@ -269,7 +269,7 @@ export default function App() {
     const offerings = await fetchOfferings();
     setPaywallOfferings(offerings);
     const pkgs = offerings?.current?.availablePackages ?? [];
-    if (pkgs.length > 0) setPaywallSelectedPkg(pkgs[pkgs.length - 1]); // default to last (usually annual)
+    if (pkgs.length > 0) setPaywallSelectedPkg(pkgs[pkgs.length - 1]);
   };
 
   const handlePurchase = async () => {
@@ -446,7 +446,10 @@ export default function App() {
               thumbColor={skipGroupMessages ? PURPLE : MUTED}
             />
           </View>
-          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => { if (!isPro) { openPaywall(); } }}>
+          <Pressable
+            style={[styles.settingRow, { borderBottomWidth: isPro ? 1 : 0 }]}
+            onPress={() => { if (!isPro) { openPaywall(); } }}
+          >
             <View style={{ flex: 1, marginRight: 16 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={styles.settingText}>Suggest replies for all messages</Text>
@@ -471,6 +474,15 @@ export default function App() {
               thumbColor={suggestAllMessages ? PURPLE : MUTED}
             />
           </Pressable>
+          {isPro && (
+            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => presentCustomerCenter()}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingText}>Manage subscription</Text>
+                <Text style={styles.setupStatus}>ConTxt Pro — Active</Text>
+              </View>
+              <Text style={styles.setupAction}>Manage ›</Text>
+            </Pressable>
+          )}
         </View>
 
         {/* CONTACTS */}
