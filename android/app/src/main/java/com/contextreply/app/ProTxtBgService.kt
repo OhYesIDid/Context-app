@@ -164,6 +164,22 @@ class ProTxtBgService : NotificationListenerService() {
             val prefix = key.substring(0, colonSpace)
             return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
         }
+
+        fun appLabel(pkg: String): String = when {
+            pkg.contains("whatsapp")                          -> "WhatsApp"
+            pkg.contains("telegram")                          -> "Telegram"
+            pkg.contains("hinge")                             -> "Hinge"
+            pkg.contains("tinder")                            -> "Tinder"
+            pkg.contains("bumble")                            -> "Bumble"
+            pkg.contains("instagram")                         -> "Instagram"
+            pkg.contains("messenger") || pkg.contains("facebook") -> "Messenger"
+            pkg.contains("signal")                            -> "Signal"
+            pkg.contains("snapchat")                          -> "Snapchat"
+            pkg.contains("twitter") || pkg.contains(".x.")    -> "X"
+            pkg.contains("viber")                             -> "Viber"
+            pkg.contains("discord")                           -> "Discord"
+            else -> pkg.substringAfterLast(".").replaceFirstChar { it.uppercase() }
+        }
     }
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
@@ -1263,6 +1279,8 @@ class ProTxtBgService : NotificationListenerService() {
     // Returns a JSON blob for a fuzzy-matched contact that hasn't been confirmed yet,
     // or null if the sender is already confirmed or no match found.
     // Includes a `candidates` array of up to 3 near-matches for the disambiguation picker.
+    // Includes `crossApp: true` when the match would link two different app packages —
+    // those are never auto-confirmed regardless of confidence; the user must approve.
     private fun contactMatchJson(convKey: String): String? {
         val prefs = Prefs.main(this)
         val confirmed = try {
@@ -1270,14 +1288,27 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) { JSONObject() }
         if (confirmed.has(convKey)) return null  // already confirmed, no banner needed
         val senderName = stripAppPrefix(convKey.substringAfter(":"))
+
         // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching.
-        // Phone lookup is definitive — auto-confirm silently, no banner needed.
         val phoneMatch = ContactMatcher.bestMatchByPhone(this, senderName)
         if (phoneMatch != null) {
-            confirmed.put(convKey, phoneMatch.contactId)
-            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
-            return null
+            val (crossApp, srcPkg) = crossAppLink(phoneMatch.contactId, convKey, confirmed)
+            if (!crossApp) {
+                confirmed.put(convKey, phoneMatch.contactId)
+                prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+                return null
+            }
+            return JSONObject().apply {
+                put("contactId",   phoneMatch.contactId)
+                put("displayName", phoneMatch.displayName)
+                put("preferredTone", phoneMatch.preferredTone ?: "")
+                put("confidence",  1.0)
+                put("crossApp", true)
+                put("crossAppSourceLabel", appLabel(srcPkg))
+                put("candidates",  JSONArray())
+            }.toString()
         }
+
         val candidates = ContactMatcher.bestMatches(this, senderName, 3)
         val primary = candidates.firstOrNull() ?: run {
             // No contact found anywhere — auto-register so the banner never repeats.
@@ -1286,26 +1317,59 @@ class ProTxtBgService : NotificationListenerService() {
             prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
             return null
         }
-        // High-confidence name match — auto-confirm silently, same as phone lookup.
-        if (primary.confidence >= ContactMatcher.AUTO_APPLY) {
-            confirmed.put(convKey, primary.contactId)
-            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
-            return null
-        }
-        return JSONObject().apply {
-            put("contactId",    primary.contactId)
-            put("displayName",  primary.displayName)
-            put("preferredTone", primary.preferredTone ?: "")
-            put("confidence",   primary.confidence)
-            put("candidates", JSONArray().also { arr ->
-                for (c in candidates) arr.put(JSONObject().apply {
-                    put("contactId",    c.contactId)
-                    put("displayName",  c.displayName)
-                    put("preferredTone", c.preferredTone ?: "")
-                    put("confidence",   c.confidence)
-                })
+
+        fun candidatesJson() = JSONArray().also { arr ->
+            for (c in candidates) arr.put(JSONObject().apply {
+                put("contactId",    c.contactId)
+                put("displayName",  c.displayName)
+                put("preferredTone", c.preferredTone ?: "")
+                put("confidence",   c.confidence)
             })
+        }
+
+        // High-confidence name match — auto-confirm unless it crosses app boundaries.
+        if (primary.confidence >= ContactMatcher.AUTO_APPLY) {
+            val (crossApp, srcPkg) = crossAppLink(primary.contactId, convKey, confirmed)
+            if (!crossApp) {
+                confirmed.put(convKey, primary.contactId)
+                prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+                return null
+            }
+            return JSONObject().apply {
+                put("contactId",   primary.contactId)
+                put("displayName", primary.displayName)
+                put("preferredTone", primary.preferredTone ?: "")
+                put("confidence",  primary.confidence)
+                put("crossApp", true)
+                put("crossAppSourceLabel", appLabel(srcPkg))
+                put("candidates",  candidatesJson())
+            }.toString()
+        }
+
+        // Medium confidence (0.70–0.88) — always show banner; add crossApp flag if applicable.
+        val (crossApp, srcPkg) = crossAppLink(primary.contactId, convKey, confirmed)
+        return JSONObject().apply {
+            put("contactId",   primary.contactId)
+            put("displayName", primary.displayName)
+            put("preferredTone", primary.preferredTone ?: "")
+            put("confidence",  primary.confidence)
+            if (crossApp) { put("crossApp", true); put("crossAppSourceLabel", appLabel(srcPkg)) }
+            put("candidates",  candidatesJson())
         }.toString()
+    }
+
+    // Returns (true, sourcePkg) when contactId is already linked from a different package.
+    // Synthetic auto:/sep: IDs are per-sender and never constitute a cross-app link.
+    private fun crossAppLink(contactId: String, currentConvKey: String, confirmed: JSONObject): Pair<Boolean, String> {
+        if (contactId.startsWith("auto:") || contactId.startsWith("sep:")) return false to ""
+        val currentPkg = currentConvKey.substringBefore(":")
+        for (key in confirmed.keys()) {
+            if (confirmed.optString(key) == contactId) {
+                val existingPkg = key.substringBefore(":")
+                if (existingPkg != currentPkg) return true to existingPkg
+            }
+        }
+        return false to ""
     }
 
     private fun postSuggestionNotification(

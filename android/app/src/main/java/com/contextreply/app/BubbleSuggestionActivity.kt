@@ -493,22 +493,35 @@ class BubbleSuggestionActivity : Activity() {
         val refreshTabsFn = arrayOfNulls<((Int) -> Unit)>(1)
 
         if (contactMatch != null) {
-            val matchName      = contactMatch.optString("displayName")
-            val matchContactId = contactMatch.optString("contactId")
-            val matchTone      = contactMatch.optString("preferredTone").ifEmpty { null }
+            val matchName       = contactMatch.optString("displayName")
+            val matchContactId  = contactMatch.optString("contactId")
+            val matchTone       = contactMatch.optString("preferredTone").ifEmpty { null }
             val matchConfidence = contactMatch.optDouble("confidence", 0.0)
+            val isCrossApp      = contactMatch.optBoolean("crossApp", false)
+            val crossAppSrc     = contactMatch.optString("crossAppSourceLabel").ifEmpty { null }
+            val currentAppLabel = ProTxtBgService.appLabel(packageName)
+
             val isHighConf = matchConfidence >= 0.88
-            val AMBER    = Color.parseColor(if (isHighConf) "#f59e0b" else "#d97706")
-            val AMBER_BG = Color.parseColor(if (isHighConf) "#f59e0b18" else "#d9770610")
-            val bannerText = if (isHighConf) "Is this $matchName?" else "Possibly $matchName?"
+            // Cross-app uses indigo; same-app uses amber scaled by confidence
+            val accentColor = if (isCrossApp) Color.parseColor("#6366f1")
+                              else Color.parseColor(if (isHighConf) "#f59e0b" else "#d97706")
+            val accentBg    = if (isCrossApp) Color.parseColor("#6366f118")
+                              else Color.parseColor(if (isHighConf) "#f59e0b18" else "#d9770610")
+            val accentBorder = if (isCrossApp) Color.parseColor("#6366f144")
+                               else Color.parseColor(if (isHighConf) "#f59e0b44" else "#d9770630")
+
+            val bannerText = when {
+                isCrossApp  -> "Same person as $matchName?"
+                isHighConf  -> "Is this $matchName?"
+                else        -> "Possibly $matchName?"
+            }
 
             val banner = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.VERTICAL
                 background = GradientDrawable().apply {
-                    setColor(AMBER_BG)
+                    setColor(accentBg)
                     cornerRadius = dp(8).toFloat()
-                    setStroke(1, Color.parseColor(if (isHighConf) "#f59e0b44" else "#d9770630"))
+                    setStroke(1, accentBorder)
                 }
                 setPadding(dp(10), dp(7), dp(10), dp(7))
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -516,9 +529,16 @@ class BubbleSuggestionActivity : Activity() {
                 layoutParams = lp
             }
 
-            banner.addView(TextView(this).apply {
+            // Header row
+            val headerRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            banner.addView(headerRow)
+
+            headerRow.addView(TextView(this).apply {
                 text = bannerText
-                setTextColor(AMBER)
+                setTextColor(accentColor)
                 textSize = 12f
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
@@ -542,16 +562,56 @@ class BubbleSuggestionActivity : Activity() {
                 banner.visibility = View.GONE
             }
 
-            banner.addView(TextView(this).apply {
-                text = "Yes"
-                setTextColor(AMBER)
-                textSize = 12f
-                setTypeface(null, Typeface.BOLD)
-                setPadding(dp(12), dp(4), dp(6), dp(4))
-                setOnClickListener { confirmMatch() }
-            })
+            if (isCrossApp && crossAppSrc != null) {
+                // Sub-label explaining the existing link
+                banner.addView(TextView(this).apply {
+                    text = "Already linked via $crossAppSrc · $currentAppLabel"
+                    setTextColor(MUTED)
+                    textSize = 11f
+                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp.topMargin = dp(2); lp.bottomMargin = dp(6)
+                    layoutParams = lp
+                })
+                // Action row for cross-app
+                val actionRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END
+                }
+                banner.addView(actionRow)
+                actionRow.addView(TextView(this).apply {
+                    text = "Keep separate"
+                    setTextColor(MUTED)
+                    textSize = 12f
+                    setPadding(0, dp(4), dp(14), dp(4))
+                    setOnClickListener {
+                        val prefs = Prefs.main(this@BubbleSuggestionActivity)
+                        val conf = try { JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+                        val sepId = "sep:${contact.lowercase().replace(Regex("[^a-z0-9]"), "_").take(36)}_${packageName.substringAfterLast(".").take(16)}"
+                        if (convKey != null) conf.put(convKey, sepId)
+                        prefs.edit().putString("confirmed_identities", conf.toString()).apply()
+                        banner.visibility = View.GONE
+                    }
+                })
+                actionRow.addView(TextView(this).apply {
+                    text = "Yes, link"
+                    setTextColor(accentColor)
+                    textSize = 12f
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding(0, dp(4), 0, dp(4))
+                    setOnClickListener { confirmMatch() }
+                })
+            } else {
+                headerRow.addView(TextView(this).apply {
+                    text = "Yes"
+                    setTextColor(accentColor)
+                    textSize = 12f
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding(dp(12), dp(4), dp(6), dp(4))
+                    setOnClickListener { confirmMatch() }
+                })
 
-            // Parse alternative candidates for the "No" disambiguation expansion
+            // Parse alternative candidates for the "No" disambiguation expansion (same-app only)
+
             val candidatesArr = try {
                 contactMatch.optJSONArray("candidates") ?: JSONArray()
             } catch (_: Exception) { JSONArray() }
@@ -574,7 +634,7 @@ class BubbleSuggestionActivity : Activity() {
                     banner.orientation = LinearLayout.VERTICAL
                     banner.addView(TextView(this@BubbleSuggestionActivity).apply {
                         text = "Who is this?"
-                        setTextColor(AMBER)
+                        setTextColor(accentColor)
                         textSize = 12f
                         setTypeface(null, Typeface.BOLD)
                         setPadding(0, 0, 0, dp(6))
@@ -585,7 +645,7 @@ class BubbleSuggestionActivity : Activity() {
                         val cTone = candidate.optString("preferredTone").ifEmpty { null }
                         banner.addView(TextView(this@BubbleSuggestionActivity).apply {
                             text = cName
-                            setTextColor(AMBER)
+                            setTextColor(accentColor)
                             textSize = 12f
                             setPadding(0, dp(3), 0, dp(3))
                             setOnClickListener {
@@ -622,6 +682,7 @@ class BubbleSuggestionActivity : Activity() {
                     })
                 }
             })
+            } // end same-app else block
             root.addView(banner)
         }
 
