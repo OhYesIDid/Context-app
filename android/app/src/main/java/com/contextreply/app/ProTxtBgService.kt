@@ -851,8 +851,6 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\b(busy|schedule|calendar)\b""", RegexOption.IGNORE_CASE),
         // "chat" and "call" alone are too broad (casual social use). Require scheduling context.
         Regex("""\b(meeting|catch.?up)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(quick call|hop on a call|jump on a call|scheduled? call)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(quick chat|have a chat|schedule.{0,10}chat)\b""", RegexOption.IGNORE_CASE),
         // Day name alone is too noisy ("had a great Saturday"). Require scheduling context around it.
         Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|work[s]?)\b""", RegexOption.IGNORE_CASE),
         Regex("""(meet|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),

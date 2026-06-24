@@ -69,8 +69,6 @@ const AVAILABILITY_PATTERNS = [
   /\b(free|available|availability)\b/i,
   /\b(busy|schedule|calendar)\b/i,
   /\b(meeting|catch[- ]?up)\b/i,
-  /\b(quick call|hop on a call|jump on a call|scheduled? call)\b/i,
-  /\b(quick chat|have a chat|schedule.{0,10}chat)\b/i,
   /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|works?)\b/i,
   /(meet|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
   /\b(this|next) (week|weekend|morning|afternoon|evening)\b/i,
