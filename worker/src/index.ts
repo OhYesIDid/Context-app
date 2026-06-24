@@ -94,19 +94,26 @@ function detectIntents(message: string): string[] {
 
 function formatCalendar(events: CalendarEvent[]): string {
   if (events.length === 0) return 'User has no calendar events in the next 7 days — completely free.';
-  const fmt = (iso: string) =>
+  const fmtDateTime = (iso: string) =>
     new Date(iso).toLocaleString('en-GB', {
       weekday: 'short', month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
+  const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const lines = events.slice(0, 15).map((e) => {
     if (e.allDay) {
-      const day = new Date(e.start).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
-      return `  • ${day} — ${e.summary} (all day)`;
+      return `  • ${fmtDate(e.start)} — ${e.summary} (all day)`;
     }
-    return `  • ${fmt(e.start)} → ${new Date(e.end).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} — ${e.summary}`;
+    const startDate = new Date(e.start).toDateString();
+    const endDate = new Date(e.end).toDateString();
+    // Show end datetime when the event crosses midnight into the next day
+    const endStr = startDate === endDate ? fmtTime(e.end) : fmtDateTime(e.end);
+    return `  • ${fmtDateTime(e.start)} → ${endStr} — ${e.summary}`;
   }).join('\n');
-  return `User's calendar events in the next 7 days (${events.length} total):\n${lines}`;
+  return `User's calendar events in the next 7 days (${events.length} total):\n${lines}\nIMPORTANT: The user is ONLY busy during the times listed above. Any day or time not listed is free.`;
 }
 
 const TYPE_LABEL: Record<string, string> = {
