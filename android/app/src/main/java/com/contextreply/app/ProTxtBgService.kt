@@ -525,10 +525,10 @@ class ProTxtBgService : NotificationListenerService() {
             val latestMessage = burstTexts.joinToString("\n")
             if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "burst ${burstTexts.size} msgs ready")
 
+            ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
             val detectedIntentsStr = detectIntents(latestMessage).joinToString(",")
-            val suggestAll = Prefs.main(this)
-                .getBoolean("suggest_all_messages", true) // TODO before release: flip default back to false
+            val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", true) } catch (_: Exception) { true }
             if (!suggestAll && detectedIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
             // If this convKey's bubble Activity is already open (the system never recreates
@@ -571,6 +571,7 @@ class ProTxtBgService : NotificationListenerService() {
         val fullThread = store.getThread(convKey)
         val contactMemory = ContactMemory.getMemory(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
+        val contactContext = ContactSignals.getContactContext(this, convKey)
         // Tracks whether THIS job has finished — distinct from activeBubbles, which stays
         // true for any live, un-actioned bubble (including a successful suggestion the user
         // just hasn't tapped yet). The watchdog must not mistake "still live" for "still
@@ -586,6 +587,7 @@ class ProTxtBgService : NotificationListenerService() {
                     this, latestMessage, fullThread, enrichments,
                     contactMemory = contactMemory,
                     lastSentReply = lastSent,
+                    contactContext = contactContext,
                 ) ?: run {
                     android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                     if (activeBubbles.contains(convKey)) {

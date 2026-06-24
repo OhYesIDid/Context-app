@@ -37,6 +37,7 @@ interface SuggestRequest {
   styleContext?: string;
   contactMemory?: string;
   lastSentReply?: string;
+  contactContext?: string;
 }
 
 interface ReplyOptions {
@@ -175,6 +176,7 @@ function buildPrompt(body: SuggestRequest): string {
   const memoryParts: string[] = [];
   if (body.contactMemory) memoryParts.push(`Past context about this contact: ${body.contactMemory}`);
   if (body.lastSentReply) memoryParts.push(`Your last reply to them was: "${body.lastSentReply}"`);
+  if (body.contactContext) memoryParts.push(body.contactContext);
 
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',

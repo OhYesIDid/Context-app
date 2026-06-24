@@ -124,6 +124,7 @@ class ReplySendReceiver : BroadcastReceiver() {
             if (convKey != null) {
                 StyleEditQueue.enqueue(context, replyText, replyText, convKey, intentType)
                 ContactMemory.saveLastSent(context, convKey, replyText)
+                ContactSignals.recordReply(context, convKey)
             }
             return
         }
@@ -159,6 +160,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         // what was last said (included in the prompt as "Your last reply to them was: …")
         if (convKey != null) {
             ContactMemory.saveLastSent(context, convKey, replyText)
+            ContactSignals.recordReply(context, convKey)
         }
 
         val remoteInputKey = intent.getStringExtra(ProTxtBgService.EXTRA_REMOTE_INPUT_KEY)

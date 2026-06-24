@@ -24,6 +24,7 @@ object WorkerClient {
         regenerate: Boolean = false,
         contactMemory: String? = null,
         lastSentReply: String? = null,
+        contactContext: String? = null,
     ): WorkerResult? {
         val prefs = Prefs.main(context)
         val styleProfile      = prefs.getString("style_profile", null)
@@ -51,6 +52,7 @@ object WorkerClient {
             if (regenerate) put("regenerate", true)
             if (contactMemory != null) put("contactMemory", contactMemory)
             if (lastSentReply != null) put("lastSentReply", lastSentReply)
+            if (contactContext != null) put("contactContext", contactContext)
         }.toString()
 
         var lastException: Exception? = null
