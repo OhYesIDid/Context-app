@@ -253,6 +253,17 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
+    // Re-feed active notifications when "suggest all messages" is turned on so that
+    // any conversations already in the shade that were skipped (other intent, toggle was off)
+    // immediately get bubbles and suggestions without waiting for a new message.
+    internal fun replayActiveNotifications() {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                getActiveNotifications()?.forEach { sbn -> onNotificationPosted(sbn) }
+            } catch (_: Exception) {}
+        }
+    }
+
     internal fun dismissAllGroupBubbles() {
         // Reload from SharedPrefs in case the service restarted since group messages arrived
         val prefs = Prefs.main(this)
