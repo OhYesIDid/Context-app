@@ -787,12 +787,6 @@ class ProTxtBgService : NotificationListenerService() {
                 lastOpenedTimestamp[sbn.packageName] = System.currentTimeMillis()
                 if (isTracked) {
                     activeBubbles.remove(convKey)
-                    // Clear the stored thread: the user is reading/replying in the app.
-                    // If they reply, the outbound detection in onNotificationPosted will
-                    // handle the next bundle; if it doesn't (app bundles only the new
-                    // inbound without the outbound), this ensures the next suggestion
-                    // doesn't reference messages that predated the user's reply.
-                    NotificationStore.getInstance(this).markReplied(convKey)
                     // Schedule auto-dismiss keyed on pendingBubbles (not activeBubbles,
                     // which we just cleared) as the zombie-bubble safety net. Gate 6 and
                     // send-button detection clear pendingBubbles before this fires when a
