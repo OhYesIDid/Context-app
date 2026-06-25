@@ -69,6 +69,22 @@ class BubbleSuggestionActivity : Activity() {
         val intentsRaw      = intent.getStringExtra(ProTxtBgService.EXTRA_INTENTS) ?: ""
         val detectedIntents = if (intentsRaw.isNotEmpty()) intentsRaw.split(",") else listOf("other")
         val preferredTone   = intent.getStringExtra(ProTxtBgService.EXTRA_PREFERRED_TONE)
+
+        // Strategy chips — only for ETA and availability intents
+        val strategyIntent = when {
+            detectedIntents.contains("eta")          -> "eta"
+            detectedIntents.contains("availability") -> "availability"
+            else                                     -> null
+        }
+        val strategyOptions: List<Pair<String, String>>? = when (strategyIntent) {
+            "eta"          -> listOf("eta_direct" to "Straight shot", "eta_delay" to "Buy time", "eta_excuse" to "Soft excuse")
+            "availability" -> listOf("avail_yes" to "Open to it", "avail_maybe" to "Keep it open", "avail_no" to "Decline gently")
+            else           -> null
+        }
+        val savedStrategy = if (convKey != null) Prefs.main(this).getString("strategy_$convKey", null) else null
+        var selectedStrategy: String? = strategyOptions?.let { opts ->
+            savedStrategy?.takeIf { s -> opts.any { it.first == s } } ?: opts[0].first
+        }
         @Suppress("DEPRECATION")
         val openChatIntent  = intent.getParcelableExtra<PendingIntent>(ProTxtBgService.EXTRA_OPEN_CHAT_INTENT)
         val contact         = convKey?.substringAfter(":")?.let { ProTxtBgService.stripAppPrefix(it) } ?: "Reply"
@@ -321,6 +337,7 @@ class BubbleSuggestionActivity : Activity() {
                     regenerate = true,
                     contactMemory = contactMemory,
                     lastSentReply = lastSent,
+                    strategy = selectedStrategy,
                 )
                 val newCasual = result?.replies?.optString("casual")?.takeIf { it.isNotEmpty() }
                 val newFormal = result?.replies?.optString("formal")?.takeIf { it.isNotEmpty() }
@@ -443,7 +460,7 @@ class BubbleSuggestionActivity : Activity() {
                 })
 
                 addView(ScrollView(this@BubbleSuggestionActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, dp(80), 1f)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                     isVerticalScrollBarEnabled = false
                     // Fading edges act as the scroll indicator — the top edge fades in
                     // once the user has scrolled up, the bottom fades when there's more below.
@@ -476,8 +493,21 @@ class BubbleSuggestionActivity : Activity() {
                     if (formatted.isNotEmpty() && tv != null) {
                         runOnUiThread {
                             tv.text = formatted
-                            // Scroll to bottom so the latest message is visible first
-                            sv?.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }
+                            sv?.post {
+                                // Measure the text at the ScrollView's actual width so the
+                                // height reflects real wrapping. Fall back to screen width
+                                // minus horizontal padding if layout hasn't run yet.
+                                val w = sv.width.takeIf { it > 0 }
+                                    ?: (resources.displayMetrics.widthPixels - dp(60))
+                                tv.measure(
+                                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.AT_MOST),
+                                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                                )
+                                val lp = sv.layoutParams as LinearLayout.LayoutParams
+                                lp.height = tv.measuredHeight.coerceAtMost(dp(160))
+                                sv.layoutParams = lp
+                                sv.fullScroll(ScrollView.FOCUS_DOWN)
+                            }
                         }
                     }
                 }.start()
@@ -684,6 +714,65 @@ class BubbleSuggestionActivity : Activity() {
             })
             } // end same-app else block
             root.addView(banner)
+        }
+
+        // ── Strategy chips ────────────────────────────────────────────────────
+        // Only shown for ETA and availability intents. First chip is pre-selected
+        // (from Prefs or default). Tapping a chip updates selectedStrategy and
+        // triggers a regen if a reply is already showing.
+        if (strategyOptions != null && selectedStrategy != null) {
+            val strategyChipViews = mutableListOf<TextView>()
+
+            fun refreshStrategyChips(selected: String) {
+                strategyChipViews.forEach { chip ->
+                    val isActive = chip.tag as? String == selected
+                    chip.background = GradientDrawable().apply {
+                        setColor(if (isActive) PURPLE_BG else Color.TRANSPARENT)
+                        cornerRadius = dp(12).toFloat()
+                        setStroke(1, if (isActive) PURPLE else BORDER)
+                    }
+                    chip.setTextColor(if (isActive) PURPLE else MUTED)
+                    chip.setTypeface(null, if (isActive) Typeface.BOLD else Typeface.NORMAL)
+                }
+            }
+
+            val strategyRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(10)
+                layoutParams = lp
+            }
+
+            strategyOptions.forEachIndexed { idx, (key, label) ->
+                val chip = TextView(this).apply {
+                    text = label
+                    tag = key
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setPadding(dp(10), dp(6), dp(10), dp(6))
+                    val lp2 = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    if (idx < strategyOptions.size - 1) lp2.marginEnd = dp(6)
+                    layoutParams = lp2
+                    setOnClickListener {
+                        selectedStrategy = key
+                        if (convKey != null) {
+                            Prefs.main(this@BubbleSuggestionActivity).edit()
+                                .putString("strategy_$convKey", key).apply()
+                        }
+                        refreshStrategyChips(key)
+                        // Only regen if a reply is already loaded — if loading, the
+                        // user's pick will be applied on the next manual regen.
+                        if (skeletonContainer.visibility != View.VISIBLE) {
+                            triggerRegen()
+                        }
+                    }
+                }
+                strategyChipViews.add(chip)
+                strategyRow.addView(chip)
+            }
+
+            refreshStrategyChips(selectedStrategy!!)
+            root.addView(strategyRow)
         }
 
         // ── Reply area: edit text (ready) or skeleton (loading) ───────────────

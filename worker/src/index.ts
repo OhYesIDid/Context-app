@@ -39,7 +39,17 @@ interface SuggestRequest {
   lastSentReply?: string;
   contactContext?: string;
   contactName?: string;
+  strategy?: string;
 }
+
+const STRATEGY_INSTRUCTIONS: Record<string, string> = {
+  eta_direct:   'Be honest and specific about your travel time. Use the real data if available.',
+  eta_delay:    'Frame the timing as slightly longer or vaguer than it may actually be. Sound warm and apologetic, not dishonest.',
+  eta_excuse:   'Acknowledge the delay with a sympathetic reason (traffic, task, etc.). Do not invent specific details the user has not provided.',
+  avail_yes:    'Express genuine willingness. Confirm availability using calendar data if available, or suggest a specific time.',
+  avail_maybe:  'Be friendly but non-committal. Avoid hard dates. Suggest the conversation can continue without locking anything in.',
+  avail_no:     'Politely decline. Keep warmth. Optionally gesture toward a future window without making a firm commitment.',
+};
 
 interface ReplyOptions {
   formal: string;
@@ -135,7 +145,7 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
   maps: (data) => {
     const d = data as EnrichmentData['maps']!;
     if (d.currentLocation) {
-      return `User's current location: ${d.currentLocation}. No specific destination was found — mention where the user currently is.`;
+      return `User's current location: ${d.currentLocation}. No specific destination was found in calendar or saved places — suggest asking the other person to share their location (drop a pin or share via Google Maps) so an accurate ETA can be given.`;
     }
     return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}.`;
   },
@@ -181,12 +191,18 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - snippets: optional — array of 0–3 specific high-intent facts worth storing long-term (concrete plans, dates, places, commitments, preferences, personal details the user should remember). Max 12 words each. Be selective — only facts with lasting relevance. Omit the field entirely if nothing qualifies.
 - action: optional — include for three cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
 
-function buildPrompt(body: SuggestRequest): string {
+function buildPrompt(body: SuggestRequest, intents: string[]): string {
   const enrichments = body.enrichments ?? {};
   const contextParts = (Object.entries(enrichments) as [keyof EnrichmentData, unknown][])
     .filter(([, v]) => v != null)
     .map(([key, value]) => ENRICHMENT_FORMATTERS[key]?.(value) ?? '')
     .filter(Boolean);
+
+  // ETA with no routable destination — ask the sender to share theirs
+  const hasDestination = enrichments.maps != null && !enrichments.maps.currentLocation;
+  if (intents.includes('eta') && !hasDestination) {
+    contextParts.push('No destination is available from calendar or saved places. The reply should ask the other person to share their location (e.g. drop a pin or send a Google Maps link) so an accurate ETA can be given.');
+  }
 
   const thread = body.conversationThread;
   const messageBlock = thread && thread.length > 1
@@ -202,10 +218,13 @@ function buildPrompt(body: SuggestRequest): string {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
+  const strategyInstruction = body.strategy ? STRATEGY_INSTRUCTIONS[body.strategy] : null;
+
   return [
     messageBlock,
     memoryParts.length > 0 && `\n<context>\n${memoryParts.join('\n')}\n</context>`,
     contextParts.length > 0 && `\nContext:\n${contextParts.join('\n')}`,
+    strategyInstruction && `\nReply strategy: ${strategyInstruction}`,
     body.styleContext && `\nWriting style reference (examples of how this user edits AI suggestions — for voice/tone matching only, not conversation context):\n${body.styleContext}`,
     `\nToday is ${today}.`,
     '\nWrite the reply JSON for the user.',
@@ -326,7 +345,7 @@ export default {
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildPrompt(body) }],
+        messages: [{ role: 'user', content: buildPrompt(body, intents) }],
       }),
     });
 
