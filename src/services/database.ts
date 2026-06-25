@@ -174,12 +174,33 @@ async function _encryptExistingRows(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.runAsync('UPDATE saved_places SET address = ? WHERE id = ?', [await encryptField(r.address), r.id]);
   }
 
-  // bookings.snippet
-  const bookingRows = await db.getAllAsync<{ id: string; snippet: string }>(
-    "SELECT id, snippet FROM bookings WHERE snippet NOT LIKE 'enc1:%'"
+  // bookings.snippet / subject / from_address
+  const bookingRows = await db.getAllAsync<{ id: string; snippet: string; subject: string; from_address: string }>(
+    "SELECT id, snippet, subject, from_address FROM bookings WHERE snippet NOT LIKE 'enc1:%' OR subject NOT LIKE 'enc1:%' OR from_address NOT LIKE 'enc1:%'"
   );
   for (const r of bookingRows) {
-    await db.runAsync('UPDATE bookings SET snippet = ? WHERE id = ?', [await encryptField(r.snippet), r.id]);
+    await db.runAsync(
+      'UPDATE bookings SET snippet = ?, subject = ?, from_address = ? WHERE id = ?',
+      [await encryptField(r.snippet), await encryptField(r.subject), await encryptField(r.from_address), r.id]
+    );
+  }
+
+  // contacts.display_name
+  const contactNameRows = await db.getAllAsync<{ id: string; display_name: string }>(
+    "SELECT id, display_name FROM contacts WHERE display_name NOT LIKE 'enc1:%'"
+  );
+  for (const r of contactNameRows) {
+    await db.runAsync('UPDATE contacts SET display_name = ? WHERE id = ?',
+      [await encryptField(r.display_name), r.id]);
+  }
+
+  // memories.location_name
+  const memLocRows = await db.getAllAsync<{ id: string; location_name: string }>(
+    "SELECT id, location_name FROM memories WHERE location_name IS NOT NULL AND location_name NOT LIKE 'enc1:%'"
+  );
+  for (const r of memLocRows) {
+    await db.runAsync('UPDATE memories SET location_name = ? WHERE id = ?',
+      [await encryptField(r.location_name), r.id]);
   }
 }
 
@@ -303,7 +324,7 @@ type ContactRow = {
 
 async function rowToContact(r: ContactRow): Promise<Contact> {
   return {
-    id: r.id, displayName: r.display_name,
+    id: r.id, displayName: (await decryptField(r.display_name)) ?? r.display_name,
     relationship: (r.relationship as Contact['relationship']) ?? undefined,
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
     interactionCount: r.interaction_count ?? 0,
@@ -326,7 +347,7 @@ export async function upsertContact(
        display_name=excluded.display_name, relationship=excluded.relationship,
        preferred_tone=excluded.preferred_tone,
        notes=excluded.notes, updated_at=excluded.updated_at, synced_at=NULL`,
-    [id, contact.displayName, contact.relationship ?? null,
+    [id, await encryptField(contact.displayName), contact.relationship ?? null,
      contact.preferredTone ?? null, await encryptField(contact.notes ?? null), now, now]
   );
   return { ...contact, id, createdAt: now, updatedAt: now };
@@ -335,18 +356,22 @@ export async function upsertContact(
 export async function getAllContacts(): Promise<Contact[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<ContactRow>(
-    'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY interaction_count DESC, display_name ASC'
+    'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY interaction_count DESC'
   );
-  return Promise.all(rows.map(rowToContact));
+  const contacts = await Promise.all(rows.map(rowToContact));
+  // Sort alphabetically within each interaction_count tier (display_name is encrypted in DB)
+  return contacts.sort((a, b) => {
+    const bCount = b.interactionCount ?? 0;
+    const aCount = a.interactionCount ?? 0;
+    if (bCount !== aCount) return bCount - aCount;
+    return a.displayName.localeCompare(b.displayName);
+  });
 }
 
 export async function findContactByDisplayName(name: string): Promise<Contact | null> {
-  const db = await getDatabase();
-  const row = await db.getFirstAsync<ContactRow>(
-    'SELECT * FROM contacts WHERE LOWER(display_name) = LOWER(?) AND deleted_at IS NULL LIMIT 1',
-    [name]
-  );
-  return row ? await rowToContact(row) : null;
+  const all = await getAllContacts();
+  const target = name.toLowerCase();
+  return all.find((c) => c.displayName.toLowerCase() === target) ?? null;
 }
 
 // Migrates all style_edits, platform_identities, and memories from fromId to toId,
@@ -379,11 +404,12 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
 }
 
 export async function incrementContactInteraction(displayName: string): Promise<void> {
+  const contact = await findContactByDisplayName(displayName);
+  if (!contact) return;
   const db = await getDatabase();
   await db.runAsync(
-    `UPDATE contacts SET interaction_count = interaction_count + 1, updated_at = ?
-     WHERE LOWER(display_name) = LOWER(?) AND deleted_at IS NULL`,
-    [new Date().toISOString(), displayName]
+    'UPDATE contacts SET interaction_count = interaction_count + 1, updated_at = ? WHERE id = ?',
+    [new Date().toISOString(), contact.id]
   );
 }
 
@@ -457,7 +483,7 @@ export async function insertMemory(
      await encryptField(memory.content),
      await encryptField(memory.entitiesJson ?? null),
      memory.locationLat ?? null,
-     memory.locationLng ?? null, memory.locationName ?? null,
+     memory.locationLng ?? null, await encryptField(memory.locationName ?? null),
      memory.relevanceScore, memory.lastConfirmedAt ?? null, now, now]
   );
   return { ...memory, id, createdAt: now, updatedAt: now };
