@@ -83,6 +83,9 @@ const AVAILABILITY_PATTERNS = [
   /\bwhat (is|are) the (date|day|time)\b/i,
   /\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
   /\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+  // Social plans imply scheduling: "dinner on Tuesday?", "Tuesday lunch?", "coffee Saturday"
+  /\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\s+(?:on\s+|for\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b/i,
 ];
 
 function detectIntents(message: string): string[] {

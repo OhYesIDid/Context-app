@@ -959,6 +959,9 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        // Social plans imply scheduling: "dinner on Tuesday?", "Tuesday lunch?", "coffee Saturday"
+        Regex("""\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\s+(?:on\s+|for\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b""", RegexOption.IGNORE_CASE),
     )
 
     private val LOCATION_SHARE_PATTERNS = listOf(
