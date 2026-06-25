@@ -277,7 +277,16 @@ class ProTxtAccessibilityService : AccessibilityService() {
         val prefsConvKey = prefs.getString("last_suggestion_conv_$packageName", null)
         if (prefsConvKey != null) {
             val contactRaw = prefsConvKey.substringAfter(":").trim()
-            if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) return true
+            if (contactRaw.startsWith("group:") || contactRaw.startsWith("id:")) {
+                // Numeric fallback IDs — no readable name to match against. At minimum,
+                // verify the user is in a conversation view, not the chat list.
+                val screenName = screenConversationName(packageName)
+                return when {
+                    screenName != null -> true
+                    CONVERSATION_TITLE_VIEW_ID.containsKey(packageName) -> false
+                    else -> true  // unknown app, no view ID to check — be permissive
+                }
+            }
             val contact = ProTxtBgService.stripAppPrefix(contactRaw).trim().lowercase()
             if (contact.isEmpty()) return true
 
