@@ -79,10 +79,23 @@ class ReplySendReceiver : BroadcastReceiver() {
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
             ProTxtBgService.getInstance()?.arrivalBuffer?.remove(convKey)
             ProTxtBgService.pendingBubbles.remove(convKey)
+            val pkg = convKey.substringBefore(":")
+            // Clear cached overlay prefs so a stale suggestion doesn't reappear if the
+            // user re-opens the same conversation after sending/dismissing.
+            val prefs = Prefs.main(context)
+            if (prefs.getString("last_suggestion_conv_$pkg", null) == convKey) {
+                prefs.edit()
+                    .remove("last_suggestion_$pkg")
+                    .remove("last_suggestion_formal_$pkg")
+                    .remove("last_suggestion_brief_$pkg")
+                    .remove("last_suggestion_ts_$pkg")
+                    .remove("last_suggestion_conv_$pkg")
+                    .remove("last_suggestion_action_$pkg")
+                    .apply()
+            }
             // Stamp send time keyed by "$packageName:sbnId" — the messaging app's sbn.id
             // stays constant for a conversation even when the title changes to "You" on
             // the outbound update, which would otherwise produce a different convKey.
-            val pkg = convKey.substringBefore(":")
             val sbnId = ProTxtBgService.getInstance()?.sbnIdByConvKey?.get(convKey)
             if (sbnId != null) {
                 ProTxtBgService.getInstance()?.recentlySentAt?.put("$pkg:$sbnId", System.currentTimeMillis())

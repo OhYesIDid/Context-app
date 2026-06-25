@@ -706,6 +706,7 @@ class ProTxtAccessibilityService : AccessibilityService() {
             .remove("last_suggestion_brief_$packageName")
             .remove("last_suggestion_ts_$packageName")
             .remove("last_suggestion_conv_$packageName")
+            .remove("last_suggestion_action_$packageName")
             .apply()
         // Clear activeBubbles so the next message triggers a fresh suggestion cycle.
         // Without this, activeBubbles.contains(convKey) stays true after navigation
