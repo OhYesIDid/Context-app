@@ -35,4 +35,19 @@ echo "  leaf:         $(spki api.anthropic.com)"
 echo "  intermediate: $(intermediate api.anthropic.com)"
 
 echo ""
+echo "=== maps.googleapis.com ==="
+echo "  leaf:         $(spki maps.googleapis.com)"
+echo "  intermediate: $(intermediate maps.googleapis.com)"
+
+echo ""
+echo "=== www.googleapis.com ==="
+echo "  leaf:         $(spki www.googleapis.com)"
+echo "  intermediate: $(intermediate www.googleapis.com)"
+
+echo ""
+echo "=== api.revenuecat.com ==="
+echo "  leaf:         $(spki api.revenuecat.com)"
+echo "  intermediate: $(intermediate api.revenuecat.com)"
+
+echo ""
 echo "Update network_security_config.xml and set expiration to next 31 Dec."

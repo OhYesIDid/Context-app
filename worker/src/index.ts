@@ -1,6 +1,40 @@
 export interface Env {
   CLAUDE_API_KEY: string;
   WORKER_SECRET: string; // HMAC-SHA256 key shared with the Android client
+  RATE_LIMIT_KV: KVNamespace | undefined; // optional — omit binding to disable rate limiting
+}
+
+const RATE_LIMIT = 10; // requests per window
+const RATE_WINDOW_MS = 60_000; // 1 minute
+
+interface RateLimitState { count: number; resetAt: number }
+
+async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: boolean; retryAfter: number }> {
+  const key = `rl:${ip}`;
+  const now = Date.now();
+  const raw = await kv.get(key);
+  let state: RateLimitState;
+
+  if (!raw) {
+    state = { count: 1, resetAt: now + RATE_WINDOW_MS };
+    await kv.put(key, JSON.stringify(state), { expirationTtl: 60 });
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  state = JSON.parse(raw) as RateLimitState;
+  if (now >= state.resetAt) {
+    state = { count: 1, resetAt: now + RATE_WINDOW_MS };
+    await kv.put(key, JSON.stringify(state), { expirationTtl: 60 });
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  if (state.count >= RATE_LIMIT) {
+    return { allowed: false, retryAfter: Math.ceil((state.resetAt - now) / 1000) };
+  }
+
+  state.count++;
+  await kv.put(key, JSON.stringify(state), { expirationTtl: 60 });
+  return { allowed: true, retryAfter: 0 };
 }
 
 interface CalendarEvent {
@@ -394,6 +428,22 @@ export default {
       if (!valid) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        });
+      }
+    }
+
+    // Per-IP rate limiting — 10 requests/minute. Skipped if KV namespace is not bound.
+    if (env.RATE_LIMIT_KV) {
+      const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+      const { allowed, retryAfter } = await checkRateLimit(env.RATE_LIMIT_KV, ip);
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: 'Too many requests — try again shortly' }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(retryAfter),
+            ...CORS_HEADERS,
+          },
         });
       }
     }

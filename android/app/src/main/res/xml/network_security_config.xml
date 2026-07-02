@@ -43,4 +43,31 @@
         </pin-set>
     </domain-config>
 
+    <!--
+        Google APIs — Maps Directions + Calendar OAuth token calls.
+        Leaf + GTS CA 1C3 intermediate as backup. Expiry 2026-12-31 ensures
+        Android falls back to normal validation rather than bricking on rotation.
+        Re-derive with scripts/update-pins.sh before each release.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">maps.googleapis.com</domain>
+        <domain includeSubdomains="true">www.googleapis.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">xqMIOq/TKCdAwLfr9h5XTauakQnjCKBQnRqcGiezy3A=</pin>
+            <pin digest="SHA-256">YPtHaftLw6/0vnc2BnNKGF54xiCA28WFcccjkA4ypCM=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!--
+        RevenueCat SDK calls for offerings / purchase verification.
+        Leaf + intermediate. Expiry 2026-12-31 as safety net.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.revenuecat.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">cScruLir0xVY/lla8OssSntPTNLaMzAGSFIG4Z9myl4=</pin>
+            <pin digest="SHA-256">8dcSZIGOkkJAXV71MH2lsFJuG8T2GkkAq3oGwdC4sHo=</pin>
+        </pin-set>
+    </domain-config>
+
 </network-security-config>

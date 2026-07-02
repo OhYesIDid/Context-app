@@ -68,6 +68,7 @@ async function callViaWorker(input: SuggestReplyInput): Promise<ReplyOptions> {
       }),
     });
     const data = await res.json() as { reply?: string; replies?: Partial<ReplyOptions>; error?: string };
+    if (res.status === 429) throw new Error('rate_limited');
     if (!res.ok) throw new Error(data.error ?? `Worker error ${res.status}`);
     if (data.replies) {
       return {

@@ -754,6 +754,12 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                     return@submit
                 }
+                if (result.rateLimited) {
+                    if (activeBubbles.contains(convKey)) {
+                        postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, "Too many requests — try again shortly", detectedIntentsStr, markAsReadPendingIntent)
+                    }
+                    return@submit
+                }
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "worker call returned")
                 // Persist context update + snippets, keyed by contactId where available
                 ContactMemory.save(this, convKey, result.contextUpdate, result.snippets)

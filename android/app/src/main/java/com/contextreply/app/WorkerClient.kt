@@ -15,7 +15,12 @@ data class WorkerResult(
     val contextUpdate: String?,
     val action: JSONObject? = null,
     val snippets: List<String> = emptyList(),
-)
+    val rateLimited: Boolean = false,
+) {
+    companion object {
+        val RATE_LIMITED = WorkerResult(JSONObject(), null, null, rateLimited = true)
+    }
+}
 
 object WorkerClient {
 
@@ -114,6 +119,10 @@ object WorkerClient {
             if (code >= 500) {
                 conn.errorStream?.use { it.readBytes() }
                 throw RetryableException("HTTP $code")
+            }
+            if (code == 429) {
+                conn.errorStream?.use { it.readBytes() }
+                return WorkerResult.RATE_LIMITED
             }
             if (code != 200) {
                 val errorBody = conn.errorStream?.use { it.bufferedReader().readText() } ?: ""

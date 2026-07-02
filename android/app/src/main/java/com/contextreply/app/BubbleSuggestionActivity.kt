@@ -90,6 +90,10 @@ class BubbleSuggestionActivity : Activity() {
         val contact         = convKey?.substringAfter(":")?.let { ProTxtBgService.stripAppPrefix(it) } ?: "Reply"
         val packageName     = convKey?.substringBefore(":") ?: ""
         val actionJson      = intent.getStringExtra(ProTxtBgService.EXTRA_ACTION_JSON)
+        val contactMatchJson = intent.getStringExtra(ProTxtBgService.EXTRA_CONTACT_MATCH_JSON)
+        val contactMatch = if (contactMatchJson != null) {
+            try { JSONObject(contactMatchJson) } catch (_: Exception) { null }
+        } else null
 
         // ── State ─────────────────────────────────────────────────────────────
         val isLoading = casualText == ProTxtBgService.LOADING_PLACEHOLDER
@@ -233,7 +237,7 @@ class BubbleSuggestionActivity : Activity() {
                 val aiSuggestion = textMap[selectedTone] ?: casualText
                 val text = replyEdit.text.toString().trim().ifEmpty { aiSuggestion }
                 sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra, aiSuggestion, selectedTone)
-                if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId)
+                if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId, contactMatch)
                 finish()
             }
         }
@@ -339,11 +343,18 @@ class BubbleSuggestionActivity : Activity() {
                     lastSentReply = lastSent,
                     strategy = selectedStrategy,
                 )
+                val rateLimited = result?.rateLimited == true
                 val newCasual = result?.replies?.optString("casual")?.takeIf { it.isNotEmpty() }
                 val newFormal = result?.replies?.optString("formal")?.takeIf { it.isNotEmpty() }
                 val newBrief  = result?.replies?.optString("brief")?.takeIf { it.isNotEmpty() }
                 runOnUiThread {
-                    if (newCasual != null) {
+                    if (rateLimited) {
+                        android.widget.Toast.makeText(
+                            this@BubbleSuggestionActivity,
+                            "Too many requests — try again shortly",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    } else if (newCasual != null) {
                         textMap["casual"] = newCasual
                         if (newFormal != null) textMap["formal"] = newFormal
                         if (newBrief  != null) textMap["brief"]  = newBrief
@@ -514,11 +525,6 @@ class BubbleSuggestionActivity : Activity() {
         }
 
         // ── Contact match banner ──────────────────────────────────────────────
-        val contactMatchJson = intent.getStringExtra(ProTxtBgService.EXTRA_CONTACT_MATCH_JSON)
-        val contactMatch = if (contactMatchJson != null) {
-            try { JSONObject(contactMatchJson) } catch (_: Exception) { null }
-        } else null
-
         val refreshTabsFn = arrayOfNulls<((Int) -> Unit)>(1)
 
         if (contactMatch != null) {
@@ -1199,7 +1205,7 @@ class BubbleSuggestionActivity : Activity() {
         }
     }
 
-    private fun postActionFollowUp(action: JSONObject, convKey: String?, notifId: Int) {
+    private fun postActionFollowUp(action: JSONObject, convKey: String?, notifId: Int, contactMatch: JSONObject? = null) {
         val actionType  = action.optString("type")
         val actionLabel = action.optString("label").ifEmpty { null } ?: return
 
@@ -1209,10 +1215,19 @@ class BubbleSuggestionActivity : Activity() {
                 val title       = action.optString("title").ifEmpty { "Event" }
                 val datetimeStr = action.optString("datetime").ifEmpty { null }
                 val duration    = action.optInt("durationMinutes", 60)
+                val contactName = contactMatch?.optString("displayName")?.ifEmpty { null }
+                val contactId   = contactMatch?.optString("contactId")?.ifEmpty { null }
+                val contactEmail = contactId?.let { lookupContactEmail(it) }
                 bodyText = buildCalendarBody(title, datetimeStr, duration)
                 Intent(Intent.ACTION_INSERT).apply {
                     data = CalendarContract.Events.CONTENT_URI
                     putExtra(CalendarContract.Events.TITLE, title)
+                    if (contactName != null) {
+                        putExtra(CalendarContract.Events.DESCRIPTION, "with $contactName")
+                    }
+                    if (contactEmail != null) {
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf(contactEmail))
+                    }
                     if (datetimeStr != null) {
                         try {
                             val startMs = LocalDateTime.parse(datetimeStr)
@@ -1247,6 +1262,20 @@ class BubbleSuggestionActivity : Activity() {
             .build()
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .notify(followUpId, notification)
+    }
+
+    private fun lookupContactEmail(contactId: String): String? {
+        return try {
+            contentResolver.query(
+                ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Email.ADDRESS),
+                "${ContactsContract.CommonDataKinds.Email.CONTACT_ID} = ?",
+                arrayOf(contactId),
+                "${ContactsContract.CommonDataKinds.Email.IS_PRIMARY} DESC"
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0).ifEmpty { null } else null
+            }
+        } catch (_: Exception) { null }
     }
 
     private fun buildCalendarBody(title: String, datetimeStr: String?, durationMinutes: Int): String {
