@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ProTxt — V2 Glass Bubble -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="45%" cy="38%" r="62%">
+      <stop offset="0%" stop-color="#1a0f3d"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </radialGradient>
+
+    <radialGradient id="bubble" cx="28%" cy="22%" r="78%">
+      <stop offset="0%" stop-color="#ede9fe"/>
+      <stop offset="28%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </radialGradient>
+
+    <linearGradient id="tail" x1="30%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+
+    <!-- Soft ambient glow (behind bubble) -->
+    <filter id="ambGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="48"/>
+    </filter>
+
+    <!-- Sparkle glow -->
+    <filter id="sparkGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Drop shadow for bubble depth -->
+    <filter id="bubbleShadow" x="-12%" y="-8%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="32" flood-color="#4c1d95" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Ambient purple glow -->
+  <ellipse cx="512" cy="405" rx="300" ry="240" fill="#7c3aed" opacity="0.22" filter="url(#ambGlow)"/>
+
+  <!-- Tail (drawn first, behind bubble) -->
+  <path d="M 606 668 C 628 718 700 802 754 868 C 706 806 652 734 652 668 Z"
+        fill="url(#tail)"/>
+
+  <!-- Bubble body -->
+  <rect x="160" y="144" width="704" height="524" rx="92"
+        fill="url(#bubble)" filter="url(#bubbleShadow)"/>
+
+  <!-- Glass inner highlight — lit from top-left -->
+  <path d="M 182 236 Q 182 164 252 164 L 772 164 Q 842 164 842 236 L 842 388
+           Q 695 348 512 356 Q 326 364 182 388 Z"
+        fill="white" opacity="0.13"/>
+
+  <!-- Thin inner border for glass edge effect -->
+  <rect x="161" y="145" width="702" height="522" rx="91"
+        fill="none" stroke="white" stroke-width="1.5" stroke-opacity="0.22"/>
+
+  <!-- 4-pointed sparkle: center (512, 406), outer r=104, inner r=40 -->
+  <!-- outer: top(512,302) right(616,406) bottom(512,510) left(408,406) -->
+  <!-- inner 45°: r=40 → offset=28 → (540,378) (540,434) (484,434) (484,378) -->
+  <path d="M 512 302
+           L 540 378 L 616 406
+           L 540 434 L 512 510
+           L 484 434 L 408 406
+           L 484 378 Z"
+        fill="white" filter="url(#sparkGlow)"/>
+
+  <!-- Tiny secondary sparkle (bottom-right, for depth) -->
+  <circle cx="730" cy="540" r="5" fill="white" opacity="0.45"/>
+  <circle cx="748" cy="518" r="3" fill="white" opacity="0.28"/>
+</svg>

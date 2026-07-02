@@ -1,0 +1,121 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.READ_CONTACTS"/>
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <permission
+    android:name="com.contxt.app.INTERNAL_BROADCAST"
+    android:protectionLevel="signature" />
+
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <category android:name="android.intent.category.BROWSABLE"/>
+      <data android:scheme="https"/>
+    </intent>
+  </queries>
+  <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:theme="@style/AppTheme" android:supportsRtl="true" android:enableOnBackInvokedCallback="false" android:networkSecurityConfig="@xml/network_security_config">
+    <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc"/>
+    <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
+    <service
+      android:name=".ProTxtBgService"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService"/>
+      </intent-filter>
+    </service>
+
+    <service
+      android:name=".ProTxtAccessibilityService"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+      android:exported="true"
+      android:label="@string/app_name">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService"/>
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/accessibility_service_config"/>
+    </service>
+
+    <receiver
+      android:name=".ReplySendReceiver"
+      android:exported="false"
+      android:permission="com.contxt.app.INTERNAL_BROADCAST">
+      <intent-filter>
+        <action android:name="com.contxt.app.ACTION_SEND_REPLY"/>
+        <action android:name="com.contxt.app.ACTION_DISMISS_REPLY"/>
+        <action android:name="com.contxt.app.ACTION_MARK_READ"/>
+        <action android:name="com.contxt.app.ACTION_OPEN_CHAT"/>
+      </intent-filter>
+    </receiver>
+
+    <receiver
+      android:name=".ActionReceiver"
+      android:exported="false"
+      android:permission="com.contxt.app.INTERNAL_BROADCAST">
+      <intent-filter>
+        <action android:name="com.contxt.app.ACTION_CALENDAR_ADD"/>
+        <action android:name="com.contxt.app.ACTION_MAPS_OPEN"/>
+      </intent-filter>
+    </receiver>
+
+    <receiver
+      android:name=".HomeConfirmReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.contxt.app.ACTION_HOME_CONFIRM"/>
+        <action android:name="com.contxt.app.ACTION_HOME_DISMISS"/>
+      </intent-filter>
+    </receiver>
+
+    <service
+      android:name="expo.modules.androidnotificationlistenerservice.ExpoNotificationListenerService"
+      tools:node="remove"/>
+
+    <!-- Bubble suggestion window — remove this + BubbleHelper.kt + BubbleSuggestionActivity.kt to disable bubbles -->
+    <activity
+      android:name=".BubbleSuggestionActivity"
+      android:allowEmbedded="true"
+      android:resizeableActivity="true"
+      android:documentLaunchMode="always"
+      android:windowSoftInputMode="adjustResize"
+      android:theme="@android:style/Theme.NoTitleBar"
+      android:exported="false"/>
+
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.fileprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/bubble_file_paths"/>
+    </provider>
+
+    <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="protxt" android:host="contxt.app"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="text/plain"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

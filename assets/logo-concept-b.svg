@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ProTxt Logo — Concept B: Bold P as Speech Bubble -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e1b4b"/>
+      <stop offset="100%" style="stop-color:#0c0c0e"/>
+    </linearGradient>
+    <linearGradient id="pGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a5b4fc"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bgGrad)"/>
+
+  <!-- Speech bubble shape (the bowl of the P) -->
+  <rect x="160" y="160" width="620" height="520" rx="100" fill="url(#pGrad)"/>
+  <!-- Bubble tail (bottom-left — forms the stem of the P) -->
+  <path d="M 200 680 L 148 820 L 340 680 Z" fill="#6366f1"/>
+
+  <!-- Letter "P" cutout / stem line -->
+  <!-- Horizontal bar dividing P into top and bottom -->
+  <rect x="160" y="390" width="420" height="60" rx="0" fill="#0c0c0e" opacity="0.15"/>
+
+  <!-- White wordmark "Px" centered -->
+  <text x="468"
+        y="570"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif"
+        font-size="280"
+        font-weight="800"
+        fill="white"
+        text-anchor="middle"
+        letter-spacing="-8">Px</text>
+</svg>
