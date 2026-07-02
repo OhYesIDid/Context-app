@@ -78,9 +78,13 @@ object WorkerClient {
                 if (result != null) return result
                 // null means a 4xx — don't retry
                 return null
+            } catch (e: java.net.SocketTimeoutException) {
+                // Don't retry on timeout — request reached the worker, Claude is just slow.
+                // Fail immediately so the watchdog shows the Retry button without a 45s wait.
+                return null
             } catch (e: IOException) {
                 lastException = e
-                // retry on network errors
+                // retry on network errors (connection refused, DNS, etc.)
             } catch (e: RetryableException) {
                 lastException = e
                 // retry on 5xx
@@ -110,8 +114,8 @@ object WorkerClient {
             conn.setRequestProperty("X-Timestamp", timestamp)
             if (signature.isNotEmpty()) conn.setRequestProperty("X-Signature", signature)
             conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 28_000
 
             conn.outputStream.bufferedWriter().use { it.write(body) }
 

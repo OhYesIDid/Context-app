@@ -191,6 +191,7 @@ export default function App() {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
       ProTxtSettings.refreshBubbleState?.();
+      loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
@@ -635,7 +636,10 @@ export default function App() {
           const active = activeTab === tab.key;
           const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;
           return (
-            <Pressable key={tab.key} style={styles.navItem} onPress={() => setActiveTab(tab.key)}>
+            <Pressable key={tab.key} style={styles.navItem} onPress={() => {
+              if (tab.key === 'home') loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+              setActiveTab(tab.key);
+            }}>
               <View>
                 <Text style={[styles.navIcon, active && styles.navIconActive]}>{tab.icon}</Text>
                 {overdueCount > 0 && <View style={styles.navBadge}><Text style={styles.navBadgeText}>{overdueCount}</Text></View>}
