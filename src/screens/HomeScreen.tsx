@@ -11,6 +11,8 @@ import type { FollowUp } from '../services/followUps';
 import { formatDueLabel, urgency } from '../services/followUps';
 import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pendingCalendarActions';
 import type { PendingCalendarAction } from '../services/pendingCalendarActions';
+import { clearPendingFollowUp } from '../services/pendingFollowUps';
+import type { PendingFollowUp } from '../services/pendingFollowUps';
 
 const PURPLE = '#6366f1';
 const BG     = '#0c0c0e';
@@ -41,14 +43,17 @@ const URGENCY_TIME: Record<string, string> = {
 interface Props {
   followUps: FollowUp[];
   pendingCalendarActions: PendingCalendarAction[];
+  pendingFollowUps: PendingFollowUp[];
   onCalendarActionDismiss: (id: string) => void;
+  onFollowUpAdd: (item: PendingFollowUp) => void;
+  onFollowUpDismiss: (id: string) => void;
   onGoToFollowUps: () => void;
   onGoToSettings: () => void;
   onOpenPaywall: () => void;
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, onCalendarActionDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -179,6 +184,52 @@ export default function HomeScreen({ followUps, pendingCalendarActions, onCalend
                 <Pressable
                   hitSlop={10}
                   onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
+                >
+                  <Text style={styles.calendarDismiss}>✕</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Suggested follow-ups card */}
+      {pendingFollowUps.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#22c55e20' }]}>
+                <Text style={styles.cardIconText}>✅</Text>
+              </View>
+              <Text style={styles.cardTitle}>Suggested Follow-ups</Text>
+              <View style={[styles.badge, { backgroundColor: '#22c55e1a', borderWidth: 1, borderColor: '#22c55e33' }]}>
+                <Text style={[styles.badgeText, { color: GREEN }]}>{pendingFollowUps.length}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.divider} />
+
+          {pendingFollowUps.map(item => (
+            <View key={item.id} style={styles.calendarItem}>
+              <View style={styles.calendarBody}>
+                <Text style={styles.calendarTitle} numberOfLines={1}>{item.task}</Text>
+                <Text style={styles.calendarSub}>
+                  {[item.contactName ? `from ${item.contactName}` : null, item.dueHint].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
+              <View style={styles.calendarActions}>
+                <Pressable
+                  style={styles.calendarAddBtn}
+                  onPress={() => {
+                    clearPendingFollowUp(item.id);
+                    onFollowUpAdd(item);
+                  }}
+                >
+                  <Text style={styles.calendarAddText}>Add</Text>
+                </Pressable>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => { clearPendingFollowUp(item.id); onFollowUpDismiss(item.id); }}
                 >
                   <Text style={styles.calendarDismiss}>✕</Text>
                 </Pressable>

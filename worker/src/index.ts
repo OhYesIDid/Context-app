@@ -1,6 +1,7 @@
 export interface Env {
   CLAUDE_API_KEY: string;
   WORKER_SECRET: string; // HMAC-SHA256 key shared with the Android client
+  DEBUG_KEY: string | undefined; // separate key for /debug/recent endpoint
   RATE_LIMIT_KV: KVNamespace | undefined; // optional — omit binding to disable rate limiting
 }
 
@@ -305,12 +306,17 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
 // ── Prompt building ───────────────────────────────────────────────────────────
 
 interface ActionSuggestion {
-  type: 'calendar_add' | 'maps_open';
+  type: 'calendar_add' | 'maps_open' | 'follow_up';
   label: string;
+  // calendar_add
   title?: string;
   datetime?: string | null;
   durationMinutes?: number;
+  // maps_open
   address?: string;
+  // follow_up
+  task?: string;
+  dueHint?: string | null;
 }
 
 const MODEL = 'claude-sonnet-4-6';
@@ -327,7 +333,7 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - brief: one short sentence, direct
 - contextUpdate: optional — a single sentence (max 20 words) summarising the overall relationship/topic update. Only include when the exchange reveals something notable. Omit entirely if nothing new.
 - snippets: optional — array of 0–3 specific high-intent facts worth storing long-term (concrete plans, dates, places, commitments, preferences, personal details the user should remember). Max 12 words each. Be selective — only facts with lasting relevance. Omit the field entirely if nothing qualifies.
-- action: optional — include for three cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
+- action: optional — include for four cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}; (4) message asks the user to DO something specific that requires follow-up action (send a file, make a call, check something, bring something, book something, complete a task — i.e. a concrete actionable request directed at the user): {"type":"follow_up","label":"Add to Follow-ups","task":"[what the user needs to do — action-first, max 12 words, e.g. 'Send the contract to John']","dueHint":"[relative deadline if mentioned, e.g. 'by tomorrow', 'this week', or null]"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
 
 function buildPrompt(body: SuggestRequest, intents: string[]): string {
   const enrichments = body.enrichments ?? {};
@@ -481,7 +487,7 @@ async function verifyHmac(secret: string, timestamp: string, rawBody: string, si
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
     }
@@ -491,7 +497,7 @@ export default {
       const url = new URL(request.url);
       if (url.pathname === '/debug/recent') {
         const key = url.searchParams.get('key') ?? '';
-        if (!env.WORKER_SECRET || !constantTimeEqual(key, env.WORKER_SECRET)) {
+        if (!env.DEBUG_KEY || !constantTimeEqual(key, env.DEBUG_KEY)) {
           return new Response('Unauthorized', { status: 401 });
         }
         const raw = env.RATE_LIMIT_KV ? await env.RATE_LIMIT_KV.get(DEBUG_LOG_KEY) : null;
@@ -619,9 +625,9 @@ export default {
     if (snippets && snippets.length > 0) responseBody.snippets = snippets;
     if (action) responseBody.action = action;
 
-    // Fire-and-forget debug log — never delays the response
+    // Log after response is sent — ctx.waitUntil keeps the worker alive for the KV write
     if (env.RATE_LIMIT_KV) {
-      void appendDebugLog(env.RATE_LIMIT_KV, {
+      ctx.waitUntil(appendDebugLog(env.RATE_LIMIT_KV, {
         ts: new Date().toISOString(),
         contact: body.contactName ?? null,
         strategy: body.strategy ?? null,
@@ -635,7 +641,7 @@ export default {
         prompt: builtPrompt,
         replies: replyTones as Record<string, string>,
         action: action ?? null,
-      });
+      }));
     }
 
     return new Response(JSON.stringify(responseBody), {

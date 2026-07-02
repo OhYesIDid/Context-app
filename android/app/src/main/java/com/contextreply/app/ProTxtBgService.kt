@@ -799,6 +799,9 @@ class ProTxtBgService : NotificationListenerService() {
                 if (finalAction?.optString("type") == "calendar_add") {
                     upsertPendingCalendarAction(finalAction, convKey, senderName)
                 }
+                if (finalAction?.optString("type") == "follow_up") {
+                    upsertPendingFollowUp(finalAction, convKey, senderName)
+                }
                 val nowInApp = ProTxtAccessibilityService.activePackage == packageName
                 // Always post the suggestion notification so it lands in pendingBubbles.
                 // If we posted a loading bubble (!userInApp), we must update it with the real
@@ -2047,6 +2050,61 @@ class ProTxtBgService : NotificationListenerService() {
                 put("createdAt", System.currentTimeMillis())
             })
             prefs.edit().putString("pending_calendar_actions", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Upserts a follow-up task into the pending_follow_ups SharedPrefs list.
+    private fun upsertPendingFollowUp(action: JSONObject, convKey: String, contactName: String) {
+        val prefs = Prefs.main(this)
+        try {
+            val existing = JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
+            val next = JSONArray()
+            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            next.put(JSONObject().apply {
+                put("id", id)
+                put("task", action.optString("task").ifEmpty { action.optString("label") })
+                put("dueHint", action.optString("dueHint").ifEmpty { null } ?: JSONObject.NULL)
+                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
+                put("convKey", convKey)
+                put("createdAt", System.currentTimeMillis())
+            })
+            prefs.edit().putString("pending_follow_ups", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Removes a pending follow-up by id (called from BubbleSuggestionActivity or SettingsModule).
+    fun clearPendingFollowUp(id: String) {
+        val prefs = Prefs.main(this)
+        try {
+            val arr = JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
+            val next = JSONArray()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            prefs.edit().putString("pending_follow_ups", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Called when user confirms a follow-up from the bubble CTA.
+    // Clears from pending and adds to confirmed_follow_ups so JS can drain it into AsyncStorage.
+    fun confirmFollowUp(id: String, task: String, contactName: String, dueHint: String?) {
+        val prefs = Prefs.main(this)
+        clearPendingFollowUp(id)
+        try {
+            val arr = JSONArray(prefs.getString("confirmed_follow_ups", "[]") ?: "[]")
+            arr.put(JSONObject().apply {
+                put("id", id)
+                put("task", task)
+                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
+                put("dueHint", dueHint?.ifEmpty { null } ?: JSONObject.NULL)
+                put("createdAt", System.currentTimeMillis())
+            })
+            prefs.edit().putString("confirmed_follow_ups", arr.toString()).apply()
         } catch (_: Exception) {}
     }
 

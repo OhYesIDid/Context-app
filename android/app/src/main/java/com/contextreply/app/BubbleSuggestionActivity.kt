@@ -992,6 +992,18 @@ class BubbleSuggestionActivity : Activity() {
                             val address = action.optString("address").ifEmpty { null } ?: return@setOnClickListener
                             try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))) } catch (_: Exception) {}
                         }
+                        "follow_up" -> {
+                            val task    = action.optString("task").ifEmpty { actionLabel }
+                            val dueHint = action.optString("dueHint").ifEmpty { null }
+                            val id      = convKey?.hashCode()?.and(0x7FFFFFFF)?.toString()
+                            if (id != null) {
+                                val contact = contactMatch?.optString("displayName")?.ifEmpty { null } ?: ""
+                                ProTxtBgService.getInstance()?.confirmFollowUp(id, task, contact, dueHint)
+                            }
+                            text = "✓ Added to follow-ups"
+                            setTextColor(GREEN)
+                            isClickable = false
+                        }
                         "share_location" -> {
                             var lat = action.optDouble("lat", Double.NaN)
                             var lon = action.optDouble("lon", Double.NaN)

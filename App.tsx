@@ -23,10 +23,12 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import FollowUpsScreen from './src/screens/FollowUpsScreen';
-import { loadFollowUps } from './src/services/followUps';
+import { loadFollowUps, addFollowUp } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
 import { loadPendingCalendarActions } from './src/services/pendingCalendarActions';
 import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
+import { loadPendingFollowUps, drainConfirmedFollowUps } from './src/services/pendingFollowUps';
+import type { PendingFollowUp } from './src/services/pendingFollowUps';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -87,6 +89,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [pendingCalendarActions, setPendingCalendarActions] = useState<PendingCalendarAction[]>([]);
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>([]);
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
@@ -181,6 +184,13 @@ export default function App() {
     checkProEntitlement().then(setIsPro);
     loadFollowUps().then(setFollowUps).catch(() => {});
     loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+    loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
+    drainConfirmedFollowUps().then(confirmed => {
+      if (confirmed.length === 0) return;
+      Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined })))
+        .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
+        .catch(() => {});
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -194,6 +204,13 @@ export default function App() {
       }).catch(() => {});
       ProTxtSettings.refreshBubbleState?.();
       loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+      loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
+      drainConfirmedFollowUps().then(confirmed => {
+        if (confirmed.length === 0) return;
+        Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined })))
+          .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
+          .catch(() => {});
+      }).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
@@ -373,7 +390,14 @@ export default function App() {
         <HomeScreen
           followUps={followUps}
           pendingCalendarActions={pendingCalendarActions}
+          pendingFollowUps={pendingFollowUps}
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
+          onFollowUpAdd={(item) => {
+            setPendingFollowUps(prev => prev.filter(f => f.id !== item.id));
+            addFollowUp({ text: item.task, contactName: item.contactName ?? undefined })
+              .then(setFollowUps).catch(() => {});
+          }}
+          onFollowUpDismiss={(id) => setPendingFollowUps(prev => prev.filter(f => f.id !== id))}
           onGoToFollowUps={() => setActiveTab('followups')}
           onGoToSettings={() => setActiveTab('settings')}
           onOpenPaywall={openPaywall}
@@ -651,7 +675,10 @@ export default function App() {
           const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;
           return (
             <Pressable key={tab.key} style={styles.navItem} onPress={() => {
-              if (tab.key === 'home') loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+              if (tab.key === 'home') {
+                loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+                loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
+              }
               setActiveTab(tab.key);
             }}>
               <View>

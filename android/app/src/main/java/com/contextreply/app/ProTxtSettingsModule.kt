@@ -144,6 +144,41 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(json)
     }
 
+    @ReactMethod
+    fun getPendingFollowUps(promise: Promise) {
+        val json = Prefs.main(reactApplicationContext)
+            .getString("pending_follow_ups", "[]") ?: "[]"
+        promise.resolve(json)
+    }
+
+    @ReactMethod
+    fun clearPendingFollowUp(id: String) {
+        ProTxtBgService.getInstance()?.clearPendingFollowUp(id)
+            ?: run {
+                // Service not running — clear directly from prefs
+                val prefs = Prefs.main(reactApplicationContext)
+                try {
+                    val arr = org.json.JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
+                    val next = org.json.JSONArray()
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i) ?: continue
+                        if (item.optString("id") != id) next.put(item)
+                    }
+                    prefs.edit().putString("pending_follow_ups", next.toString()).apply()
+                } catch (_: Exception) {}
+            }
+    }
+
+    // Atomically reads and clears follow-ups confirmed via the bubble CTA so JS can
+    // drain them into AsyncStorage without showing the HomeScreen suggestion card.
+    @ReactMethod
+    fun drainConfirmedFollowUps(promise: Promise) {
+        val prefs = Prefs.main(reactApplicationContext)
+        val json = prefs.getString("confirmed_follow_ups", "[]") ?: "[]"
+        prefs.edit().putString("confirmed_follow_ups", "[]").apply()
+        promise.resolve(json)
+    }
+
     // Removes a single pending calendar action by id.
     @ReactMethod
     fun clearPendingCalendarAction(id: String) {
