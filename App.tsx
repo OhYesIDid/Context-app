@@ -21,6 +21,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import HomeScreen from './src/screens/HomeScreen';
+import FollowUpsScreen from './src/screens/FollowUpsScreen';
+import { loadFollowUps } from './src/services/followUps';
+import type { FollowUp } from './src/services/followUps';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -75,7 +79,11 @@ const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
 const WHATSAPP_IMPORT_KEY = 'setup_whatsapp_messages';
 const SETUP_COMPLETE_KEY = 'setup_complete';
 
+type Tab = 'home' | 'followups' | 'history' | 'settings';
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
@@ -166,6 +174,7 @@ export default function App() {
     }
     configurePurchases();
     checkProEntitlement().then(setIsPro);
+    loadFollowUps().then(setFollowUps).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -351,10 +360,33 @@ export default function App() {
     <SafeAreaProvider>
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
+
+      {/* Tab content */}
+      {activeTab === 'home' && (
+        <HomeScreen
+          followUps={followUps}
+          notifPermission={notifPermission}
+          onGoToFollowUps={() => setActiveTab('followups')}
+          onGoToSettings={() => setActiveTab('settings')}
+          onOpenPaywall={openPaywall}
+          isPro={isPro}
+        />
+      )}
+      {activeTab === 'followups' && (
+        <FollowUpsScreen followUps={followUps} setFollowUps={setFollowUps} />
+      )}
+      {activeTab === 'history' && (
+        <View style={{ flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 36, marginBottom: 16 }}>🕐</Text>
+          <Text style={{ fontSize: 18, fontWeight: '600', color: '#f4f4f5', marginBottom: 8 }}>Reply history</Text>
+          <Text style={{ fontSize: 14, color: '#71717a', textAlign: 'center', lineHeight: 20 }}>Your past reply suggestions and conversations will appear here.</Text>
+        </View>
+      )}
+      {activeTab === 'settings' && (
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
 
         <View style={styles.header}>
-          <Text style={styles.title}>ConTxt</Text>
+          <Text style={styles.title}>Settings</Text>
           <Text style={styles.subtitle}>Reply suggestions in the background</Text>
         </View>
 
@@ -585,6 +617,29 @@ export default function App() {
         </View>
 
       </ScrollView>
+      )}
+
+      {/* Bottom navigation */}
+      <View style={styles.bottomNav}>
+        {([
+          { key: 'home',      icon: '⌂',  label: 'Home'      },
+          { key: 'followups', icon: '☑',  label: 'Follow-ups' },
+          { key: 'history',   icon: '🕐', label: 'History'   },
+          { key: 'settings',  icon: '⚙',  label: 'Settings'  },
+        ] as { key: Tab; icon: string; label: string }[]).map(tab => {
+          const active = activeTab === tab.key;
+          const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;
+          return (
+            <Pressable key={tab.key} style={styles.navItem} onPress={() => setActiveTab(tab.key)}>
+              <View>
+                <Text style={[styles.navIcon, active && styles.navIconActive]}>{tab.icon}</Text>
+                {overdueCount > 0 && <View style={styles.navBadge}><Text style={styles.navBadgeText}>{overdueCount}</Text></View>}
+              </View>
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       {/* Contacts modal */}
       <Modal
@@ -1085,6 +1140,15 @@ const styles = StyleSheet.create({
   header: { marginBottom: 28 },
   title: { fontSize: 26, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: MUTED, marginTop: 4 },
+
+  bottomNav:     { flexDirection: 'row', backgroundColor: '#131315', borderTopWidth: 1, borderTopColor: BORDER, paddingBottom: 4 },
+  navItem:       { flex: 1, alignItems: 'center', paddingVertical: 8 },
+  navIcon:       { fontSize: 22, color: MUTED, textAlign: 'center' },
+  navIconActive: { color: PURPLE },
+  navLabel:      { fontSize: 10, color: MUTED, fontWeight: '500', marginTop: 2 },
+  navLabelActive:{ color: PURPLE },
+  navBadge:      { position: 'absolute', top: -4, right: -8, backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  navBadgeText:  { fontSize: 10, fontWeight: '700', color: '#fff' },
 
   sectionLabel: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   sectionCard: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 24, overflow: 'hidden' },

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ConTxt — Home Screen Prototype</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  body {
+    background: #0f0f11;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: -apple-system, 'Inter', 'Roboto', sans-serif;
+    padding: 40px 20px;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 393px;
+    background: #1c1c1f;
+    border-radius: 50px;
+    box-shadow:
+      0 0 0 1px #333,
+      0 0 0 10px #1a1a1a,
+      0 0 0 11px #2a2a2a,
+      0 60px 120px rgba(0,0,0,0.8);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Dynamic island */
+  .dynamic-island {
+    width: 126px;
+    height: 37px;
+    background: #000;
+    border-radius: 20px;
+    margin: 14px auto 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 28px;
+    height: 44px;
+    margin-top: -8px;
+  }
+  .status-time { color: #f4f4f5; font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .status-icons svg { fill: #f4f4f5; }
+
+  /* Screen content */
+  .screen {
+    background: #111113;
+    min-height: 780px;
+    padding-bottom: 90px;
+  }
+
+  /* App header */
+  .app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 20px 12px;
+  }
+  .app-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #f4f4f5;
+    letter-spacing: -0.8px;
+  }
+  .app-title span { color: #6366f1; }
+  .header-actions { display: flex; gap: 4px; }
+  .icon-btn {
+    width: 36px; height: 36px;
+    border-radius: 12px;
+    background: #27272a;
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: #a1a1aa;
+    font-size: 16px;
+  }
+
+  /* Cards */
+  .cards { padding: 4px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  .card {
+    background: #1e1e22;
+    border-radius: 20px;
+    border: 1px solid #2d2d32;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 16px 10px;
+  }
+  .card-title-row { display: flex; align-items: center; gap: 8px; }
+  .card-icon {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .card-title { font-size: 15px; font-weight: 600; color: #f4f4f5; }
+  .card-badge {
+    background: #6366f1;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    letter-spacing: 0.2px;
+  }
+  .card-badge.urgent { background: #ef4444; }
+  .card-link { font-size: 13px; color: #6366f1; font-weight: 500; }
+  .card-divider { height: 1px; background: #2d2d32; margin: 0 16px; }
+
+  /* Follow-up items */
+  .followup-list { padding: 8px 0; }
+  .followup-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .followup-item:active { background: #27272a; }
+  .followup-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .dot-overdue { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  .dot-soon    { background: #f59e0b; }
+  .dot-later   { background: #6366f1; }
+  .followup-content { flex: 1; min-width: 0; }
+  .followup-text {
+    font-size: 14px;
+    color: #e4e4e7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 450;
+  }
+  .followup-text.overdue { color: #fca5a5; }
+  .followup-meta { font-size: 12px; color: #71717a; margin-top: 1px; }
+  .followup-time {
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .time-overdue { color: #ef4444; }
+  .time-soon    { color: #f59e0b; }
+  .time-later   { color: #71717a; }
+
+  .followup-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px 14px;
+    border-top: 1px solid #2d2d32;
+  }
+  .followup-footer-text { font-size: 13px; color: #71717a; }
+  .btn-add {
+    display: flex; align-items: center; gap: 5px;
+    background: #27272a;
+    border: 1px solid #3f3f46;
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: #a1a1aa;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* Today card */
+  .today-card { }
+  .today-items { padding: 4px 0 8px; }
+  .today-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 9px 16px;
+  }
+  .today-item-icon {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .today-item-body { flex: 1; }
+  .today-item-title { font-size: 14px; color: #e4e4e7; font-weight: 450; line-height: 1.3; }
+  .today-item-sub { font-size: 12px; color: #71717a; margin-top: 2px; }
+  .today-item-action {
+    background: #27272a;
+    border: 1px solid #3f3f46;
+    border-radius: 8px;
+    padding: 4px 10px;
+    color: #a1a1aa;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: center;
+    flex-shrink: 0;
+  }
+  .today-item-action.purple {
+    background: rgba(99,102,241,0.15);
+    border-color: rgba(99,102,241,0.3);
+    color: #818cf8;
+  }
+
+  /* Monitoring card */
+  .monitor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 14px 14px;
+  }
+  .monitor-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: #27272a;
+    border-radius: 12px;
+    padding: 10px 12px;
+    border: 1px solid #3f3f46;
+  }
+  .monitor-app-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .monitor-label { font-size: 13px; color: #d4d4d8; font-weight: 500; }
+  .monitor-status {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .status-on  { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.2); }
+  .status-off { background: #3f3f46; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: #1c1c1f;
+    border-top: 1px solid #2d2d32;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 10px 0 28px;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 4px 16px;
+    border-radius: 10px;
+  }
+  .nav-icon { font-size: 22px; }
+  .nav-label { font-size: 10px; color: #71717a; font-weight: 500; }
+  .nav-item.active .nav-label { color: #6366f1; }
+  .nav-item.active .nav-icon { filter: none; }
+
+  /* Scroll hint */
+  .scroll-hint {
+    text-align: center;
+    padding: 16px 0 4px;
+    font-size: 12px;
+    color: #3f3f46;
+  }
+
+  /* Interactive elements */
+  .card { transition: transform 0.1s; cursor: default; }
+
+  /* Annotations */
+  .annotations {
+    width: 393px;
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .annotation {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .ann-num {
+    background: #6366f1;
+    color: #fff;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .ann-text { font-size: 13px; color: #71717a; line-height: 1.5; }
+  .ann-text strong { color: #a1a1aa; }
+</style>
+</head>
+<body>
+
+<div style="display:flex;flex-direction:column;align-items:center;gap:0">
+
+<div class="phone">
+  <div class="dynamic-island"></div>
+
+  <div class="status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons">
+      <!-- Signal -->
+      <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="7" width="3" height="5" rx="0.8"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="0.8"/><rect x="9" y="2" width="3" height="10" rx="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="0.8" opacity="0.3"/></svg>
+      <!-- WiFi -->
+      <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 9.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0-3.8a6.1 6.1 0 0 1 4.3 1.8l1.4-1.4A8.1 8.1 0 0 0 8 3.5a8.1 8.1 0 0 0-5.7 2.6l1.4 1.4A6.1 6.1 0 0 1 8 5.7zm0-4A9.8 9.8 0 0 1 14.9 4L16 2.9A11.6 11.6 0 0 0 8 0 11.6 11.6 0 0 0 0 2.9L1.1 4A9.8 9.8 0 0 1 8 1.7z" fill-rule="evenodd"/></svg>
+      <!-- Battery -->
+      <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="21" height="10" rx="2.5" stroke="#f4f4f5" stroke-width="1" fill="none"/><rect x="1.5" y="2.5" width="16" height="7" rx="1.5" fill="#f4f4f5"/><path d="M22.5 4v4a2 2 0 0 0 0-4z" fill="#f4f4f5" opacity="0.4"/></svg>
+    </div>
+  </div>
+
+  <div class="screen">
+
+    <!-- Header -->
+    <div class="app-header">
+      <div class="app-title">Con<span>Txt</span></div>
+      <div class="header-actions">
+        <button class="icon-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button class="icon-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="cards">
+
+      <!-- Follow-ups card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <div class="card-icon" style="background:rgba(99,102,241,0.15)">📋</div>
+            <span class="card-title">Follow-ups</span>
+            <span class="card-badge urgent">1 overdue</span>
+          </div>
+          <span class="card-link">View all</span>
+        </div>
+        <div class="card-divider"></div>
+
+        <div class="followup-list">
+          <div class="followup-item">
+            <div class="followup-dot dot-overdue"></div>
+            <div class="followup-content">
+              <div class="followup-text overdue">Send Sarah the doc link</div>
+              <div class="followup-meta">Sarah • WhatsApp</div>
+            </div>
+            <div class="followup-time time-overdue">2h ago</div>
+          </div>
+
+          <div class="followup-item">
+            <div class="followup-dot dot-soon"></div>
+            <div class="followup-content">
+              <div class="followup-text">Confirm dinner with Dan</div>
+              <div class="followup-meta">Dan • iMessage</div>
+            </div>
+            <div class="followup-time time-soon">by 5pm</div>
+          </div>
+
+          <div class="followup-item">
+            <div class="followup-dot dot-later"></div>
+            <div class="followup-content">
+              <div class="followup-text">Check if Mum got the parcel</div>
+              <div class="followup-meta">Mum • WhatsApp</div>
+            </div>
+            <div class="followup-time time-later">Fri</div>
+          </div>
+        </div>
+
+        <div class="followup-footer">
+          <span class="followup-footer-text">3 of 5 remaining</span>
+          <button class="btn-add">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add
+          </button>
+        </div>
+      </div>
+
+      <!-- Today card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <div class="card-icon" style="background:rgba(245,158,11,0.15)">☀️</div>
+            <span class="card-title">Today</span>
+          </div>
+        </div>
+        <div class="card-divider"></div>
+
+        <div class="today-items">
+          <div class="today-item">
+            <div class="today-item-icon" style="background:rgba(34,197,94,0.12)">💬</div>
+            <div class="today-item-body">
+              <div class="today-item-title">Mum messaged 3 hours ago</div>
+              <div class="today-item-sub">No reply yet</div>
+            </div>
+            <button class="today-item-action purple">Reply</button>
+          </div>
+
+          <div class="today-item">
+            <div class="today-item-icon" style="background:rgba(99,102,241,0.12)">📅</div>
+            <div class="today-item-body">
+              <div class="today-item-title">Dinner with Dan at 7:00 PM</div>
+              <div class="today-item-sub">Il Ponte · 22 min away at 6:30</div>
+            </div>
+            <button class="today-item-action">Maps</button>
+          </div>
+
+          <div class="today-item">
+            <div class="today-item-icon" style="background:rgba(239,68,68,0.12)">🔖</div>
+            <div class="today-item-body">
+              <div class="today-item-title">2 follow-ups due today</div>
+              <div class="today-item-sub">Sarah and Dan</div>
+            </div>
+            <button class="today-item-action">View</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monitoring card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <div class="card-icon" style="background:rgba(34,197,94,0.12)">🔔</div>
+            <span class="card-title">Monitoring</span>
+            <span class="card-badge" style="background:#22c55e20;color:#4ade80;border:1px solid #22c55e30">4 active</span>
+          </div>
+          <span class="card-link">Manage</span>
+        </div>
+        <div class="card-divider"></div>
+
+        <div class="monitor-grid">
+          <div class="monitor-item">
+            <div class="monitor-app-icon" style="background:#25D366">💬</div>
+            <span class="monitor-label">WhatsApp</span>
+            <div class="monitor-status status-on"></div>
+          </div>
+          <div class="monitor-item">
+            <div class="monitor-app-icon" style="background:#0088cc">✈️</div>
+            <span class="monitor-label">Telegram</span>
+            <div class="monitor-status status-on"></div>
+          </div>
+          <div class="monitor-item">
+            <div class="monitor-app-icon" style="background:#1877F2">💙</div>
+            <span class="monitor-label">Messenger</span>
+            <div class="monitor-status status-on"></div>
+          </div>
+          <div class="monitor-item">
+            <div class="monitor-app-icon" style="background:#1c1c1e;border:1px solid #3f3f46">💬</div>
+            <span class="monitor-label">Messages</span>
+            <div class="monitor-status status-on"></div>
+          </div>
+          <div class="monitor-item">
+            <div class="monitor-app-icon" style="background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)">📷</div>
+            <span class="monitor-label">Instagram</span>
+            <div class="monitor-status status-off"></div>
+          </div>
+          <div class="monitor-item" style="background:#1c1c1f;border-style:dashed;cursor:pointer">
+            <div class="monitor-app-icon" style="background:#27272a">➕</div>
+            <span class="monitor-label" style="color:#71717a">Add app</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /cards -->
+
+    <div class="scroll-hint">· · ·</div>
+
+  </div><!-- /screen -->
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <div class="nav-item active">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label" style="color:#6366f1">Home</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Follow-ups</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">🕐</span>
+      <span class="nav-label">History</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </div>
+  </div>
+
+</div><!-- /phone -->
+
+</div>
+</body>
+</html>
