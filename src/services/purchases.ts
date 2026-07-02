@@ -41,12 +41,12 @@ export function addEntitlementListener(cb: (isPro: boolean) => void): () => void
 }
 
 export async function fetchOfferings(): Promise<PurchasesOfferings | null> {
-  try {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000));
-    return await Promise.race([Purchases.getOfferings(), timeout]);
-  } catch {
-    return null;
-  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5_000);
+    Purchases.getOfferings()
+      .then((o) => { clearTimeout(timer); resolve(o); })
+      .catch(() => { clearTimeout(timer); resolve(null); });
+  });
 }
 
 export async function purchasePkg(pkg: PurchasesPackage): Promise<boolean> {
