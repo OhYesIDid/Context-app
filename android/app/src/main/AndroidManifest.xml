@@ -85,6 +85,7 @@
       android:name=".BubbleSuggestionActivity"
       android:allowEmbedded="true"
       android:resizeableActivity="true"
+      android:documentLaunchMode="always"
       android:windowSoftInputMode="adjustResize"
       android:theme="@android:style/Theme.NoTitleBar"
       android:exported="false"/>
