@@ -136,9 +136,6 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
 
         <View style={styles.cardFooter}>
           <Text style={styles.footerText}>{pending.length} pending{pending.length !== followUps.length ? ` · ${followUps.filter(f => f.status === 'done').length} done` : ''}</Text>
-          <Pressable style={styles.addBtn} onPress={onGoToFollowUps}>
-            <Text style={styles.addBtnText}>+ Add</Text>
-          </Pressable>
         </View>
       </View>
 
