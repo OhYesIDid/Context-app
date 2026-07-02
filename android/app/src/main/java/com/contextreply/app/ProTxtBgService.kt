@@ -1049,14 +1049,6 @@ class ProTxtBgService : NotificationListenerService() {
         // Social plans imply scheduling: "dinner on Tuesday?", "Tuesday lunch?", "coffee Saturday"
         Regex("""\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\s+(?:on\s+|for\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b""", RegexOption.IGNORE_CASE),
-        // Calendar-check queries: questions that need calendar context to answer ("Is it Dan's bday soon?")
-        Regex("""\b(birthday|bday|b-day)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\banniversary\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(appointment|appt)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\breminder\b""", RegexOption.IGNORE_CASE),
-        Regex("""(coming up|any plans|what('?s| is) (on|happening)|anything (on|planned|scheduled))""", RegexOption.IGNORE_CASE),
-        Regex("""\b(event|events)\b.{0,20}\b(this|next|any|upcoming|soon)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(this|next|any|upcoming|soon)\b.{0,20}\b(event|events)\b""", RegexOption.IGNORE_CASE),
     )
 
     private val LOCATION_SHARE_PATTERNS = listOf(
@@ -1082,11 +1074,23 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})"""),
     )
 
+    // Social-awareness questions that warrant a reply but don't need calendar enrichment.
+    // Birthday/anniversary questions are about the OTHER person's dates, not the user's schedule.
+    // Pulling the user's own calendar for these returns unrelated events and confuses the model.
+    private val GENERAL_PATTERNS = listOf(
+        Regex("""\b(birthday|bday|b-day)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\banniversary\b""", RegexOption.IGNORE_CASE),
+        Regex("""(coming up|any plans|what('?s| is) (on|happening)|anything (on|planned|scheduled))""", RegexOption.IGNORE_CASE),
+        Regex("""\b(event|events)\b.{0,20}\b(this|next|any|upcoming|soon)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(this|next|any|upcoming|soon)\b.{0,20}\b(event|events)\b""", RegexOption.IGNORE_CASE),
+    )
+
     private val INTENT_ENRICHMENTS = mapOf(
         "eta"               to listOf("maps"),
         "availability"      to listOf("calendar"),
         "location_share"    to listOf("location_coords"),
         "incoming_location" to listOf("incoming_location", "maps"),
+        "general"           to listOf<String>(),
         "other"             to listOf<String>(),
     )
 
@@ -1107,6 +1111,7 @@ class ProTxtBgService : NotificationListenerService() {
         if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
         if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
         if (INCOMING_LOCATION_PATTERNS.any { it.containsMatchIn(message) }) intents.add("incoming_location")
+        if (intents.isEmpty() && GENERAL_PATTERNS.any { it.containsMatchIn(message) }) intents.add("general")
         return intents.ifEmpty { listOf("other") }
     }
 
