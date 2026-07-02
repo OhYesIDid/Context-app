@@ -125,6 +125,29 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         } catch (_: Exception) {}
     }
 
+    // Returns current pending calendar actions as a JSON array without clearing them.
+    @ReactMethod
+    fun getPendingCalendarActions(promise: Promise) {
+        val json = Prefs.main(reactApplicationContext)
+            .getString("pending_calendar_actions", "[]") ?: "[]"
+        promise.resolve(json)
+    }
+
+    // Removes a single pending calendar action by id.
+    @ReactMethod
+    fun clearPendingCalendarAction(id: String) {
+        val prefs = Prefs.main(reactApplicationContext)
+        try {
+            val arr = JSONArray(prefs.getString("pending_calendar_actions", "[]") ?: "[]")
+            val next = JSONArray()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            prefs.edit().putString("pending_calendar_actions", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
     // Atomically reads and clears the pending_contacts queue, returning a JSON
     // array of {convKey, senderName, platform} objects for JS to process.
     @ReactMethod

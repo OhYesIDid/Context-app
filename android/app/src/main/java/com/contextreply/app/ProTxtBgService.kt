@@ -686,7 +686,12 @@ class ProTxtBgService : NotificationListenerService() {
                 conversationIntents[convKey] = Pair(effectiveIntentsStr, System.currentTimeMillis())
             }
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
-            if (!suggestAll && effectiveIntentsStr == "other") return@schedule
+            // Also process "other" intent messages when the current bubble for this conversation
+            // has an open calendar action — the next message may carry the confirmed time/place
+            // that should update the suggested event details.
+            val hasPendingCalendarAction = pendingBubbles[convKey]?.suggestedActionJson
+                ?.let { try { org.json.JSONObject(it).optString("type") == "calendar_add" } catch (_: Exception) { false } } == true
+            if (!suggestAll && effectiveIntentsStr == "other" && !hasPendingCalendarAction) return@schedule
             activeBubbles.add(convKey)
             // If this convKey's bubble Activity is already open (the system never recreates
             // it to deliver a fresh Intent for later messages), push it back into a loading
@@ -783,6 +788,9 @@ class ProTxtBgService : NotificationListenerService() {
                                 ?.let { area -> action.put("area", area) }
                         }
                     }
+                }
+                if (finalAction?.optString("type") == "calendar_add") {
+                    upsertPendingCalendarAction(finalAction, convKey, senderName)
                 }
                 val nowInApp = ProTxtAccessibilityService.activePackage == packageName
                 // Always post the suggestion notification so it lands in pendingBubbles.
@@ -1924,6 +1932,44 @@ class ProTxtBgService : NotificationListenerService() {
             if (!briefText.isNullOrEmpty())  putExtra("suggestion_brief", briefText)
             putExtra("conv_key", convKey)
         })
+    }
+
+    fun clearPendingCalendarAction(id: String) {
+        try {
+            val prefs = Prefs.main(this)
+            val arr = JSONArray(prefs.getString("pending_calendar_actions", "[]") ?: "[]")
+            val next = JSONArray()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            prefs.edit().putString("pending_calendar_actions", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Upserts a calendar action into the pending_calendar_actions SharedPrefs list.
+    // Keyed by convKey so re-processing the same conversation updates rather than duplicates.
+    private fun upsertPendingCalendarAction(action: JSONObject, convKey: String, contactName: String) {
+        val prefs = Prefs.main(this)
+        try {
+            val existing = JSONArray(prefs.getString("pending_calendar_actions", "[]") ?: "[]")
+            val next = JSONArray()
+            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            next.put(JSONObject().apply {
+                put("id", id)
+                put("title", action.optString("title").ifEmpty { "Event" })
+                put("datetime", action.optString("datetime").ifEmpty { null } ?: JSONObject.NULL)
+                put("durationMinutes", action.optInt("durationMinutes", 60))
+                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
+                put("convKey", convKey)
+                put("createdAt", System.currentTimeMillis())
+            })
+            prefs.edit().putString("pending_calendar_actions", next.toString()).apply()
+        } catch (_: Exception) {}
     }
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {

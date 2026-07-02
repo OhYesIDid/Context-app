@@ -25,6 +25,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import FollowUpsScreen from './src/screens/FollowUpsScreen';
 import { loadFollowUps } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
+import { loadPendingCalendarActions } from './src/services/pendingCalendarActions';
+import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -84,6 +86,7 @@ type Tab = 'home' | 'followups' | 'history' | 'settings';
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [pendingCalendarActions, setPendingCalendarActions] = useState<PendingCalendarAction[]>([]);
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
@@ -175,6 +178,7 @@ export default function App() {
     configurePurchases();
     checkProEntitlement().then(setIsPro);
     loadFollowUps().then(setFollowUps).catch(() => {});
+    loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -365,6 +369,8 @@ export default function App() {
       {activeTab === 'home' && (
         <HomeScreen
           followUps={followUps}
+          pendingCalendarActions={pendingCalendarActions}
+          onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
           onGoToFollowUps={() => setActiveTab('followups')}
           onGoToSettings={() => setActiveTab('settings')}
           onOpenPaywall={openPaywall}

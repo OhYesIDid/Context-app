@@ -981,6 +981,11 @@ class BubbleSuggestionActivity : Activity() {
                                     } catch (_: Exception) {}
                                 }
                             }
+                            // Clear from homescreen pending list now that it's been acted on
+                            convKey?.let { key ->
+                                val id = key.hashCode().and(0x7FFFFFFF).toString()
+                                ProTxtBgService.getInstance()?.clearPendingCalendarAction(id)
+                            }
                             try { startActivity(calIntent) } catch (_: Exception) {}
                         }
                         "maps_open" -> {

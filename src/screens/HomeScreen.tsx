@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,8 @@ import {
 } from 'react-native';
 import type { FollowUp } from '../services/followUps';
 import { formatDueLabel, urgency } from '../services/followUps';
+import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pendingCalendarActions';
+import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 
 const PURPLE = '#6366f1';
 const BG     = '#0c0c0e';
@@ -37,13 +40,15 @@ const URGENCY_TIME: Record<string, string> = {
 
 interface Props {
   followUps: FollowUp[];
+  pendingCalendarActions: PendingCalendarAction[];
+  onCalendarActionDismiss: (id: string) => void;
   onGoToFollowUps: () => void;
   onGoToSettings: () => void;
   onOpenPaywall: () => void;
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, onCalendarActionDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -132,6 +137,57 @@ export default function HomeScreen({ followUps, onGoToFollowUps, onGoToSettings,
         </View>
       </View>
 
+      {/* Pending calendar actions card */}
+      {pendingCalendarActions.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+                <Text style={styles.cardIconText}>📅</Text>
+              </View>
+              <Text style={styles.cardTitle}>Suggested Events</Text>
+              <View style={[styles.badge, { backgroundColor: '#6366f133', borderWidth: 1, borderColor: '#6366f155' }]}>
+                <Text style={[styles.badgeText, { color: PURPLE }]}>{pendingCalendarActions.length}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.divider} />
+
+          {pendingCalendarActions.map(action => (
+            <View key={action.id} style={styles.calendarItem}>
+              <View style={styles.calendarBody}>
+                <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
+                <Text style={styles.calendarSub}>
+                  {action.contactName ? `with ${action.contactName}` : ''}
+                  {action.contactName && action.datetime ? ' · ' : ''}
+                  {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
+                </Text>
+              </View>
+              <View style={styles.calendarActions}>
+                <Pressable
+                  style={styles.calendarAddBtn}
+                  onPress={() => {
+                    const title = encodeURIComponent(action.title);
+                    const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
+                    Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
+                    clearPendingCalendarAction(action.id);
+                    onCalendarActionDismiss(action.id);
+                  }}
+                >
+                  <Text style={styles.calendarAddText}>Add</Text>
+                </Pressable>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
+                >
+                  <Text style={styles.calendarDismiss}>✕</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Today card */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -211,5 +267,14 @@ const styles = StyleSheet.create({
   todaySub:      { fontSize: 12, color: MUTED, marginTop: 2 },
   todayAction:   { backgroundColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0 },
   todayActionText: { fontSize: 12, color: MUTED, fontWeight: '500' },
+
+  calendarItem:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  calendarBody:    { flex: 1, minWidth: 0 },
+  calendarTitle:   { fontSize: 14, color: TEXT, fontWeight: '500' },
+  calendarSub:     { fontSize: 12, color: MUTED, marginTop: 2 },
+  calendarActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  calendarAddBtn:  { backgroundColor: '#6366f122', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#6366f144' },
+  calendarAddText: { fontSize: 12, color: PURPLE, fontWeight: '600' },
+  calendarDismiss: { fontSize: 14, color: MUTED, paddingHorizontal: 4 },
 
 });
