@@ -4,6 +4,35 @@ export interface Env {
   RATE_LIMIT_KV: KVNamespace | undefined; // optional — omit binding to disable rate limiting
 }
 
+const DEBUG_LOG_KEY = 'dbg:log';
+const DEBUG_LOG_MAX = 20;
+const DEBUG_LOG_TTL = 48 * 3600; // 48 hours
+
+interface DebugEntry {
+  ts: string;
+  contact: string | null;
+  strategy: string | null;
+  intents: string[];
+  message: string;
+  thread: { sender: string | null; text: string }[];
+  enrichmentKeys: string[];
+  prompt: string;
+  replies: Record<string, string>;
+  action: unknown;
+}
+
+async function appendDebugLog(kv: KVNamespace, entry: DebugEntry): Promise<void> {
+  try {
+    const raw = await kv.get(DEBUG_LOG_KEY);
+    const entries: DebugEntry[] = raw ? JSON.parse(raw) : [];
+    entries.unshift(entry);
+    if (entries.length > DEBUG_LOG_MAX) entries.length = DEBUG_LOG_MAX;
+    await kv.put(DEBUG_LOG_KEY, JSON.stringify(entries), { expirationTtl: DEBUG_LOG_TTL });
+  } catch (_) {
+    // Never let logging failures break the main request
+  }
+}
+
 const RATE_LIMIT = 10; // requests per window
 const RATE_WINDOW_MS = 60_000; // 1 minute
 
@@ -371,6 +400,55 @@ function parseReplies(raw: string): ReplyOptions {
   }
 }
 
+// ── Debug log viewer ─────────────────────────────────────────────────────────
+
+function buildDebugHtml(entries: DebugEntry[]): string {
+  const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const rows = entries.map((e, i) => {
+    const thread = e.thread.map((m) =>
+      `<div class="msg ${m.sender ? 'inbound' : 'outbound'}"><span class="sender">${escape(m.sender ?? 'Me')}</span> ${escape(m.text)}</div>`
+    ).join('');
+    const replies = Object.entries(e.replies).map(([k, v]) =>
+      `<div><span class="tone">${k}</span> ${escape(v)}</div>`
+    ).join('');
+    return `
+      <details ${i === 0 ? 'open' : ''}>
+        <summary>
+          <strong>${escape(e.contact ?? 'unknown')}</strong>
+          <span class="meta">${e.ts} · intents: ${e.intents.join(', ')} · enrichments: ${e.enrichmentKeys.join(', ') || 'none'}${e.strategy ? ` · strategy: ${e.strategy}` : ''}</span>
+        </summary>
+        <div class="section-label">Thread (last 10)</div>
+        <div class="thread">${thread || '<em>empty</em>'}</div>
+        <div class="section-label">Full prompt sent to Claude</div>
+        <pre class="prompt">${escape(e.prompt)}</pre>
+        <div class="section-label">Replies</div>
+        <div class="replies">${replies}</div>
+        ${e.action ? `<div class="section-label">Action</div><pre class="prompt">${escape(JSON.stringify(e.action, null, 2))}</pre>` : ''}
+      </details>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ConTxt debug log</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #0f0f0f; color: #e0e0e0; }
+  h1 { font-size: 1.1rem; color: #a78bfa; }
+  details { border: 1px solid #333; border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  summary { padding: .75rem 1rem; cursor: pointer; background: #1a1a1a; list-style: none; display: flex; gap: 1rem; align-items: baseline; }
+  summary::-webkit-details-marker { display: none; }
+  .meta { font-size: 11px; color: #888; }
+  .section-label { font-size: 11px; font-weight: 600; color: #a78bfa; padding: .5rem 1rem 0; text-transform: uppercase; letter-spacing: .05em; }
+  .thread, .replies { padding: .5rem 1rem; }
+  .msg { padding: 2px 0; }
+  .sender { font-weight: 600; color: #60a5fa; margin-right: .5rem; }
+  .outbound .sender { color: #34d399; }
+  .tone { display: inline-block; min-width: 60px; font-weight: 600; color: #f59e0b; margin-right: .5rem; }
+  pre.prompt { margin: 0; padding: .75rem 1rem; background: #1a1a1a; font-size: 12px; white-space: pre-wrap; word-break: break-word; color: #d1d5db; }
+  em { color: #555; }
+</style></head><body>
+<h1>ConTxt · debug log · last ${entries.length} suggestions</h1>
+${entries.length === 0 ? '<p style="color:#555">No entries yet — trigger a suggestion on the device.</p>' : rows}
+</body></html>`;
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 const CORS_HEADERS = {
@@ -407,6 +485,23 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
     }
+
+    // Debug log viewer — GET /debug/recent?key=<WORKER_SECRET>
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      if (url.pathname === '/debug/recent') {
+        const key = url.searchParams.get('key') ?? '';
+        if (!env.WORKER_SECRET || !constantTimeEqual(key, env.WORKER_SECRET)) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+        const raw = env.RATE_LIMIT_KV ? await env.RATE_LIMIT_KV.get(DEBUG_LOG_KEY) : null;
+        const entries: DebugEntry[] = raw ? JSON.parse(raw) : [];
+        const html = buildDebugHtml(entries);
+        return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      }
+      return new Response('Not found', { status: 404 });
+    }
+
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 });
     }
@@ -479,6 +574,8 @@ export default {
       }
     }
 
+    const builtPrompt = buildPrompt(body, intents);
+
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -490,7 +587,7 @@ export default {
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildPrompt(body, intents) }],
+        messages: [{ role: 'user', content: builtPrompt }],
       }),
     });
 
@@ -521,6 +618,25 @@ export default {
     if (contextUpdate) responseBody.contextUpdate = contextUpdate;
     if (snippets && snippets.length > 0) responseBody.snippets = snippets;
     if (action) responseBody.action = action;
+
+    // Fire-and-forget debug log — never delays the response
+    if (env.RATE_LIMIT_KV) {
+      void appendDebugLog(env.RATE_LIMIT_KV, {
+        ts: new Date().toISOString(),
+        contact: body.contactName ?? null,
+        strategy: body.strategy ?? null,
+        intents,
+        message: body.message,
+        thread: (body.conversationThread ?? []).slice(-10).map((m) => ({
+          sender: m.sender,
+          text: m.text.slice(0, 300),
+        })),
+        enrichmentKeys: Object.keys(body.enrichments ?? {}).filter((k) => (body.enrichments as Record<string, unknown>)[k] != null),
+        prompt: builtPrompt,
+        replies: replyTones as Record<string, string>,
+        action: action ?? null,
+      });
+    }
 
     return new Response(JSON.stringify(responseBody), {
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
