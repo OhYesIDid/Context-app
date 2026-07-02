@@ -45,6 +45,17 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun setRemindersEnabled(enabled: Boolean) {
+        Prefs.main(reactApplicationContext)
+            .edit().putBoolean("reminders_enabled", enabled).apply()
+    }
+
+    @ReactMethod
+    fun getRemindersEnabled(promise: Promise) {
+        promise.resolve(Prefs.main(reactApplicationContext).getBoolean("reminders_enabled", true))
+    }
+
+    @ReactMethod
     fun setSuggestAllMessages(all: Boolean) {
         Prefs.main(reactApplicationContext)
             .edit()

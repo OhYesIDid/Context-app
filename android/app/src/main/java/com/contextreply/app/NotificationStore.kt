@@ -14,6 +14,7 @@ import org.json.JSONObject
  */
 class NotificationStore private constructor(context: Context) {
 
+    private val appContext = context.applicationContext
     private val prefs = Prefs.messageCache(context)
 
     fun isEmpty(convKey: String): Boolean =
@@ -76,8 +77,33 @@ class NotificationStore private constructor(context: Context) {
     }
 
     fun markReplied(convKey: String) {
-        prefs.edit().remove(storeKey(convKey)).remove(unreadKey(convKey)).apply()
+        val sk = storeKey(convKey)
+        prefs.edit()
+            .remove(sk)
+            .remove(unreadKey(convKey))
+            .remove("reminder_urgency_$sk")
+            .remove("reminder_fired_$sk")
+            .apply()
+        ReminderWorker.cancel(appContext, convKey)
     }
+
+    fun recordPendingReminder(convKey: String, urgencyScore: Int) {
+        val sk = storeKey(convKey)
+        prefs.edit()
+            .putInt("reminder_urgency_$sk", urgencyScore)
+            .putBoolean("reminder_fired_$sk", false)
+            .apply()
+    }
+
+    fun getReminderUrgency(convKey: String): Int =
+        prefs.getInt("reminder_urgency_${storeKey(convKey)}", 0)
+
+    fun markReminderFired(convKey: String) {
+        prefs.edit().putBoolean("reminder_fired_${storeKey(convKey)}", true).apply()
+    }
+
+    fun hasReminderFired(convKey: String): Boolean =
+        prefs.getBoolean("reminder_fired_${storeKey(convKey)}", false)
 
     private fun unreadKey(convKey: String) = "unread_${storeKey(convKey)}"
 

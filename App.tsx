@@ -97,6 +97,7 @@ export default function App() {
   const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
   const [setupLoading, setSetupLoading] = useState<string | null>(null);
   const [skipGroupMessages, setSkipGroupMessages] = useState(false);
+  const [remindersEnabled, setRemindersEnabledState] = useState(true);
   const [suggestAllMessages, setSuggestAllMessagesState] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsVisible, setContactsVisible] = useState(false);
@@ -157,6 +158,7 @@ export default function App() {
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
+      ProTxtSettings.getRemindersEnabled?.().then((v: boolean) => setRemindersEnabledState(v)).catch(() => {});
       ProTxtSettings.getSuggestAllMessages().then((all: boolean) => setSuggestAllMessagesState(all)).catch(() => {});
       ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
       (async () => {
@@ -509,6 +511,18 @@ export default function App() {
               onValueChange={(v) => { setSkipGroupMessages(v); ProTxtSettings?.setSkipGroupMessages?.(v); }}
               trackColor={{ false: BORDER, true: PURPLE + '99' }}
               thumbColor={skipGroupMessages ? PURPLE : MUTED}
+            />
+          </View>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1, marginRight: 16 }}>
+              <Text style={styles.settingText}>Reply reminders</Text>
+              <Text style={styles.setupStatus}>Notify you with a suggested reply if you haven't responded</Text>
+            </View>
+            <Switch
+              value={remindersEnabled}
+              onValueChange={(v) => { setRemindersEnabledState(v); ProTxtSettings?.setRemindersEnabled?.(v); }}
+              trackColor={{ false: BORDER, true: PURPLE + '99' }}
+              thumbColor={remindersEnabled ? PURPLE : MUTED}
             />
           </View>
           {isPro ? (

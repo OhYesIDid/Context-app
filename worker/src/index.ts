@@ -85,6 +85,7 @@ const STRATEGY_INSTRUCTIONS: Record<string, string> = {
   avail_yes:    'Express genuine willingness. Confirm availability using calendar data if available, or suggest a specific time.',
   avail_maybe:  'Be friendly but non-committal. Avoid hard dates. Suggest the conversation can continue without locking anything in.',
   avail_no:     'Politely decline. Keep warmth. Optionally gesture toward a future window without making a firm commitment.',
+  reminder:     'The user has not yet replied to this message. Generate a warm, natural reply as if they are responding now. Keep it concise and genuine — do not mention the delay or apologise for it unless the message text itself warrants it.',
 };
 
 interface ReplyOptions {

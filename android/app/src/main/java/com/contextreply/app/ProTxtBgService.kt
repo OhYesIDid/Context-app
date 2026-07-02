@@ -46,6 +46,7 @@ class ProTxtBgService : NotificationListenerService() {
 
         const val CHANNEL_ID = "contextreply_suggestions"
         const val CHANNEL_SILENT_ID = "contextreply_silent"
+        const val CHANNEL_REMINDER_ID = "contextreply_reminders"
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
         const val ACTION_COPY = "com.contxt.app.ACTION_COPY_REPLY"
@@ -712,6 +713,12 @@ class ProTxtBgService : NotificationListenerService() {
                 replyPendingIntent, remoteInputKey, openChatIntent,
                 markAsReadPendingIntent, packageName, userInApp,
             )
+            val remindersEnabled = try { Prefs.main(this).getBoolean("reminders_enabled", true) } catch (_: Exception) { true }
+            if (remindersEnabled) {
+                val urgencyScore = computeUrgencyScore(latestMessage, effectiveIntentsStr, convKey)
+                store.recordPendingReminder(convKey, urgencyScore)
+                ReminderWorker.schedule(this, convKey, urgencyScore)
+            }
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
 
@@ -1082,6 +1089,17 @@ class ProTxtBgService : NotificationListenerService() {
         "incoming_location" to listOf("incoming_location", "maps"),
         "other"             to listOf<String>(),
     )
+
+    private fun computeUrgencyScore(message: String, intentsStr: String, convKey: String): Int {
+        var score = 0
+        val lc = message.lowercase()
+        if (Regex("""\b(asap|urgent|emergency|immediately|right now|help me|need you now)\b""").containsMatchIn(lc)) score += 2
+        if (Regex("""\b(wtf|seriously|come on|hello\?+|are you there|why aren.?t you)\b""").containsMatchIn(lc)) score += 1
+        if (Regex("""\?{2,}|!{2,}""").containsMatchIn(message)) score += 1
+        if ((arrivalBuffer[convKey]?.size ?: 0) >= 2) score += 1
+        if (intentsStr.contains("eta") || intentsStr.contains("availability")) score += 1
+        return score.coerceIn(0, 3)
+    }
 
     private fun detectIntents(message: String): List<String> {
         val intents = mutableListOf<String>()
@@ -2046,6 +2064,15 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                 }
                 nm.createNotificationChannel(silent)
+            }
+            if (nm.getNotificationChannel(CHANNEL_REMINDER_ID) == null) {
+                nm.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_REMINDER_ID, "Reply Reminders", NotificationManager.IMPORTANCE_DEFAULT
+                    ).apply {
+                        description = "Reminders to reply to messages you haven't responded to"
+                    }
+                )
             }
         }
     }

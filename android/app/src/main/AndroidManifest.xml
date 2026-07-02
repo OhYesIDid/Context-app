@@ -76,6 +76,15 @@
       </intent-filter>
     </receiver>
 
+    <receiver
+      android:name=".ReminderActionReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.contxt.app.ACTION_REMINDER_COPY"/>
+        <action android:name="com.contxt.app.ACTION_REMINDER_DISMISS"/>
+      </intent-filter>
+    </receiver>
+
     <service
       android:name="expo.modules.androidnotificationlistenerservice.ExpoNotificationListenerService"
       tools:node="remove"/>
