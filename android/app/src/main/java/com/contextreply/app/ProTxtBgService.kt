@@ -1963,6 +1963,18 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                 }
                 nm.createNotificationChannel(channel)
+                // Post-and-cancel a ghost notification so Android registers the channel
+                // as used immediately, making the Bubbles toggle appear in system settings
+                // without waiting for the first real notification.
+                val ghost = NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("")
+                    .setPriority(NotificationCompat.PRIORITY_MIN)
+                    .setAutoCancel(true)
+                    .build()
+                val ghostId = 0xCAFE
+                nm.notify(ghostId, ghost)
+                nm.cancel(ghostId)
             }
             // Silent channel for reposts (unlock, leaving app etc.) — IMPORTANCE_LOW
             // guarantees no sound/vibration at the audio-policy level, which is the only
