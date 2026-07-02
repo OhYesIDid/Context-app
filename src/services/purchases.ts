@@ -42,10 +42,16 @@ export function addEntitlementListener(cb: (isPro: boolean) => void): () => void
 
 export async function fetchOfferings(): Promise<PurchasesOfferings | null> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), 15_000);
+    const timer = setTimeout(() => { console.warn('[RC] fetchOfferings timed out after 15s'); resolve(null); }, 15_000);
     Purchases.getOfferings()
-      .then((o) => { clearTimeout(timer); resolve(o); })
-      .catch(() => { clearTimeout(timer); resolve(null); });
+      .then((o) => {
+        clearTimeout(timer);
+        console.log('[RC] offerings keys:', Object.keys(o.all ?? {}));
+        const pkgs = o.current?.availablePackages ?? [];
+        console.log('[RC] current packages:', pkgs.map(p => p.identifier + '/' + p.product?.identifier));
+        resolve(o);
+      })
+      .catch((e) => { clearTimeout(timer); console.warn('[RC] getOfferings error:', e?.message ?? e); resolve(null); });
   });
 }
 

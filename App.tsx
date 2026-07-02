@@ -974,7 +974,7 @@ export default function App() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.paywallPkgName, selected && { color: TEXT }]}>
-                          {pkg.product.title || (isAnnual ? 'Annual' : 'Monthly')}
+                          {(pkg.product.title || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || (isAnnual ? 'Annual' : 'Monthly')}
                         </Text>
                         <Text style={[styles.setupStatus, { marginTop: 1 }]}>
                           {pkg.product.priceString}{isAnnual ? ' / year' : ' / month'}
