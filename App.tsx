@@ -365,7 +365,6 @@ export default function App() {
       {activeTab === 'home' && (
         <HomeScreen
           followUps={followUps}
-          notifPermission={notifPermission}
           onGoToFollowUps={() => setActiveTab('followups')}
           onGoToSettings={() => setActiveTab('settings')}
           onOpenPaywall={openPaywall}

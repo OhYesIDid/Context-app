@@ -35,25 +35,15 @@ const URGENCY_TIME: Record<string, string> = {
   none:    MUTED,
 };
 
-const MONITORED_APPS = [
-  { name: 'WhatsApp',  letter: 'W', bg: '#25D366', color: '#fff' },
-  { name: 'Telegram',  letter: 'T', bg: '#0088cc', color: '#fff' },
-  { name: 'Messages',  letter: 'M', bg: '#2a2a2e', color: TEXT   },
-  { name: 'Messenger', letter: 'F', bg: '#1877F2', color: '#fff' },
-  { name: 'Signal',    letter: 'S', bg: '#3a76f0', color: '#fff' },
-  { name: 'Instagram', letter: 'I', bg: '#E1306C', color: '#fff' },
-];
-
 interface Props {
   followUps: FollowUp[];
-  notifPermission: boolean;
   onGoToFollowUps: () => void;
   onGoToSettings: () => void;
   onOpenPaywall: () => void;
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, notifPermission, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -67,9 +57,6 @@ export default function HomeScreen({ followUps, notifPermission, onGoToFollowUps
 
   // Today card items — dynamic, priority-ordered
   const todayItems: { icon: string; iconBg: string; title: string; sub: string; action?: string; onAction?: () => void }[] = [];
-  if (!notifPermission) {
-    todayItems.push({ icon: '🔔', iconBg: '#ef444420', title: 'Notification access needed', sub: 'ConTxt can\'t suggest replies yet', action: 'Fix', onAction: onGoToSettings });
-  }
   if (overdueCount > 0) {
     todayItems.push({ icon: '⏰', iconBg: '#ef444420', title: `${overdueCount} overdue follow-up${overdueCount > 1 ? 's' : ''}`, sub: 'Action needed now', action: 'View', onAction: onGoToFollowUps });
   }
@@ -175,42 +162,6 @@ export default function HomeScreen({ followUps, notifPermission, onGoToFollowUps
         ))}
       </View>
 
-      {/* Monitoring card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <View style={[styles.cardIcon, { backgroundColor: '#22c55e20' }]}>
-              <Text style={styles.cardIconText}>🔔</Text>
-            </View>
-            <Text style={styles.cardTitle}>Monitoring</Text>
-            <View style={[styles.badge, { backgroundColor: notifPermission ? '#22c55e20' : '#ef444420', borderWidth: 1, borderColor: notifPermission ? '#22c55e40' : '#ef444440' }]}>
-              <Text style={[styles.badgeText, { color: notifPermission ? '#4ade80' : '#f87171' }]}>{notifPermission ? 'Active' : 'Off'}</Text>
-            </View>
-          </View>
-          <Pressable onPress={onGoToSettings}>
-            <Text style={styles.cardLink}>Manage</Text>
-          </Pressable>
-        </View>
-        <View style={styles.divider} />
-
-        <View style={styles.monitorGrid}>
-          {MONITORED_APPS.map(app => (
-            <View key={app.name} style={styles.monitorItem}>
-              <View style={[styles.monitorAppIcon, { backgroundColor: app.bg }]}>
-                <Text style={[styles.monitorLetter, { color: app.color }]}>{app.letter}</Text>
-              </View>
-              <Text style={styles.monitorLabel} numberOfLines={1}>{app.name}</Text>
-              <View style={[styles.monitorDot, { backgroundColor: notifPermission ? GREEN : BORDER }]} />
-            </View>
-          ))}
-        </View>
-
-        {!notifPermission && (
-          <Pressable style={styles.monitorCta} onPress={onGoToSettings}>
-            <Text style={styles.monitorCtaText}>Enable notification access to start monitoring →</Text>
-          </Pressable>
-        )}
-      </View>
     </ScrollView>
   );
 }
@@ -261,13 +212,4 @@ const styles = StyleSheet.create({
   todayAction:   { backgroundColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0 },
   todayActionText: { fontSize: 12, color: MUTED, fontWeight: '500' },
 
-  monitorGrid:    { flexDirection: 'row', flexWrap: 'wrap', padding: 10, gap: 8 },
-  monitorItem:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111113', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: BORDER, width: '47%' },
-  monitorAppIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  monitorLetter:  { fontSize: 13, fontWeight: '700' },
-  monitorLabel:   { flex: 1, fontSize: 12, color: TEXT, fontWeight: '500' },
-  monitorDot:     { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
-
-  monitorCta:     { margin: 14, marginTop: 4 },
-  monitorCtaText: { fontSize: 13, color: PURPLE, fontWeight: '500', textAlign: 'center' },
 });

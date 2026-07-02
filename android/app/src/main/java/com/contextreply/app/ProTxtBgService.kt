@@ -1970,11 +1970,11 @@ class ProTxtBgService : NotificationListenerService() {
                 }
                 nm.createNotificationChannel(channel)
             }
-            // initBubble runs once per app-data lifetime (SharedPrefs is cleared on data clear,
-            // channels are not) so the Bubbles toggle appears in settings immediately.
+            // initBubble fires once per app version so the Bubbles toggle appears in settings
+            // immediately after install OR after an update (version code changes → re-registers).
             val prefs = Prefs.main(this)
-            if (!prefs.getBoolean("bubble_init_done", false)) {
-                prefs.edit().putBoolean("bubble_init_done", true).apply()
+            if (prefs.getInt("bubble_init_version", -1) != BuildConfig.VERSION_CODE) {
+                prefs.edit().putInt("bubble_init_version", BuildConfig.VERSION_CODE).apply()
                 BubbleHelper.initBubble(this)
             }
             // Silent channel for reposts (unlock, leaving app etc.) — IMPORTANCE_LOW
