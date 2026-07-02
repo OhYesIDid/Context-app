@@ -1963,6 +1963,7 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                 }
                 nm.createNotificationChannel(channel)
+                BubbleHelper.initBubble(this)
             }
             // Silent channel for reposts (unlock, leaving app etc.) — IMPORTANCE_LOW
             // guarantees no sound/vibration at the audio-policy level, which is the only

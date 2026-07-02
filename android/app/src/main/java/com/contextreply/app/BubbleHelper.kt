@@ -11,6 +11,8 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.content.FileProvider
@@ -198,6 +200,55 @@ object BubbleHelper {
             android.util.Log.e("BubbleHelper", "compositeIcon failed: ${e.javaClass.simpleName}: ${e.message}")
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
+    }
+
+    // Posts a fully valid bubble notification immediately after the channel is first created so
+    // Android registers this app as bubble-capable and shows the Bubbles toggle in system
+    // settings without the user needing to receive a real message first.
+    fun initBubble(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            val icon = IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
+            val shortcutId = "cr_init_bubble"
+            val person = Person.Builder().setName("ConTxt").setIcon(icon).build()
+            val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
+                .setLongLived(true)
+                .setIntent(Intent(context, BubbleSuggestionActivity::class.java).setAction(Intent.ACTION_VIEW))
+                .setShortLabel("ConTxt")
+                .setPerson(person)
+                .setIcon(icon)
+                .setCategories(setOf("android.shortcut.conversation"))
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+
+            val bubblePi = PendingIntent.getActivity(
+                context, 0xBEEF,
+                Intent(context, BubbleSuggestionActivity::class.java).setAction(Intent.ACTION_VIEW),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            )
+            val notification = NotificationCompat.Builder(context, ProTxtBgService.CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher_round)
+                .setContentTitle("ConTxt")
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setShortcutId(shortcutId)
+                .setBubbleMetadata(
+                    NotificationCompat.BubbleMetadata.Builder(bubblePi, icon)
+                        .setDesiredHeight(520)
+                        .setAutoExpandBubble(false)
+                        .setSuppressNotification(true)
+                        .build()
+                )
+                .setStyle(
+                    NotificationCompat.MessagingStyle(Person.Builder().setName("You").build())
+                        .addMessage("Ready to suggest replies", System.currentTimeMillis(), person)
+                )
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .build()
+
+            val nm = context.getSystemService(android.app.NotificationManager::class.java)
+            nm.notify(0xBEEF, notification)
+            Handler(Looper.getMainLooper()).postDelayed({ nm.cancel(0xBEEF) }, 1500)
+        } catch (_: Exception) {}
     }
 
     // Per-contact coloured circle with initial — kept for reference; no longer used as main dot.
