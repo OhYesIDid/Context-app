@@ -42,7 +42,8 @@ export function addEntitlementListener(cb: (isPro: boolean) => void): () => void
 
 export async function fetchOfferings(): Promise<PurchasesOfferings | null> {
   try {
-    return await Purchases.getOfferings();
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000));
+    return await Promise.race([Purchases.getOfferings(), timeout]);
   } catch {
     return null;
   }

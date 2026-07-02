@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Image,
   Linking,
   Modal,
   NativeModules,
@@ -919,9 +920,10 @@ export default function App() {
             <View style={styles.modalHandle} />
 
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
-              <View style={styles.paywallIconRing}>
-                <Text style={{ fontSize: 28 }}>✦</Text>
-              </View>
+              <Image
+                source={require('./assets/contxt-logo-g-minimal-circuit.png')}
+                style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 12 }}
+              />
               <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 4 }]}>ConTxt Pro</Text>
               <Text style={[styles.setupStatus, { textAlign: 'center' }]}>Reply smarter, to every message</Text>
             </View>
