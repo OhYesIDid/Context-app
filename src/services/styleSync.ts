@@ -1,15 +1,27 @@
 import { NativeModules } from 'react-native';
-import { findContactByDisplayName, getAllContacts, getConfirmedPlatformIdentities, getRecentStyleEdits, incrementContactInteraction, mergeContact, recordStyleEdit, upsertContact, upsertPlatformIdentity } from './database';
+import {
+  ensureContactForConversation,
+  findContactIdByIdentifier,
+  getAllContacts,
+  getConfirmedPlatformIdentities,
+  getContactsByIds,
+  getContactsWithPreferences,
+  getDatabase,
+  getRecentStyleEdits,
+  incrementContactInteraction,
+  mergeContact,
+  recordStyleEdit,
+  upsertPlatformIdentity,
+} from './database';
 import type { Intent, Platform, StyleEdit } from '../types';
 
-// Maps Android package names → Platform type used in SQLite
 const PACKAGE_TO_PLATFORM: Record<string, Platform> = {
-  'com.whatsapp':                     'whatsapp',
-  'com.whatsapp.w4b':                 'whatsapp',
-  'org.telegram.messenger':           'telegram',
-  'com.instagram.android':            'instagram',
-  'com.facebook.orca':                'messenger',
-  'org.thoughtcrime.securesms':       'signal',
+  'com.whatsapp':                      'whatsapp',
+  'com.whatsapp.w4b':                  'whatsapp',
+  'org.telegram.messenger':            'telegram',
+  'com.instagram.android':             'instagram',
+  'com.facebook.orca':                 'messenger',
+  'org.thoughtcrime.securesms':        'signal',
   'com.google.android.apps.messaging': 'sms',
 };
 
@@ -23,20 +35,74 @@ interface QueueItem {
   ts: number;
 }
 
-// Drain the Kotlin-side SharedPrefs queue into SQLite, then rebuild and
+interface PendingContact {
+  convKey: string;
+  senderName: string;
+  platform: string;
+}
+
+interface IntentCorrection {
+  ts: number;
+  from: string[];
+  to: string[];
+  message: string;
+}
+
+// Drain the Kotlin-side SharedPrefs queues into SQLite, then rebuild and
 // cache the style profile string so the background worker can use it.
+// On a typical startup with empty queues this returns immediately — no
+// contact decryption, no DB work.
 export async function syncStyleProfile(): Promise<void> {
   try {
+    // Restore confirmed identities to SharedPrefs if it was wiped (reinstall).
+    // Fast: reads SharedPrefs + at most one small SQLite query.
     await restoreConfirmedIdentitiesFromDb();
-    await drainConfirmedIdentities();
-    await drainQueue();
-    await drainCorrections();
+
+    // Drain all Kotlin queues in parallel — pure SharedPrefs reads, no DB yet.
+    const [confirmedJson, queueJson, correctionsJson, pendingJson] = await Promise.all([
+      NativeModules.ProTxtSettings.getConfirmedIdentities(),
+      NativeModules.ProTxtSettings.drainStyleQueue(),
+      NativeModules.ProTxtSettings.drainIntentCorrections(),
+      NativeModules.ProTxtSettings.drainPendingContacts(),
+    ]);
+
+    const confirmed: Record<string, string> = JSON.parse(confirmedJson);
+    const queue: QueueItem[] = JSON.parse(queueJson);
+    const corrections: IntentCorrection[] = JSON.parse(correctionsJson);
+    const pending: PendingContact[] = JSON.parse(pendingJson);
+
+    // Nothing pending — cached profile in SharedPrefs is still valid, stop here.
+    if (
+      Object.keys(confirmed).length === 0 &&
+      queue.length === 0 &&
+      corrections.length === 0 &&
+      pending.length === 0
+    ) return;
+
+    // Process only non-empty queues, each using targeted SQL (no getAllContacts).
+    if (Object.keys(confirmed).length > 0) await drainConfirmedIdentities(confirmed);
+    if (pending.length > 0) await drainPendingContacts(pending);
+    if (queue.length > 0) await drainQueue(queue);
+    if (corrections.length > 0) await drainCorrections(corrections);
+
     await rebuildCachedProfile();
   } catch (_) {}
 }
 
-// On reinstall SharedPrefs is wiped. If it's empty but SQLite has confirmed
-// identities, write them back so the background service works immediately.
+// Rebuild and push the full contact list to Kotlin for fuzzy name matching.
+// Call after contact imports or when a contact preference changes — not on
+// every startup.
+export async function refreshContactListCache(): Promise<void> {
+  const contacts = await getAllContacts();
+  const contactList = contacts.map((c) => ({
+    id: c.id,
+    display_name: c.displayName,
+    preferred_tone: c.preferredTone ?? inferredTone(c.relationship) ?? null,
+    interaction_count: c.interactionCount ?? 0,
+  }));
+  NativeModules.ProTxtSettings.cacheContactList(JSON.stringify(contactList));
+}
+
 async function restoreConfirmedIdentitiesFromDb(): Promise<void> {
   const existing: string = await NativeModules.ProTxtSettings.getConfirmedIdentities();
   if (Object.keys(JSON.parse(existing)).length > 0) return;
@@ -49,37 +115,41 @@ async function restoreConfirmedIdentitiesFromDb(): Promise<void> {
   NativeModules.ProTxtSettings.restoreConfirmedIdentities(JSON.stringify(map));
 }
 
-// Reads confirmed_identities from SharedPrefs and upserts each into SQLite
-// platform_identities so confirmations survive a reinstall.
-async function drainConfirmedIdentities(): Promise<void> {
-  const json: string = await NativeModules.ProTxtSettings.getConfirmedIdentities();
-  const confirmed: Record<string, string> = JSON.parse(json);
-  const entries = Object.entries(confirmed);
-  if (entries.length === 0) return;
-  const contacts = await getAllContacts();
-  const contactById = new Map(contacts.map((c) => [c.id, c]));
-  for (const [convKey, contactId] of entries) {
+async function drainConfirmedIdentities(confirmed: Record<string, string>): Promise<void> {
+  for (const [convKey, contactId] of Object.entries(confirmed)) {
     const colonIdx = convKey.indexOf(':');
     if (colonIdx < 0) continue;
     const packageName = convKey.slice(0, colonIdx);
     const senderName = convKey.slice(colonIdx + 1);
     if (!senderName || senderName.startsWith('group:') || senderName.startsWith('id:')) continue;
     const platform = (PACKAGE_TO_PLATFORM[packageName] ?? packageName) as Platform;
-    // Resolve SQLite contact ID — direct UUID or device contact looked up by name
+
     let sqliteContactId: string | null = null;
     if (!contactId.startsWith('device:')) {
-      sqliteContactId = contactById.has(contactId) ? contactId : null;
+      // Direct UUID — check existence without loading all contacts
+      const db = await getDatabase();
+      const row = await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM contacts WHERE id = ? AND deleted_at IS NULL', [contactId]
+      );
+      sqliteContactId = row?.id ?? null;
     } else {
-      const match = contacts.find((c) => c.displayName.toLowerCase() === senderName.toLowerCase());
-      sqliteContactId = match?.id ?? null;
+      // Device contact — look up by identifier first (fast), fall back to cache
+      sqliteContactId = await findContactIdByIdentifier(senderName);
+      if (!sqliteContactId) {
+        // Legacy imported contact without display_name identity — use cache (rare)
+        const contacts = await getAllContacts();
+        const match = contacts.find((c) => c.displayName.toLowerCase() === senderName.toLowerCase());
+        sqliteContactId = match?.id ?? null;
+      }
     }
     if (!sqliteContactId) continue;
-    // If an auto-created contact exists for this sender name with a different id,
-    // merge it into the confirmed contact so style history isn't split.
-    const autoCreated = await findContactByDisplayName(senderName);
-    if (autoCreated && autoCreated.id !== sqliteContactId) {
-      await mergeContact(autoCreated.id, sqliteContactId);
+
+    // Merge any auto-created contact with the same identifier into the confirmed one
+    const autoId = await findContactIdByIdentifier(senderName);
+    if (autoId && autoId !== sqliteContactId) {
+      await mergeContact(autoId, sqliteContactId);
     }
+
     await upsertPlatformIdentity({
       contactId: sqliteContactId,
       platform,
@@ -91,24 +161,31 @@ async function drainConfirmedIdentities(): Promise<void> {
   }
 }
 
-async function drainQueue(): Promise<void> {
-  const json: string = await NativeModules.ProTxtSettings.drainStyleQueue();
-  const items: QueueItem[] = JSON.parse(json);
-  if (items.length === 0) return;
-  // Load contacts once so we can match edit → contactId for per-contact style learning
-  const contacts = await getAllContacts();
+async function drainPendingContacts(pending: PendingContact[]): Promise<void> {
+  for (const item of pending) {
+    if (!item.senderName || !item.platform) continue;
+    await ensureContactForConversation(item.senderName, item.platform);
+  }
+}
+
+async function drainQueue(items: QueueItem[]): Promise<void> {
   for (const item of items) {
     if (!item.original) continue;
     const isSend = item.edit.length > 0;
-    let matched = item.contact
-      ? contacts.find((c) => c.displayName.toLowerCase() === item.contact!.toLowerCase())
-      : undefined;
-    // Auto-create a contact on first reply so style edits link correctly going forward.
-    // Dismissals (edit="") are not enough signal to warrant creating a contact.
-    if (!matched && item.contact && isSend) {
-      matched = await upsertContact({ displayName: item.contact });
-      contacts.push(matched);
+
+    let contactId: string | undefined;
+    if (item.contact) {
+      // Plaintext lookup via platform_identities — no decryption
+      const id = await findContactIdByIdentifier(item.contact);
+      if (id) {
+        contactId = id;
+      } else if (isSend) {
+        // Auto-create on first send — ensureContactForConversation creates both
+        // contact + platform_identity so future lookups work without all-contacts load
+        contactId = await ensureContactForConversation(item.contact, item.platform);
+      }
     }
+
     const editDelta = isSend ? computeEditDelta(item.original, item.edit) : undefined;
     await recordStyleEdit({
       originalSuggestion: item.original,
@@ -117,23 +194,15 @@ async function drainQueue(): Promise<void> {
       intent: item.intent as Intent | undefined,
       toneSelected: item.tone_selected,
       editDeltaJson: editDelta ? JSON.stringify(editDelta) : undefined,
-      contactId: matched?.id,
+      contactId,
     });
-    if (item.contact) await incrementContactInteraction(item.contact);
+    if (contactId) {
+      await incrementContactInteraction(contactId);
+    }
   }
 }
 
-interface IntentCorrection {
-  ts: number;
-  from: string[];
-  to: string[];
-  message: string;
-}
-
-async function drainCorrections(): Promise<void> {
-  const json: string = await NativeModules.ProTxtSettings.drainIntentCorrections();
-  const corrections: IntentCorrection[] = JSON.parse(json);
-  if (corrections.length === 0) return;
+async function drainCorrections(corrections: IntentCorrection[]): Promise<void> {
   const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
   const existing = await AsyncStorage.getItem('intent_corrections').catch(() => null);
   const prev: IntentCorrection[] = existing ? JSON.parse(existing) : [];
@@ -162,7 +231,6 @@ function computeEditDelta(original: string, edited: string): EditDelta {
   };
 }
 
-// Infer a preferred tone from relationship when none is explicitly set
 function inferredTone(relationship: string | undefined): string | undefined {
   switch (relationship) {
     case 'colleague': return 'formal';
@@ -176,12 +244,21 @@ function inferredTone(relationship: string | undefined): string | undefined {
 
 async function rebuildCachedProfile(): Promise<void> {
   const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-  const [edits, contacts, correctionsJson] = await Promise.all([
+  const [edits, correctionsJson] = await Promise.all([
     getRecentStyleEdits(60),
-    getAllContacts(),
     AsyncStorage.getItem('intent_corrections').catch(() => null),
   ]);
   const corrections: IntentCorrection[] = correctionsJson ? JSON.parse(correctionsJson) : [];
+
+  // Fetch only the contacts we actually need — no full table scan
+  const contactIds = [...new Set(edits.map((e) => e.contactId).filter((id): id is string => !!id))];
+  const [editContacts, prefContacts] = await Promise.all([
+    getContactsByIds(contactIds),
+    getContactsWithPreferences(),
+  ]);
+  const contactById = Object.fromEntries(
+    [...editContacts, ...prefContacts].map((c) => [c.id, c])
+  );
 
   const now = Date.now();
   const HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -192,8 +269,6 @@ async function rebuildCachedProfile(): Promise<void> {
     .filter((e) => e.userEdit.length > 0 && normalize(e.userEdit) !== normalize(e.originalSuggestion))
     .sort((a, b) => recencyScore(b) - recencyScore(a));
 
-  // Dismissal filtering: exclude dismissals that were followed by a send for the same
-  // contact within 2 minutes — those are timing dismissals (user was busy), not style signal.
   const sendTsByContact = new Map<string, number[]>();
   for (const e of meaningful) {
     if (!e.contactId) continue;
@@ -204,10 +279,9 @@ async function rebuildCachedProfile(): Promise<void> {
   const dismissed = edits
     .filter((e) => {
       if (e.userEdit.length !== 0) return false;
-      if (!e.contactId) return true; // no contact info — keep as signal
+      if (!e.contactId) return true;
       const dismissTs = new Date(e.createdAt).getTime();
       const sends = sendTsByContact.get(e.contactId) ?? [];
-      // Drop if user sent something for this contact within 2 minutes of the dismissal
       return !sends.some((ts) => ts > dismissTs && ts - dismissTs < 2 * 60_000);
     })
     .sort((a, b) => recencyScore(b) - recencyScore(a))
@@ -215,14 +289,12 @@ async function rebuildCachedProfile(): Promise<void> {
 
   const sections: string[] = [];
 
-  // ── General style examples ────────────────────────────────────────────────
   const topExamples = meaningful.slice(0, 6);
   if (topExamples.length > 0) {
     const lines = topExamples.map((e) => `• "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
     sections.push(`User's writing style (suggestion → what they actually sent):\n${lines}`);
   }
 
-  // ── Word-level patterns (aggregated from edit deltas) ─────────────────────
   const wordRemovedCount = new Map<string, number>();
   const wordAddedCount = new Map<string, number>();
   let shortenCount = 0;
@@ -243,7 +315,6 @@ async function rebuildCachedProfile(): Promise<void> {
     patternLines.push(`• Consistently shortens suggestions (shortened ${shortenCount}/${meaningful.length} times)`);
   if (patternLines.length > 0) sections.push(`Word-level patterns:\n${patternLines.join('\n')}`);
 
-  // ── Style by tone ─────────────────────────────────────────────────────────
   const toneGroups: Record<string, StyleEdit[]> = {};
   for (const e of meaningful) {
     const tone = e.toneSelected ?? 'casual';
@@ -257,7 +328,6 @@ async function rebuildCachedProfile(): Promise<void> {
   }
   if (toneLines.length > 0) sections.push(`Style by tone:\n${toneLines.join('\n')}`);
 
-  // ── Style by intent ───────────────────────────────────────────────────────
   const INTENT_LABEL: Record<string, string> = {
     eta: 'ETA / location',
     availability: 'availability / scheduling',
@@ -276,31 +346,27 @@ async function rebuildCachedProfile(): Promise<void> {
   }
   if (intentLines.length > 0) sections.push(`Style by message type:\n${intentLines.join('\n')}`);
 
-  // ── Contact-specific examples ─────────────────────────────────────────────
-  const contactById = Object.fromEntries(contacts.map((c) => [c.id, c]));
   const contactGroups: Record<string, StyleEdit[]> = {};
   for (const e of meaningful) {
     if (!e.contactId) continue;
     (contactGroups[e.contactId] ??= []).push(e);
   }
   const contactStyleLines: string[] = [];
-  for (const [contactId, group] of Object.entries(contactGroups)) {
+  for (const [id, group] of Object.entries(contactGroups)) {
     if (group.length < 2) continue;
-    const contact = contactById[contactId];
+    const contact = contactById[id];
     if (!contact) continue;
     const examples = group.slice(0, 2).map((e) => `  • "${e.originalSuggestion}" → "${e.userEdit}"`).join('\n');
     contactStyleLines.push(`With ${contact.displayName}:\n${examples}`);
   }
   if (contactStyleLines.length > 0) sections.push(`Style with specific contacts:\n${contactStyleLines.join('\n')}`);
 
-  // ── Rejected suggestions ──────────────────────────────────────────────────
   if (dismissed.length >= 2) {
     const lines = dismissed.map((e) => `• "${e.originalSuggestion}"`).join('\n');
     sections.push(`Suggestions the user has rejected (avoid similar phrasing):\n${lines}`);
   }
 
-  // ── Contact preferences (explicit + inferred) ─────────────────────────────
-  const withPrefs = contacts.filter((c) => c.relationship || c.preferredTone);
+  const withPrefs = prefContacts;
   if (withPrefs.length > 0) {
     const lines = withPrefs.map((c) => {
       const parts: string[] = [];
@@ -312,29 +378,19 @@ async function rebuildCachedProfile(): Promise<void> {
     sections.push(`Contact preferences:\n${lines}`);
   }
 
-  // ── Intent corrections ────────────────────────────────────────────────────
   const recent = corrections.slice(-10);
   if (recent.length > 0) {
     const lines = recent.map((c) => `• "${c.message.slice(0, 80)}" — missed: ${c.from.join('+')} should be ${c.to.join('+')}`).join('\n');
     sections.push(`Intent corrections (user flagged missing context):\n${lines}`);
   }
 
-  // ── Write caches to Kotlin ─────────────────────────────────────────────────
-  // Tone map: explicit preferred_tone first, then infer from relationship for pre-selecting the bubble tab
+  // Tone map: only contacts with preferences (tiny subset)
   const toneMap: Record<string, string> = {};
-  for (const c of contacts) {
+  for (const c of prefContacts) {
     const tone = c.preferredTone ?? inferredTone(c.relationship);
     if (tone) toneMap[c.displayName.toLowerCase()] = tone;
   }
   NativeModules.ProTxtSettings.cacheContactTones(JSON.stringify(toneMap));
-
-  const contactList = contacts.map((c) => ({
-    id: c.id,
-    display_name: c.displayName,
-    preferred_tone: c.preferredTone ?? inferredTone(c.relationship) ?? null,
-    interaction_count: c.interactionCount ?? 0,
-  }));
-  NativeModules.ProTxtSettings.cacheContactList(JSON.stringify(contactList));
 
   if (sections.length === 0) return;
   NativeModules.ProTxtSettings.cacheStyleProfile(sections.join('\n\n'));

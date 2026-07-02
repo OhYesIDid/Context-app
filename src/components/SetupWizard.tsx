@@ -6,6 +6,7 @@ import {
   Alert,
   AppState,
   Linking,
+  Modal,
   NativeModules,
   PermissionsAndroid,
   Platform,
@@ -19,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { configureGoogleSignin, isSignedIn } from '../services/googleAuth';
 import { importDeviceContacts } from '../services/deviceContacts';
 import { importGoogleContacts } from '../services/googlePeople';
+import { refreshContactListCache } from '../services/styleSync';
 import { pickAndParseWhatsAppExport } from '../services/whatsappParser';
 
 const { ProTxtSettings: ConTxtSettings } = NativeModules;
@@ -47,6 +49,7 @@ const STEPS = [
 ] as const;
 
 const SETUP_COMPLETE_KEY       = 'setup_complete';
+const SETUP_STEP_KEY           = 'setup_step';
 const GOOGLE_CONTACTS_COUNT_KEY = 'setup_google_contacts_count';
 const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
 const WHATSAPP_IMPORT_KEY       = 'setup_whatsapp_messages';
@@ -66,12 +69,36 @@ export default function SetupWizard({ onComplete }: Props) {
   const [deviceContactsCount, setDeviceContactsCount]       = useState<number | null>(null);
   const [whatsappMessages, setWhatsappMessages]             = useState<number | null>(null);
   const [importing, setImporting]                           = useState<'google' | 'device' | 'whatsapp' | null>(null);
+  const [importProgress, setImportProgress]                 = useState<{ current: number; total: number; label: string } | null>(null);
+
+  // Tracks whether the progress modal should receive updates.
+  // Set to false when user dismisses to background — import keeps running silently.
+  const showProgressRef = useRef(false);
+
+  const runInBackground = () => {
+    showProgressRef.current = false;
+    setImportProgress(null);
+    setImporting(null);
+  };
 
   const stepRef = useRef(step);
   useEffect(() => { stepRef.current = step; }, [step]);
 
   const hasOpenedBubblesRef = useRef(hasOpenedBubbles);
   useEffect(() => { hasOpenedBubblesRef.current = hasOpenedBubbles; }, [hasOpenedBubbles]);
+
+  // Restore step and contact counts on re-open mid-setup
+  useEffect(() => {
+    AsyncStorage.multiGet([SETUP_STEP_KEY, GOOGLE_CONTACTS_COUNT_KEY, DEVICE_CONTACTS_COUNT_KEY, WHATSAPP_IMPORT_KEY])
+      .then((pairs) => {
+        const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
+        const saved = Number(map[SETUP_STEP_KEY]);
+        if (saved > 0 && saved < STEPS.length - 1) setStep(saved);
+        const gc = map[GOOGLE_CONTACTS_COUNT_KEY]; if (gc) setGoogleContactsCount(Number(gc));
+        const dc = map[DEVICE_CONTACTS_COUNT_KEY]; if (dc) setDeviceContactsCount(Number(dc));
+        const wa = map[WHATSAPP_IMPORT_KEY];        if (wa) setWhatsappMessages(Number(wa));
+      }).catch(() => {});
+  }, []);
 
   // Mount — configure auth and read initial permission state
   useEffect(() => {
@@ -111,10 +138,14 @@ export default function SetupWizard({ onComplete }: Props) {
     return () => sub.remove();
   }, []);
 
-  const advance = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  const advance = () => setStep((s) => {
+    const next = Math.min(s + 1, STEPS.length - 1);
+    AsyncStorage.setItem(SETUP_STEP_KEY, String(next)).catch(() => {});
+    return next;
+  });
 
-  const handleComplete = async () => {
-    await AsyncStorage.setItem(SETUP_COMPLETE_KEY, 'true');
+  const handleComplete = () => {
+    AsyncStorage.multiSet([[SETUP_COMPLETE_KEY, 'true'], [SETUP_STEP_KEY, '']]).catch(() => {});
     onComplete({ googleAuthed, notifPermission: notifPermGranted, locationGranted, googleContactsCount, deviceContactsCount, whatsappMessages });
   };
 
@@ -189,23 +220,45 @@ export default function SetupWizard({ onComplete }: Props) {
 
   // Step 7 — contact imports (independent of Continue button)
   const handleImportGoogle = async () => {
+    showProgressRef.current = true;
     setImporting('google');
+    setImportProgress({ current: 0, total: 0, label: 'Importing Google Contacts…' });
+    await new Promise<void>((r) => setTimeout(r, 80));
     try {
-      const count = await importGoogleContacts();
+      const count = await importGoogleContacts((current) => {
+        if (showProgressRef.current) {
+          setImportProgress({ current, total: 0, label: 'Importing Google Contacts…' });
+        }
+      });
       setGoogleContactsCount(count);
       await AsyncStorage.setItem(GOOGLE_CONTACTS_COUNT_KEY, String(count));
+      refreshContactListCache().catch(() => {});
     } catch {}
-    setImporting(null);
+    if (showProgressRef.current) {
+      setImportProgress(null);
+      setImporting(null);
+    }
   };
 
   const handleImportDevice = async () => {
+    showProgressRef.current = true;
     setImporting('device');
+    setImportProgress({ current: 0, total: 0, label: 'Importing device contacts…' });
+    await new Promise<void>((r) => setTimeout(r, 80));
     try {
-      const count = await importDeviceContacts();
+      const count = await importDeviceContacts((current, total) => {
+        if (showProgressRef.current) {
+          setImportProgress({ current, total, label: 'Importing device contacts…' });
+        }
+      });
       setDeviceContactsCount(count);
       await AsyncStorage.setItem(DEVICE_CONTACTS_COUNT_KEY, String(count));
+      refreshContactListCache().catch(() => {});
     } catch {}
-    setImporting(null);
+    if (showProgressRef.current) {
+      setImportProgress(null);
+      setImporting(null);
+    }
   };
 
   const handleImportWhatsApp = async () => {
@@ -370,6 +423,33 @@ export default function SetupWizard({ onComplete }: Props) {
 
   return (
     <SafeAreaView style={s.safe}>
+      <Modal transparent animationType="fade" visible={importProgress !== null}>
+        <View style={s.progressOverlay}>
+          <View style={s.progressCard}>
+            <Text style={s.progressLabel}>{importProgress?.label ?? ''}</Text>
+            {importProgress && importProgress.total > 0 ? (
+              <>
+                <View style={s.progressTrack}>
+                  <View style={[s.progressFill, { width: `${Math.round((importProgress.current / importProgress.total) * 100)}%` as any }]} />
+                </View>
+                <Text style={s.progressCount}>{importProgress.current} of {importProgress.total}</Text>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator color="#6366f1" style={{ marginVertical: 8 }} />
+                {(importProgress?.current ?? 0) > 0 && (
+                  <Text style={s.progressCount}>{importProgress!.current} imported so far…</Text>
+                )}
+              </>
+            )}
+            {(importProgress?.current ?? 0) > 0 && (
+              <Pressable onPress={runInBackground} style={s.bgBtn}>
+                <Text style={s.bgBtnText}>Continue in background</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
       {isOptional && (
         <Pressable style={s.skipBtn} onPress={() => setStep((prev) => prev + 1)}>
           <Text style={s.skipText}>{currentStep.skipLabel}</Text>
@@ -456,6 +536,15 @@ const s = StyleSheet.create({
   pillGreen: { backgroundColor: GREEN + '22', borderColor: GREEN + '55' },
   pillRed:   { backgroundColor: RED + '22',   borderColor: RED + '55'   },
   pillText:  { fontSize: 14, fontWeight: '500', color: TEXT },
+
+  progressOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  progressCard: { backgroundColor: '#fff', borderRadius: 16, padding: 28, width: 280, alignItems: 'center' },
+  progressLabel: { fontSize: 15, fontWeight: '600', color: '#1e1b4b', marginBottom: 16, textAlign: 'center' },
+  progressTrack: { width: '100%', height: 6, backgroundColor: '#e0e7ff', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 6, backgroundColor: '#6366f1', borderRadius: 3 },
+  progressCount: { fontSize: 13, color: '#6b7280', marginTop: 10 },
+  bgBtn: { marginTop: 20, paddingVertical: 8, paddingHorizontal: 16 },
+  bgBtnText: { fontSize: 13, color: '#6366f1', fontWeight: '500' },
 
   importRows: { width: '100%', marginTop: 28 },
   importRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },

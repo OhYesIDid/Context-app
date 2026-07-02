@@ -105,8 +105,8 @@ android {
         applicationId 'com.contxt.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 3
+        versionName "1.0.2"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "WORKER_URL", "\"https://contextreply-suggest.tommy-garnell.workers.dev\""
@@ -201,6 +201,7 @@ dependencies {
         implementation jscFlavor
     }
 
+    implementation "androidx.work:work-runtime:2.9.1"
     implementation "com.google.android.gms:play-services-auth:21.4.0"
     implementation "com.google.android.gms:play-services-auth-base:18.0.10"
     implementation "com.google.android.material:material:1.12.0"

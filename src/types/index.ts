@@ -1,5 +1,5 @@
-export type Intent = 'eta' | 'availability' | 'booking' | 'other';
-export type Enrichment = 'maps' | 'calendar' | 'bookings';
+export type Intent = 'eta' | 'availability' | 'booking' | 'incoming_location' | 'other';
+export type Enrichment = 'maps' | 'calendar' | 'bookings' | 'incoming_location';
 export type BookingType = 'flight' | 'hotel' | 'train' | 'delivery' | 'restaurant' | 'event' | 'other';
 export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
@@ -51,10 +51,19 @@ export interface BookingContext {
   windowEnd: string;
 }
 
+export interface IncomingLocationData {
+  lat?: number;
+  lon?: number;
+  placeLabel?: string;
+  shortUrl?: string;
+  nativePin?: boolean;
+}
+
 export interface EnrichmentData {
   maps?: EtaData;
   calendar?: AvailabilityData;
   bookings?: BookingContext;
+  incoming_location?: IncomingLocationData;
 }
 
 export interface ConversationMessage {

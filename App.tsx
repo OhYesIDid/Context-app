@@ -33,7 +33,7 @@ import { getCalendarData } from './src/services/googleCalendar';
 import { getBookingsContext } from './src/services/googleBookings';
 import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
-import { syncStyleProfile } from './src/services/styleSync';
+import { refreshContactListCache, syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, Tone } from './src/types';
 import { ENRICHMENT_PREFERENCES, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
@@ -103,6 +103,7 @@ export default function App() {
   const [isPro, setIsPro] = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [paywallOfferings, setPaywallOfferings] = useState<PurchasesOfferings | null>(null);
+  const [paywallFetchDone, setPaywallFetchDone] = useState(false);
   const [paywallSelectedPkg, setPaywallSelectedPkg] = useState<PurchasesPackage | null>(null);
   const [paywallLoading, setPaywallLoading] = useState(false);
   const [paywallRestoring, setPaywallRestoring] = useState(false);
@@ -136,7 +137,7 @@ export default function App() {
       const wa = map[WHATSAPP_IMPORT_KEY];
       if (wa !== null) setWhatsappMessages(Number(wa));
       setSetupComplete(map[SETUP_COMPLETE_KEY] === 'true');
-    });
+    }).catch(() => setSetupComplete(false));
     configureGoogleSignin();
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
     if (Platform.OS === 'android' && ProTxtSettings) {
@@ -162,7 +163,6 @@ export default function App() {
       }).catch(() => {});
       syncStyleProfile();
     }
-    getAllContacts().then(setContacts).catch(() => {});
     configurePurchases();
     checkProEntitlement().then(setIsPro);
   }, []);
@@ -216,11 +216,13 @@ export default function App() {
     const tone = field === 'preferredTone' ? (value as Tone | undefined) : updated.preferredTone;
     await updateContactPreferences(id, rel, tone);
     syncStyleProfile();
+    refreshContactListCache().catch(() => {});
   };
 
   const saveDefaultTone = async (t: Tone) => {
     setDefaultToneState(t);
     await AsyncStorage.setItem(DEFAULT_TONE_KEY, t);
+    NativeModules.ProTxtSettings?.setDefaultTone?.(t);
   };
 
   const handleImportGoogleContacts = async () => {
@@ -230,6 +232,7 @@ export default function App() {
       const count = await importGoogleContacts();
       setGoogleContactsCount(count);
       await AsyncStorage.setItem(GOOGLE_CONTACTS_COUNT_KEY, String(count));
+      refreshContactListCache().catch(() => {});
       Alert.alert('Done', `Imported ${count} Google contacts.`);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
@@ -242,6 +245,7 @@ export default function App() {
       const count = await importDeviceContacts();
       setDeviceContactsCount(count);
       await AsyncStorage.setItem(DEVICE_CONTACTS_COUNT_KEY, String(count));
+      refreshContactListCache().catch(() => {});
       Alert.alert('Done', `Imported ${count} device contacts.`);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Import failed');
@@ -265,9 +269,12 @@ export default function App() {
   const openPaywall = async () => {
     setPaywallError(null);
     setPaywallSelectedPkg(null);
+    setPaywallOfferings(null);
+    setPaywallFetchDone(false);
     setPaywallVisible(true);
     const offerings = await fetchOfferings();
     setPaywallOfferings(offerings);
+    setPaywallFetchDone(true);
     const pkgs = offerings?.current?.availablePackages ?? [];
     if (pkgs.length > 0) setPaywallSelectedPkg(pkgs[pkgs.length - 1]);
   };
@@ -374,19 +381,6 @@ export default function App() {
               </Pressable>
               <Pressable
                 style={styles.settingRow}
-                onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
-                  <View>
-                    <Text style={styles.settingText}>Keyboard overlay</Text>
-                    <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
-                  </View>
-                </View>
-                {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
-              </Pressable>
-              <Pressable
-                style={styles.settingRow}
                 onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
               >
                 <View style={styles.settingLeft}>
@@ -399,7 +393,7 @@ export default function App() {
                 <Text style={styles.setupAction}>Open</Text>
               </Pressable>
               <Pressable
-                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                style={styles.settingRow}
                 onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
               >
                 <View style={styles.settingLeft}>
@@ -411,6 +405,19 @@ export default function App() {
                 </View>
                 {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
               </Pressable>
+              <Pressable
+                style={[styles.settingRow, { borderBottomWidth: 0 }]}
+                onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
+                  <View>
+                    <Text style={styles.settingText}>Keyboard overlay <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
+                    <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
+                  </View>
+                </View>
+                {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
+              </Pressable>
             </>
           )}
         </View>
@@ -418,22 +425,37 @@ export default function App() {
         {/* BEHAVIOUR */}
         <Text style={styles.sectionLabel}>BEHAVIOUR</Text>
         <View style={styles.sectionCard}>
-          <View style={styles.settingRow}>
-            <Text style={styles.settingText}>Default tone</Text>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              {(['formal', 'casual', 'brief'] as Tone[]).map((t) => (
-                <Pressable
-                  key={t}
-                  style={[styles.chip, defaultTone === t && { borderColor: TONE_COLOR[t], backgroundColor: TONE_COLOR[t] + '22' }]}
-                  onPress={() => saveDefaultTone(t)}
-                >
-                  <Text style={[styles.chipText, defaultTone === t && { color: TONE_COLOR[t], fontWeight: '600' }]}>
-                    {TONE_LABEL[t]}
-                  </Text>
-                </Pressable>
-              ))}
+          {isPro ? (
+            <View style={styles.settingRow}>
+              <Text style={styles.settingText}>Default tone</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {(['formal', 'casual', 'brief'] as Tone[]).map((t) => (
+                  <Pressable
+                    key={t}
+                    style={[styles.chip, defaultTone === t && { borderColor: TONE_COLOR[t], backgroundColor: TONE_COLOR[t] + '22' }]}
+                    onPress={() => saveDefaultTone(t)}
+                  >
+                    <Text style={[styles.chipText, defaultTone === t && { color: TONE_COLOR[t], fontWeight: '600' }]}>
+                      {TONE_LABEL[t]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
+          ) : (
+            <Pressable style={styles.settingRow} onPress={() => openPaywall()}>
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.settingText, { flexShrink: 1 }]}>Default tone &amp; reply strategy</Text>
+                  <View style={[styles.proBadge, { flexShrink: 0 }]}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                </View>
+                <Text style={styles.setupStatus}>Casual, formal, brief — with reply strategy</Text>
+              </View>
+              <Text style={styles.setupAction}>Upgrade ›</Text>
+            </Pressable>
+          )}
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 16 }}>
               <Text style={styles.settingText}>Skip group messages</Text>
@@ -446,34 +468,36 @@ export default function App() {
               thumbColor={skipGroupMessages ? PURPLE : MUTED}
             />
           </View>
-          <Pressable
-            style={[styles.settingRow, { borderBottomWidth: isPro ? 1 : 0 }]}
-            onPress={() => { if (!isPro) { openPaywall(); } }}
-          >
-            <View style={{ flex: 1, marginRight: 16 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={[styles.settingText, { flexShrink: 1 }]}>Suggest replies for all messages</Text>
-                {!isPro && (
+          {isPro ? (
+            <Pressable style={[styles.settingRow, { borderBottomWidth: isPro ? 1 : 0 }]}>
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <Text style={styles.settingText}>Suggest replies for all messages</Text>
+                <Text style={styles.setupStatus}>Suggesting replies for every incoming message</Text>
+              </View>
+              <Switch
+                value={suggestAllMessages}
+                onValueChange={(v) => {
+                  setSuggestAllMessagesState(v);
+                  ProTxtSettings?.setSuggestAllMessages?.(v);
+                }}
+                trackColor={{ false: BORDER, true: PURPLE + '99' }}
+                thumbColor={suggestAllMessages ? PURPLE : MUTED}
+              />
+            </Pressable>
+          ) : (
+            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => openPaywall()}>
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.settingText, { flexShrink: 1 }]}>Suggest replies for all messages</Text>
                   <View style={[styles.proBadge, { flexShrink: 0 }]}>
                     <Text style={styles.proBadgeText}>PRO</Text>
                   </View>
-                )}
+                </View>
+                <Text style={styles.setupStatus}>Upgrade to suggest replies for every message</Text>
               </View>
-              <Text style={styles.setupStatus}>
-                {isPro ? 'Suggesting replies for every incoming message' : 'Upgrade to suggest replies for every message'}
-              </Text>
-            </View>
-            <Switch
-              value={suggestAllMessages}
-              onValueChange={(v) => {
-                if (v && !isPro) { openPaywall(); return; }
-                setSuggestAllMessagesState(v);
-                ProTxtSettings?.setSuggestAllMessages?.(v);
-              }}
-              trackColor={{ false: BORDER, true: PURPLE + '99' }}
-              thumbColor={suggestAllMessages ? PURPLE : MUTED}
-            />
-          </Pressable>
+              <Text style={styles.setupAction}>Upgrade ›</Text>
+            </Pressable>
+          )}
           {isPro && (
             <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => presentCustomerCenter()}>
               <View style={{ flex: 1 }}>
@@ -898,7 +922,7 @@ export default function App() {
               <View style={styles.paywallIconRing}>
                 <Text style={{ fontSize: 28 }}>✦</Text>
               </View>
-              <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 4 }]}>Protxt Pro</Text>
+              <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 4 }]}>ConTxt Pro</Text>
               <Text style={[styles.setupStatus, { textAlign: 'center' }]}>Reply smarter, to every message</Text>
             </View>
 
@@ -916,15 +940,15 @@ export default function App() {
             </View>
 
             {/* Package selection */}
-            {paywallOfferings === null ? (
+            {!paywallFetchDone ? (
               <ActivityIndicator color={PURPLE} style={{ marginVertical: 24 }} />
-            ) : (paywallOfferings.current?.availablePackages ?? []).length === 0 ? (
+            ) : (paywallOfferings?.current?.availablePackages ?? []).length === 0 ? (
               <Text style={[styles.setupStatus, { textAlign: 'center', marginVertical: 24 }]}>
                 Pricing not available right now. Try again later.
               </Text>
             ) : (
               <View style={{ gap: 10, marginVertical: 20 }}>
-                {(paywallOfferings.current?.availablePackages ?? []).map((pkg) => {
+                {(paywallOfferings?.current?.availablePackages ?? []).map((pkg) => {
                   const selected = paywallSelectedPkg?.identifier === pkg.identifier;
                   const isAnnual = pkg.packageType === 'ANNUAL' || pkg.identifier.toLowerCase().includes('annual');
                   return (

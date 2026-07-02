@@ -1,6 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import { decryptField, encryptField } from './dbCrypto';
+import { decryptField, encryptField, hashIdentifier } from './dbCrypto';
 import type {
   Contact,
   Memory,
@@ -10,12 +10,17 @@ import type {
 } from '../types';
 
 let _db: SQLite.SQLiteDatabase | null = null;
+let _encryptDone = false;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
   _db = await SQLite.openDatabaseAsync('contextreply.db');
   await _migrate(_db);
-  try { await _encryptExistingRows(_db); } catch { /* non-fatal — rows stay plaintext until next open */ }
+  if (!_encryptDone) {
+    try { await _encryptExistingRows(_db); } catch { /* non-fatal */ }
+    try { await _migrateIdentifierIndex(_db); } catch { /* non-fatal */ }
+    _encryptDone = true;
+  }
   return _db;
 }
 
@@ -130,6 +135,12 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN edit_delta_json TEXT'); } catch (_) {}
   try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN subintent TEXT'); } catch (_) {}
   try { await db.runAsync('ALTER TABLE style_edits ADD COLUMN dismissal_context_json TEXT'); } catch (_) {}
+  // Security: encrypted lat/lng (was REAL plaintext) + HMAC identifier hash
+  try { await db.runAsync('ALTER TABLE saved_places ADD COLUMN lat_enc TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE saved_places ADD COLUMN lng_enc TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE memories ADD COLUMN location_lat_enc TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE memories ADD COLUMN location_lng_enc TEXT'); } catch (_) {}
+  try { await db.runAsync('ALTER TABLE platform_identities ADD COLUMN identifier_hash TEXT'); } catch (_) {}
 }
 
 // Re-encrypts any rows that still have plaintext in sensitive fields.
@@ -202,6 +213,60 @@ async function _encryptExistingRows(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.runAsync('UPDATE memories SET location_name = ? WHERE id = ?',
       [await encryptField(r.location_name), r.id]);
   }
+
+  // saved_places lat/lng — store encrypted copies in lat_enc/lng_enc TEXT columns
+  const placeCoordRows = await db.getAllAsync<{ id: string; lat: number; lng: number }>(
+    'SELECT id, lat, lng FROM saved_places WHERE lat_enc IS NULL'
+  );
+  for (const r of placeCoordRows) {
+    await db.runAsync('UPDATE saved_places SET lat_enc = ?, lng_enc = ? WHERE id = ?', [
+      await encryptField(String(r.lat)),
+      await encryptField(String(r.lng)),
+      r.id,
+    ]);
+  }
+
+  // memories location_lat/lng
+  const memCoordRows = await db.getAllAsync<{
+    id: string; location_lat: number | null; location_lng: number | null;
+  }>('SELECT id, location_lat, location_lng FROM memories WHERE location_lat IS NOT NULL AND location_lat_enc IS NULL');
+  for (const r of memCoordRows) {
+    await db.runAsync('UPDATE memories SET location_lat_enc = ?, location_lng_enc = ? WHERE id = ?', [
+      r.location_lat != null ? await encryptField(String(r.location_lat)) : null,
+      r.location_lng != null ? await encryptField(String(r.location_lng)) : null,
+      r.id,
+    ]);
+  }
+
+  // platform_identities.identifier — compute HMAC hash + encrypt value for existing plaintext rows
+  const identityRows = await db.getAllAsync<{ id: string; platform: string; identifier: string }>(
+    "SELECT id, platform, identifier FROM platform_identities WHERE identifier_hash IS NULL"
+  );
+  for (const r of identityRows) {
+    const plainId = r.identifier.startsWith('enc1:') ? null : r.identifier;
+    if (plainId == null) continue; // already encrypted but hash missing — skip (unusual state)
+    const hash = await hashIdentifier(r.platform, plainId);
+    await db.runAsync(
+      'UPDATE platform_identities SET identifier_hash = ?, identifier = ? WHERE id = ?',
+      [hash, await encryptField(plainId), r.id]
+    );
+  }
+}
+
+// After _encryptExistingRows has populated identifier_hash for all rows, swap the
+// unique index from (platform, identifier) to (platform, identifier_hash) so new
+// inserts can upsert by hash without touching the encrypted identifier column.
+async function _migrateIdentifierIndex(db: SQLite.SQLiteDatabase): Promise<void> {
+  const nullRow = await db.getFirstAsync<{ c: number }>(
+    'SELECT COUNT(*) AS c FROM platform_identities WHERE identifier_hash IS NULL'
+  );
+  if (nullRow && nullRow.c > 0) return; // not all rows migrated yet
+  await db.execAsync(`
+    DROP INDEX IF EXISTS idx_platform_identities_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_identities_unique
+      ON platform_identities(platform, identifier_hash)
+      WHERE identifier_hash IS NOT NULL;
+  `);
 }
 
 // ── Saved places ──────────────────────────────────────────────────────────────
@@ -212,58 +277,63 @@ export async function upsertSavedPlace(
   const db = await getDatabase();
   const now = new Date().toISOString();
   const id = place.id ?? randomUUID();
+  const latEnc = await encryptField(String(place.lat));
+  const lngEnc = await encryptField(String(place.lng));
   await db.runAsync(
-    `INSERT INTO saved_places (id, name, address, lat, lng, place_id, is_home, is_work, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO saved_places (id, name, address, lat, lng, lat_enc, lng_enc, place_id, is_home, is_work, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, address=excluded.address,
-       lat=excluded.lat, lng=excluded.lng, place_id=excluded.place_id,
-       is_home=excluded.is_home, is_work=excluded.is_work,
+       lat=excluded.lat, lng=excluded.lng, lat_enc=excluded.lat_enc, lng_enc=excluded.lng_enc,
+       place_id=excluded.place_id, is_home=excluded.is_home, is_work=excluded.is_work,
        updated_at=excluded.updated_at, synced_at=NULL`,
-    [id, place.name, await encryptField(place.address), place.lat, place.lng, place.placeId ?? null,
-     place.isHome ? 1 : 0, place.isWork ? 1 : 0, now, now]
+    [id, place.name, await encryptField(place.address), place.lat, place.lng, latEnc, lngEnc,
+     place.placeId ?? null, place.isHome ? 1 : 0, place.isWork ? 1 : 0, now, now]
   );
   return { ...place, id, createdAt: now, updatedAt: now };
 }
 
 export async function getSavedPlaces(): Promise<SavedPlace[]> {
   const db = await getDatabase();
-  const rows = await db.getAllAsync<{
-    id: string; name: string; address: string; lat: number; lng: number;
-    place_id: string | null; is_home: number; is_work: number;
-    created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-  }>('SELECT * FROM saved_places WHERE deleted_at IS NULL ORDER BY name');
+  const rows = await db.getAllAsync<SavedPlaceRow>(
+    'SELECT * FROM saved_places WHERE deleted_at IS NULL ORDER BY name'
+  );
   return Promise.all(rows.map(rowToSavedPlace));
 }
 
 export async function getWorkPlace(): Promise<SavedPlace | null> {
   const db = await getDatabase();
-  const row = await db.getFirstAsync<{
-    id: string; name: string; address: string; lat: number; lng: number;
-    place_id: string | null; is_home: number; is_work: number;
-    created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-  }>('SELECT * FROM saved_places WHERE is_work = 1 AND deleted_at IS NULL LIMIT 1');
+  const row = await db.getFirstAsync<SavedPlaceRow>(
+    'SELECT * FROM saved_places WHERE is_work = 1 AND deleted_at IS NULL LIMIT 1'
+  );
   return row ? await rowToSavedPlace(row) : null;
 }
 
 export async function getHomePlace(): Promise<SavedPlace | null> {
   const db = await getDatabase();
-  const row = await db.getFirstAsync<{
-    id: string; name: string; address: string; lat: number; lng: number;
-    place_id: string | null; is_home: number; is_work: number;
-    created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-  }>('SELECT * FROM saved_places WHERE is_home = 1 AND deleted_at IS NULL LIMIT 1');
+  const row = await db.getFirstAsync<SavedPlaceRow>(
+    'SELECT * FROM saved_places WHERE is_home = 1 AND deleted_at IS NULL LIMIT 1'
+  );
   return row ? await rowToSavedPlace(row) : null;
 }
 
-async function rowToSavedPlace(row: {
+type SavedPlaceRow = {
   id: string; name: string; address: string; lat: number; lng: number;
+  lat_enc: string | null; lng_enc: string | null;
   place_id: string | null; is_home: number; is_work: number;
   created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-}): Promise<SavedPlace> {
+};
+
+async function rowToSavedPlace(row: SavedPlaceRow): Promise<SavedPlace> {
+  const lat = row.lat_enc
+    ? parseFloat((await decryptField(row.lat_enc)) ?? String(row.lat))
+    : row.lat;
+  const lng = row.lng_enc
+    ? parseFloat((await decryptField(row.lng_enc)) ?? String(row.lng))
+    : row.lng;
   return {
     id: row.id, name: row.name, address: (await decryptField(row.address)) ?? row.address,
-    lat: row.lat, lng: row.lng, placeId: row.place_id ?? undefined,
+    lat, lng, placeId: row.place_id ?? undefined,
     isHome: row.is_home === 1, isWork: row.is_work === 1,
     createdAt: row.created_at, updatedAt: row.updated_at,
     syncedAt: row.synced_at ?? undefined, deletedAt: row.deleted_at ?? undefined,
@@ -316,6 +386,9 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
+let _contactsCache: Contact[] | null = null;
+export function invalidateContactsCache() { _contactsCache = null; }
+
 type ContactRow = {
   id: string; display_name: string; relationship: string | null;
   preferred_tone: string | null; interaction_count: number | null; notes: string | null;
@@ -350,28 +423,68 @@ export async function upsertContact(
     [id, await encryptField(contact.displayName), contact.relationship ?? null,
      contact.preferredTone ?? null, await encryptField(contact.notes ?? null), now, now]
   );
+  invalidateContactsCache();
   return { ...contact, id, createdAt: now, updatedAt: now };
 }
 
 export async function getAllContacts(): Promise<Contact[]> {
+  if (_contactsCache) return _contactsCache;
   const db = await getDatabase();
   const rows = await db.getAllAsync<ContactRow>(
     'SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY interaction_count DESC'
   );
   const contacts = await Promise.all(rows.map(rowToContact));
-  // Sort alphabetically within each interaction_count tier (display_name is encrypted in DB)
-  return contacts.sort((a, b) => {
+  contacts.sort((a, b) => {
     const bCount = b.interactionCount ?? 0;
     const aCount = a.interactionCount ?? 0;
     if (bCount !== aCount) return bCount - aCount;
     return a.displayName.localeCompare(b.displayName);
   });
+  _contactsCache = contacts;
+  return contacts;
 }
 
 export async function findContactByDisplayName(name: string): Promise<Contact | null> {
   const all = await getAllContacts();
   const target = name.toLowerCase();
   return all.find((c) => c.displayName.toLowerCase() === target) ?? null;
+}
+
+export async function findContactIdByIdentifier(identifier: string, platform = ''): Promise<string | null> {
+  const db = await getDatabase();
+  // Prefer hash-based lookup (post-migration); fall back to plaintext scan for pre-migration rows.
+  const hash = await hashIdentifier(platform, identifier);
+  const byHash = await db.getFirstAsync<{ contact_id: string }>(
+    'SELECT contact_id FROM platform_identities WHERE identifier_hash = ? LIMIT 1',
+    [hash]
+  );
+  if (byHash) return byHash.contact_id;
+  const byPlain = await db.getFirstAsync<{ contact_id: string }>(
+    'SELECT contact_id FROM platform_identities WHERE identifier = ? LIMIT 1',
+    [identifier]
+  );
+  return byPlain?.contact_id ?? null;
+}
+
+// Only contacts with relationship or preferred_tone — typically very few
+export async function getContactsWithPreferences(): Promise<Contact[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<ContactRow>(
+    `SELECT * FROM contacts WHERE deleted_at IS NULL AND (relationship IS NOT NULL OR preferred_tone IS NOT NULL)`
+  );
+  return Promise.all(rows.map(rowToContact));
+}
+
+// Batch fetch by IDs — no full table scan, decrypts only what's needed
+export async function getContactsByIds(ids: string[]): Promise<Contact[]> {
+  if (ids.length === 0) return [];
+  const db = await getDatabase();
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.getAllAsync<ContactRow>(
+    `SELECT * FROM contacts WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+    ids
+  );
+  return Promise.all(rows.map(rowToContact));
 }
 
 // Migrates all style_edits, platform_identities, and memories from fromId to toId,
@@ -381,12 +494,12 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
   const db = await getDatabase();
   await db.runAsync('UPDATE style_edits SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
   await db.runAsync('UPDATE memories SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
-  // platform_identities has a unique index on (platform, identifier) — use INSERT OR IGNORE to
+  // platform_identities unique index is on (platform, identifier_hash) — use INSERT OR IGNORE to
   // avoid conflicts when both contacts somehow share an identity, then delete the rest.
   await db.runAsync(
     `INSERT OR IGNORE INTO platform_identities
-       (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-     SELECT id, ?, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at
+       (id, contact_id, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at)
+     SELECT id, ?, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at
      FROM platform_identities WHERE contact_id = ?`,
     [toId, fromId]
   );
@@ -401,16 +514,46 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
     [fromId, new Date().toISOString(), toId]
   );
   await db.runAsync('DELETE FROM contacts WHERE id = ?', [fromId]);
+  invalidateContactsCache();
 }
 
-export async function incrementContactInteraction(displayName: string): Promise<void> {
-  const contact = await findContactByDisplayName(displayName);
-  if (!contact) return;
+// Creates a contact + provisional platform_identity if one doesn't already exist
+// for this (platform, senderName) pair. Called when a bubble fires (option 3).
+export async function ensureContactForConversation(
+  senderName: string,
+  platform: string,
+): Promise<string> {
+  const db = await getDatabase();
+  const hash = await hashIdentifier(platform, senderName);
+  const existing = await db.getFirstAsync<{ contact_id: string }>(
+    'SELECT contact_id FROM platform_identities WHERE platform = ? AND (identifier_hash = ? OR identifier = ?) LIMIT 1',
+    [platform, hash, senderName]
+  );
+  if (existing) return existing.contact_id;
+  const now = new Date().toISOString();
+  const contactId = randomUUID();
+  await db.runAsync(
+    'INSERT INTO contacts (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    [contactId, await encryptField(senderName), now, now]
+  );
+  await db.runAsync(
+    `INSERT OR IGNORE INTO platform_identities
+       (id, contact_id, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [randomUUID(), contactId, platform, await encryptField(senderName), hash,
+     'display_name', 0.5, 0, now, now]
+  );
+  invalidateContactsCache();
+  return contactId;
+}
+
+export async function incrementContactInteraction(contactId: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
     'UPDATE contacts SET interaction_count = interaction_count + 1, updated_at = ? WHERE id = ?',
-    [new Date().toISOString(), contact.id]
+    [new Date().toISOString(), contactId]
   );
+  invalidateContactsCache();
 }
 
 export async function updateContactPreferences(
@@ -423,6 +566,7 @@ export async function updateContactPreferences(
     `UPDATE contacts SET relationship = ?, preferred_tone = ?, updated_at = ?, synced_at = NULL WHERE id = ?`,
     [relationship ?? null, preferredTone ?? null, new Date().toISOString(), id]
   );
+  invalidateContactsCache();
 }
 
 export async function upsertPlatformIdentity(
@@ -431,17 +575,24 @@ export async function upsertPlatformIdentity(
   const db = await getDatabase();
   const now = new Date().toISOString();
   const id = identity.id ?? randomUUID();
+  const hash = await hashIdentifier(identity.platform, identity.identifier);
+  const encId = await encryptField(identity.identifier);
+  // INSERT OR IGNORE then UPDATE — avoids relying on a specific conflict-column clause
+  // since the unique index may be on either (platform, identifier) or (platform, identifier_hash)
+  // depending on which migration stage we're in.
   await db.runAsync(
-    `INSERT INTO platform_identities
-       (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(platform, identifier) DO UPDATE SET
-       contact_id=excluded.contact_id,
-       confidence=MAX(confidence, excluded.confidence),
-       user_confirmed=MAX(user_confirmed, excluded.user_confirmed),
-       updated_at=excluded.updated_at`,
-    [id, identity.contactId, identity.platform, identity.identifier, identity.identifierType,
+    `INSERT OR IGNORE INTO platform_identities
+       (id, contact_id, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, identity.contactId, identity.platform, encId, hash, identity.identifierType,
      identity.confidence, identity.userConfirmed ? 1 : 0, now, now]
+  );
+  await db.runAsync(
+    `UPDATE platform_identities SET
+       contact_id=?, confidence=MAX(confidence, ?), user_confirmed=MAX(user_confirmed, ?), updated_at=?
+     WHERE platform=? AND identifier_hash=?`,
+    [identity.contactId, identity.confidence, identity.userConfirmed ? 1 : 0, now,
+     identity.platform, hash]
   );
   return { ...identity, id, createdAt: now, updatedAt: now };
 }
@@ -453,17 +604,17 @@ export async function getConfirmedPlatformIdentities(): Promise<PlatformIdentity
     identifier_type: string; confidence: number; user_confirmed: number;
     created_at: string; updated_at: string;
   }>('SELECT * FROM platform_identities WHERE user_confirmed = 1');
-  return rows.map((r) => ({
+  return Promise.all(rows.map(async (r) => ({
     id: r.id,
     contactId: r.contact_id,
     platform: r.platform as PlatformIdentity['platform'],
-    identifier: r.identifier,
+    identifier: (await decryptField(r.identifier)) ?? r.identifier,
     identifierType: r.identifier_type as PlatformIdentity['identifierType'],
     confidence: r.confidence,
     userConfirmed: r.user_confirmed === 1,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-  }));
+  })));
 }
 
 // ── Memories ──────────────────────────────────────────────────────────────────
@@ -474,16 +625,19 @@ export async function insertMemory(
   const db = await getDatabase();
   const now = new Date().toISOString();
   const id = randomUUID();
+  const locLatEnc = memory.locationLat != null ? await encryptField(String(memory.locationLat)) : null;
+  const locLngEnc = memory.locationLng != null ? await encryptField(String(memory.locationLng)) : null;
   await db.runAsync(
     `INSERT INTO memories
        (id, contact_id, type, content, entities_json, location_lat, location_lng, location_name,
-        relevance_score, last_confirmed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        location_lat_enc, location_lng_enc, relevance_score, last_confirmed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, memory.contactId ?? null, memory.type,
      await encryptField(memory.content),
      await encryptField(memory.entitiesJson ?? null),
      memory.locationLat ?? null,
      memory.locationLng ?? null, await encryptField(memory.locationName ?? null),
+     locLatEnc, locLngEnc,
      memory.relevanceScore, memory.lastConfirmedAt ?? null, now, now]
   );
   return { ...memory, id, createdAt: now, updatedAt: now };
@@ -496,11 +650,7 @@ export async function getPendingSyncItems(): Promise<{
   style_edits: StyleEdit[];
 }> {
   const db = await getDatabase();
-  const places = await db.getAllAsync<{
-    id: string; name: string; address: string; lat: number; lng: number;
-    place_id: string | null; is_home: number; is_work: number;
-    created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
-  }>('SELECT * FROM saved_places WHERE synced_at IS NULL');
+  const places = await db.getAllAsync<SavedPlaceRow>('SELECT * FROM saved_places WHERE synced_at IS NULL');
   const edits = await db.getAllAsync<{
     id: string; contact_id: string | null; original_suggestion: string; user_edit: string;
     platform: string | null; intent: string | null; created_at: string; synced_at: string | null;

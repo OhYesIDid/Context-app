@@ -140,7 +140,11 @@ class ProTxtBgService : NotificationListenerService() {
             Regex("^missed (voice |video )?call", RegexOption.IGNORE_CASE),
             Regex("\\bmissed call\\b", RegexOption.IGNORE_CASE),
             Regex("^(voice|video) message$", RegexOption.IGNORE_CASE),
+            // Reactions — "reacted to your message", "reacted ❤️ to", "reacted with ❤️"
             Regex("reacted to your (message|story|photo|reel|post)", RegexOption.IGNORE_CASE),
+            Regex("reacted .{0,6} to (your|a|the)", RegexOption.IGNORE_CASE),
+            Regex("reacted with", RegexOption.IGNORE_CASE),
+            Regex("^message react$", RegexOption.IGNORE_CASE),
             Regex("liked your (message|photo|reel|story|post)", RegexOption.IGNORE_CASE),
             Regex("commented on your (photo|reel|post|story)", RegexOption.IGNORE_CASE),
             Regex("(started following|accepted your follow request|sent you a follow request)", RegexOption.IGNORE_CASE),
@@ -163,6 +167,16 @@ class ProTxtBgService : NotificationListenerService() {
             if (colonSpace <= 0) return key
             val prefix = key.substring(0, colonSpace)
             return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
+        }
+
+        fun packageToPlatform(pkg: String): String? = when {
+            pkg.contains("whatsapp")                               -> "whatsapp"
+            pkg.contains("telegram")                               -> "telegram"
+            pkg.contains("instagram")                              -> "instagram"
+            pkg.contains("messenger") || pkg.contains("facebook")  -> "messenger"
+            pkg.contains("signal")                                 -> "signal"
+            pkg.contains("google.android.apps.messaging")          -> "sms"
+            else -> null
         }
 
         fun appLabel(pkg: String): String = when {
@@ -315,7 +329,9 @@ class ProTxtBgService : NotificationListenerService() {
         groupConvKeys.clear()
     }
 
-    // fromUnlock=true  → PRIORITY_DEFAULT, no cancel-before-repost (avoids heads-up flash on unlock).
+    // fromUnlock=true  → skip repost entirely if the notification is still active — Android
+    //   reinstates bubbles automatically; reposting causes a visible notification flash before
+    //   the bubble metadata is processed. Only repost if the notification was cleared while locked.
     // fromUnlock=false → cancel then re-post with PRIORITY_HIGH so Android treats the notification
     //   as brand-new and promotes overflow/inactive bubbles back to active. setOnlyAlertOnce(true)
     //   on suggestion notifications suppresses re-alerting for already-active ones, but that flag
@@ -324,7 +340,12 @@ class ProTxtBgService : NotificationListenerService() {
     //   the open activity.
     internal fun repostPendingBubbles(fromUnlock: Boolean = false) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val activeIds: Set<Int> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            nm.activeNotifications.map { it.id }.toSet() else emptySet()
         for ((_, b) in pendingBubbles) {
+            // Notification is still live — Android will reinstate the bubble on its own.
+            // Skipping the repost eliminates the brief shade flash on unlock.
+            if (fromUnlock && activeIds.contains(b.notifId)) continue
             val isExpanded = BubbleSuggestionActivity.onReplyReady.containsKey(b.convKey)
             if (!fromUnlock && !isExpanded) nm.cancel(b.notifId)
             if (b.replyText == LOADING_PLACEHOLDER) {
@@ -357,6 +378,7 @@ class ProTxtBgService : NotificationListenerService() {
         instance = this
         store = NotificationStore.getInstance(this)
         createChannel()
+        HomeDetectionWorker.schedule(this)
     }
 
     override fun onListenerConnected() {
@@ -553,6 +575,9 @@ class ProTxtBgService : NotificationListenerService() {
             notifThread.forEach { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
+            // Mark all but the final (truly new) message as already-read history so the
+            // bubble quote only shows the unread portion to the user.
+            store.setUnreadStart(convKey, maxOf(0, notifThread.size - 1))
         } else {
             // Ongoing conversation, no direct reply detected — append only the new trigger
             // message, but only if it differs from the last stored entry. WhatsApp sometimes
@@ -620,6 +645,12 @@ class ProTxtBgService : NotificationListenerService() {
                     "inheriting intent '${savedIntent.first}' from conversation context for $convKey")
                 savedIntent.first
             } else directIntentsStr
+            // Always refresh the stored intent when a real intent fires so follow-up messages
+            // can inherit it — the bundle scan above only catches intents from EXTRA_MESSAGES
+            // history; the direct detectIntents call on latestMessage is the ground truth.
+            if (effectiveIntentsStr != "other") {
+                conversationIntents[convKey] = Pair(effectiveIntentsStr, System.currentTimeMillis())
+            }
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
             if (!suggestAll && effectiveIntentsStr == "other") return@schedule
             activeBubbles.add(convKey)
@@ -674,7 +705,7 @@ class ProTxtBgService : NotificationListenerService() {
         workerPool.submit {
             try {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "job start: building enrichments")
-                val enrichments = buildEnrichments(latestMessage, fullThread)
+                val enrichments = buildEnrichments(latestMessage, fullThread, convKey, detectedIntentsStr)
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
                 val result = WorkerClient.call(
                     this, latestMessage, fullThread, enrichments,
@@ -739,6 +770,7 @@ class ProTxtBgService : NotificationListenerService() {
                 // The Activity nulls onReplyReady itself in its callback; we don't null
                 // it here to avoid a race where we null it before the Activity registers.
                 BubbleSuggestionActivity.onReplyReady[convKey]?.invoke(primary, formal, brief, finalAction)
+                enqueuePendingContact(convKey, senderName, packageName)
             } catch (e: Exception) {
                 android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
                 if (activeBubbles.contains(convKey)) {
@@ -921,7 +953,7 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private data class EtaData(val duration: String, val distance: String, val routeSummary: String)
+    private data class EtaData(val duration: String, val distance: String, val routeSummary: String, val destinationLabel: String, val userLat: Double, val userLon: Double)
 
     // ── Intent / enrichment registry ──────────────────────────────────────────
     // Mirror of src/utils/intentDetector.ts — keep patterns in sync.
@@ -976,11 +1008,23 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""(location|pin) (please|pls)\b""", RegexOption.IGNORE_CASE),
     )
 
+    // Patterns that fire when the OTHER person has shared their location — a Maps link,
+    // short URL, native WhatsApp/Telegram pin, Apple Maps link, or raw GPS coordinates.
+    private val INCOMING_LOCATION_PATTERNS = listOf(
+        Regex("""maps\.(google|apple)\.com""", RegexOption.IGNORE_CASE),
+        Regex("""maps\.app\.goo\.gl""", RegexOption.IGNORE_CASE),
+        Regex("""goo\.gl/maps""", RegexOption.IGNORE_CASE),
+        Regex("""📍"""),
+        // Raw GPS coordinates with enough decimals to look intentional (not prose numbers)
+        Regex("""(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})"""),
+    )
+
     private val INTENT_ENRICHMENTS = mapOf(
-        "eta"            to listOf("maps"),
-        "availability"   to listOf("calendar"),
-        "location_share" to listOf("location_coords"),
-        "other"          to listOf<String>(),
+        "eta"               to listOf("maps"),
+        "availability"      to listOf("calendar"),
+        "location_share"    to listOf("location_coords"),
+        "incoming_location" to listOf("incoming_location", "maps"),
+        "other"             to listOf<String>(),
     )
 
     private fun detectIntents(message: String): List<String> {
@@ -988,22 +1032,74 @@ class ProTxtBgService : NotificationListenerService() {
         if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
         if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
         if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
+        if (INCOMING_LOCATION_PATTERNS.any { it.containsMatchIn(message) }) intents.add("incoming_location")
         return intents.ifEmpty { listOf("other") }
     }
 
-    private fun requiredEnrichments(message: String): List<String> =
-        detectIntents(message).flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
+    // Extracts lat/lng from a full Google or Apple Maps URL. Returns null for short URLs.
+    private fun extractMapsCoordinates(text: String): Pair<Double, Double>? {
+        val patterns = listOf(
+            Regex("""@(-?\d+\.\d+),(-?\d+\.\d+)"""),                    // /place/Name/@lat,lng,zoom
+            Regex("""[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)"""),               // ?q=lat,lng
+            Regex("""[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)"""),              // Apple Maps ?ll=lat,lng
+            Regex("""(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})"""), // raw coords
+        )
+        for (pattern in patterns) {
+            val m = pattern.find(text) ?: continue
+            val lat = m.groupValues[1].toDoubleOrNull() ?: continue
+            val lon = m.groupValues[2].toDoubleOrNull() ?: continue
+            if (lat in -90.0..90.0 && lon in -180.0..180.0) return Pair(lat, lon)
+        }
+        return null
+    }
 
-    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject {
+    // Extracts a Maps short URL that the worker must resolve to get coordinates.
+    private fun extractShortMapsUrl(text: String): String? =
+        Regex("""https?://(?:maps\.app\.goo\.gl|goo\.gl/maps)/\S+""").find(text)?.value
+
+    private fun requiredEnrichments(message: String, intentsStr: String? = null): List<String> {
+        // Use the already-resolved intents (which include inherited context) when available,
+        // so follow-up messages like "ok cool" still get maps/calendar enrichments.
+        val intents = if (!intentsStr.isNullOrEmpty() && intentsStr != "other")
+            intentsStr.split(",").map { it.trim() }
+        else
+            detectIntents(message)
+        return intents.flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
+    }
+
+    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), convKey: String? = null, intentsStr: String? = null): JSONObject {
         val enrichments = JSONObject()
-        for (key in requiredEnrichments(message)) {
+        for (key in requiredEnrichments(message, intentsStr)) {
             when (key) {
                 "maps" -> {
-                    // Search latest message first, then fall back to thread history so that
-                    // destinations mentioned in earlier messages ("meet me at Kings Cross")
-                    // are picked up even when the triggering message is just "are you close?".
-                    val eta = fetchEtaData(message) ?: run {
-                        thread.asReversed()
+                    // Prefer coords from the incoming_location enrichment (already resolved,
+                    // including short URLs the worker followed). Fall back to direct extraction.
+                    val incomingCoords: Pair<Double, Double>? = run {
+                        val fromEnrichment = enrichments.optJSONObject("incoming_location")
+                            ?.let { loc ->
+                                val lat = loc.optDouble("lat", Double.NaN)
+                                val lon = loc.optDouble("lon", Double.NaN)
+                                if (!lat.isNaN() && !lon.isNaN()) Pair(lat, lon) else null
+                            }
+                        if (fromEnrichment != null) return@run fromEnrichment
+                        val searchText = listOf(message) + thread.map { it.second }
+                        searchText.firstNotNullOfOrNull { extractMapsCoordinates(it) }
+                    }
+                    val eta: EtaData? = if (incomingCoords != null) {
+                        val label = enrichments.optJSONObject("incoming_location")
+                            ?.optString("placeLabel")?.ifEmpty { null }
+                            ?: reverseGeocode(incomingCoords.first, incomingCoords.second)
+                            ?: "their location"
+                        fetchEtaToCoords(incomingCoords.first, incomingCoords.second, label)
+                    } else {
+                        // Search latest message first, then fall back to recent thread history
+                        // (last 10 messages, within 48 h) so stale destinations from old
+                        // conversations don't pollute the ETA. Uses newest-first ordering so
+                        // the most-recent location mention wins.
+                        val etaThread = convKey?.let {
+                            store.getEtaSearchThread(it, maxCount = 10)
+                        } ?: thread.takeLast(10).asReversed()
+                        fetchEtaData(message) ?: etaThread
                             .firstNotNullOfOrNull { (_, text) -> fetchEtaData(text) }
                     }
                     if (eta != null) {
@@ -1011,6 +1107,9 @@ class ProTxtBgService : NotificationListenerService() {
                             put("duration", eta.duration)
                             put("distance", eta.distance)
                             put("routeSummary", eta.routeSummary)
+                            put("destinationLabel", eta.destinationLabel)
+                            put("userLat", eta.userLat)
+                            put("userLon", eta.userLon)
                         })
                     } else {
                         // No extractable destination — pass current location name so Claude
@@ -1033,9 +1132,96 @@ class ProTxtBgService : NotificationListenerService() {
                         put("lon", loc.longitude)
                     })
                 }
+                "incoming_location" -> {
+                    val searchText = listOf(message) + thread.map { it.second }
+                    val obj = JSONObject()
+                    var resolved = false
+                    for (t in searchText) {
+                        val coords = extractMapsCoordinates(t)
+                        if (coords != null) {
+                            obj.put("lat", coords.first)
+                            obj.put("lon", coords.second)
+                            reverseGeocode(coords.first, coords.second)
+                                ?.let { obj.put("placeLabel", it) }
+                            resolved = true
+                            break
+                        }
+                    }
+                    if (!resolved) {
+                        // Short URL — pass it to the worker for redirect resolution
+                        val shortUrl = searchText.firstNotNullOfOrNull { extractShortMapsUrl(it) }
+                        if (shortUrl != null) obj.put("shortUrl", shortUrl)
+                        else obj.put("nativePin", true) // WhatsApp 📍 or Telegram pin
+                    }
+                    enrichments.put("incoming_location", obj)
+                }
             }
         }
+        detectEmotionalCharge(message, thread)?.let { enrichments.put("emotion", it) }
         return enrichments
+    }
+
+    private fun detectEmotionalCharge(message: String, thread: List<Pair<String?, String>>): JSONObject? {
+        // Combine the current message with the last 2 inbound messages for better signal on
+        // short replies like "k" that only make sense in context.
+        val recentInbound = thread.takeLast(3)
+            .filter { (sender, _) -> sender != null }
+            .map { it.second }
+        val corpus = (recentInbound + message).joinToString(" ")
+
+        data class Signal(val emotion: String, val patterns: List<Regex>)
+
+        val highConfidence = listOf(
+            Signal("anger", listOf(
+                Regex("""!{2,}"""),
+                Regex("""\b(hate|furious|disgusting|unbelievable|ridiculous|pathetic|useless|terrible|awful|pissed)\b""", RegexOption.IGNORE_CASE),
+                Regex("""\b(can'?t believe|so done|fed up|had enough|not okay|not ok|done with)\b""", RegexOption.IGNORE_CASE),
+                Regex("""(?<![a-z])[A-Z]{4,}(?![a-z])"""),  // SHOUTING
+            )),
+            Signal("urgency", listOf(
+                Regex("""\b(urgent|asap|emergency|right now|immediately|hurry|need you now)\b""", RegexOption.IGNORE_CASE),
+                Regex("""\?{2,}"""),
+            )),
+            Signal("anxiety", listOf(
+                Regex("""\b(worried|scared|anxious|nervous|panicking|freaking out|stressed|terrified)\b""", RegexOption.IGNORE_CASE),
+                Regex("""\b(are you okay|you alright|is everything ok|what happened|hope you'?re ok)\b""", RegexOption.IGNORE_CASE),
+            )),
+        )
+
+        val lowConfidence = listOf(
+            Signal("frustration", listOf(
+                Regex("""\b(ugh|sigh|smh|ffs|seriously|really\?)\b""", RegexOption.IGNORE_CASE),
+                Regex("""\b(tired of|sick of|again\?|always|never listens)\b""", RegexOption.IGNORE_CASE),
+            )),
+            Signal("passive_agg", listOf(
+                Regex("""\b(fine|whatever|k|sure|ok)\b\.?\s*$""", RegexOption.IGNORE_CASE),
+                Regex("""\.{3,}$"""),  // trailing ellipsis on short message
+            )),
+        )
+
+        // High-confidence: check full corpus (message + recent thread)
+        for ((emotion, patterns) in highConfidence) {
+            if (patterns.any { it.containsMatchIn(corpus) }) {
+                return JSONObject().apply {
+                    put("emotion", emotion)
+                    put("confidence", "high")
+                }
+            }
+        }
+
+        // Low-confidence: only trigger on short messages (< 30 chars) to reduce false positives
+        if (message.trim().length < 30) {
+            for ((emotion, patterns) in lowConfidence) {
+                if (patterns.any { it.containsMatchIn(message) }) {
+                    return JSONObject().apply {
+                        put("emotion", emotion)
+                        put("confidence", "low")
+                    }
+                }
+            }
+        }
+
+        return null
     }
 
     fun getLastLocation(): android.location.Location? = lastLocation
@@ -1140,21 +1326,63 @@ class ProTxtBgService : NotificationListenerService() {
             ?.let { it.subLocality ?: it.locality ?: it.thoroughfare }
     } catch (_: Exception) { null }
 
-    // Returns the live location from continuous updates, or null if not yet available.
-    // Never falls back to getLastKnownLocation() — stale cache produces wrong ETA data.
-    private fun getCurrentLocation(): Location? = lastLocation
+    // Returns the most recent live location. If lastLocation is fresh (< 30s) use it directly.
+    // Otherwise request a one-shot update and block the calling thread up to 5s for a new fix.
+    // Falls back to lastLocation (any age) if no fresh fix arrives in time.
+    // Called from worker threads only — never call from main thread.
+    private fun getCurrentLocation(): Location? {
+        val now = System.currentTimeMillis()
+        lastLocation?.let { if (now - it.time < 30_000) return it }
+
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return lastLocation
+        val latch = java.util.concurrent.CountDownLatch(1)
+
+        val oneShotListener = object : android.location.LocationListener {
+            override fun onLocationChanged(loc: android.location.Location) {
+                lastLocation = loc
+                latch.countDown()
+                try { lm.removeUpdates(this) } catch (_: Exception) {}
+            }
+            @Deprecated("") override fun onStatusChanged(p: String?, s: Int, e: android.os.Bundle?) {}
+        }
+
+        try {
+            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
+                if (lm.isProviderEnabled(provider))
+                    @Suppress("MissingPermission")
+                    lm.requestLocationUpdates(provider, 0L, 0f, oneShotListener, mainLooper)
+            }
+        } catch (_: SecurityException) { return lastLocation }
+
+        latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+        try { lm.removeUpdates(oneShotListener) } catch (_: Exception) {}
+        return lastLocation
+    }
+
+    // Words that look like destinations when extracted but are not routable place names.
+    private val DESTINATION_NOISE = setOf(
+        "you", "us", "me", "them", "here", "there", "it", "that", "this",
+        "the area", "your place",
+    )
+
+    private val HOME_KEYWORDS = setOf(
+        "home", "my place", "my house", "my flat", "my apartment", "my home",
+    )
 
     private fun extractDestination(message: String): String? {
         val patterns = listOf(
-            // "how far are you from Tesco", "far from the office"
-            Regex("""(?:how far|far) (?:are you |is it )?from (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            // "are you near Tesco", "are you at Waterloo"
-            Regex("""(?:near|at|by|outside|around) (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            // "distance from Tesco"
-            Regex("""distance (?:from|to) (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            Regex("""(?:how far|far) (?:are you |is it )?(?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
+            Regex("""(?:near|at|by|in|outside|around) (.+?)(?:\?|,|\. | are | is | and | - |$)""", RegexOption.IGNORE_CASE),
+            Regex("""distance (?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
         )
         return patterns.firstNotNullOfOrNull { re ->
-            re.find(message)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length > 1 }
+            val raw = re.find(message)?.groupValues?.getOrNull(1)?.trim() ?: return@firstNotNullOfOrNull null
+            // Reject noise words and overly long / short extractions
+            if (raw.length < 2 || raw.length > 60) return@firstNotNullOfOrNull null
+            if (DESTINATION_NOISE.any { raw.equals(it, ignoreCase = true) }) return@firstNotNullOfOrNull null
+            // Reject if the extracted text reads like a sentence fragment (contains a verb phrase)
+            if (Regex("""\b(are|is|do|will|can|have|going)\b""", RegexOption.IGNORE_CASE).containsMatchIn(raw)) return@firstNotNullOfOrNull null
+            raw
         }
     }
 
@@ -1167,9 +1395,30 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private fun fetchEtaData(message: String): EtaData? {
-        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty { return null }
-        val location = getCurrentLocation() ?: return null
-        val destination = extractDestination(message) ?: return null
+        val raw = extractDestination(message) ?: return null
+        if (raw.lowercase().trim() in HOME_KEYWORDS) {
+            val prefs = Prefs.main(this)
+            if (!prefs.contains("home_lat")) return null
+            val lat = prefs.getFloat("home_lat", 0f).toDouble()
+            val lon = prefs.getFloat("home_lon", 0f).toDouble()
+            return fetchEtaToCoords(lat, lon, "home")
+        }
+        return fetchEtaToDestination(raw, raw)
+    }
+
+    private fun fetchEtaToCoords(lat: Double, lon: Double, label: String): EtaData? =
+        fetchEtaToDestination("$lat,$lon", label)
+
+    private fun fetchEtaToDestination(destination: String, label: String): EtaData? {
+        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty {
+            android.util.Log.e("ProTxt", "ETA: no Maps API key")
+            return null
+        }
+        val location = getCurrentLocation()
+        if (location == null) {
+            android.util.Log.e("ProTxt", "ETA: no GPS location available")
+            return null
+        }
         val origin = "${location.latitude},${location.longitude}"
         val mode = getEnrichmentPref("maps", "transportMode", "driving")
         val params = buildString {
@@ -1185,14 +1434,22 @@ class ProTxtBgService : NotificationListenerService() {
             val json = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
             val obj = JSONObject(json)
-            if (obj.optString("status") != "OK") return null
+            val status = obj.optString("status")
+            if (status != "OK") {
+                android.util.Log.e("ProTxt", "ETA: Directions API status=$status dest=\"$destination\"")
+                return null
+            }
             val leg = obj.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0)
             val duration = (leg.optJSONObject("duration_in_traffic") ?: leg.getJSONObject("duration"))
                 .getString("text")
             val distance = leg.getJSONObject("distance").getString("text")
             val route = obj.getJSONArray("routes").getJSONObject(0).optString("summary", "")
-            EtaData(duration, distance, route)
-        } catch (_: Exception) { null }
+            android.util.Log.d("ProTxt", "ETA: $duration to \"$label\" via $route")
+            EtaData(duration, distance, route, label, location.latitude, location.longitude)
+        } catch (e: Exception) {
+            android.util.Log.e("ProTxt", "ETA: exception for dest=\"$destination\": ${e.message}")
+            null
+        }
     }
 
     private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
@@ -1340,7 +1597,8 @@ class ProTxtBgService : NotificationListenerService() {
         )
     }
 
-    private fun preferredToneForContact(convKey: String): String? = confirmedTone(convKey)
+    private fun preferredToneForContact(convKey: String): String? =
+        confirmedTone(convKey) ?: Prefs.main(this).getString("default_tone", null)
 
     // Returns the preferred tone for a sender the user has already confirmed,
     // by looking up their contactId in confirmed_identities and then the tone in contact_cache.
@@ -1526,32 +1784,42 @@ class ProTxtBgService : NotificationListenerService() {
             if (!formalText.isNullOrEmpty()) add(Triple("Formal", formalText!!, notifId + 3))
             if (!briefText.isNullOrEmpty())  add(Triple("Brief",  briefText!!,  notifId + 4))
         }
-        val bigText = if (availableTones.size > 1) {
-            availableTones.joinToString("\n") { (label, text, _) -> "$label: $text" }
-        } else {
-            replyText
-        }
+        // Quick-reply choices for Android Auto — one CharSequence per available tone.
+        // Shown as tappable chips in the car dashboard reply screen.
+        val autoChoices: Array<CharSequence> = availableTones
+            .map { (_, text, _) -> text as CharSequence }
+            .toTypedArray()
 
         val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Suggested reply")
             .setContentText(replyText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setPriority(if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setGroup("contextreply_suggestions")
 
-        // Per-tone send actions: one tap sends that variant directly from the shade.
-        // For a single tone, attach RemoteInput so the user can edit inline before sending.
-        if (availableTones.size == 1) {
-            val remoteInput = RemoteInput.Builder(REMOTE_INPUT_KEY)
-                .setLabel(replyText.take(60))
+        // Auto/WearOS reply action — MUST be FLAG_MUTABLE so the system can insert the
+        // user's chosen text as a RemoteInput result before firing the broadcast.
+        // Uses a distinct request code (notifId+5) so FLAG_UPDATE_CURRENT on the tone
+        // actions below doesn't clobber this PendingIntent.
+        val autoReplyPi = PendingIntent.getBroadcast(
+            this, notifId + 5, sendIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+        val autoRemoteInput = RemoteInput.Builder(REMOTE_INPUT_KEY)
+            .setLabel(replyText.take(60))
+            .setChoices(autoChoices)
+            .build()
+        builder.addAction(
+            NotificationCompat.Action.Builder(android.R.drawable.ic_menu_send, "Reply", autoReplyPi)
+                .addRemoteInput(autoRemoteInput)
+                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
                 .build()
-            val replyAction = NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_send, "Reply", sendPi
-            ).addRemoteInput(remoteInput).build()
-            builder.addAction(replyAction)
+        )
+
+        // Per-tone send actions for phone notification shade (one tap → sends that variant).
+        if (availableTones.size == 1) {
             builder.addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
         } else {
             availableTones.take(3).forEach { (label, text, reqCode) ->
@@ -1627,6 +1895,22 @@ class ProTxtBgService : NotificationListenerService() {
             .putString("last_suggestion_conv_$packageName", convKey)
             .putString("last_suggestion_action_$packageName", actionJson ?: "")
             .apply()
+    }
+
+    private fun enqueuePendingContact(convKey: String, senderName: String, packageName: String) {
+        val key = convKey.substringAfter(":")
+        if (key.startsWith("group:") || key.startsWith("id:") || groupConvKeys.contains(convKey)) return
+        if (senderName.isBlank()) return
+        val platform = packageToPlatform(packageName) ?: return
+        val prefs = Prefs.main(this)
+        val arr = try { JSONArray(prefs.getString("pending_contacts", "[]") ?: "[]") } catch (_: Exception) { JSONArray() }
+        for (i in 0 until arr.length()) { if (arr.optJSONObject(i)?.optString("convKey") == convKey) return }
+        arr.put(JSONObject().apply {
+            put("convKey", convKey)
+            put("senderName", senderName)
+            put("platform", platform)
+        })
+        prefs.edit().putString("pending_contacts", arr.toString()).apply()
     }
 
     private fun createChannel() {

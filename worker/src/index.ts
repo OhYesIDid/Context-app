@@ -23,10 +23,12 @@ interface BookingItem {
 }
 
 interface EnrichmentData {
-  maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string; currentLocation?: string };
+  maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string; currentLocation?: string; userLat?: number; userLon?: number };
   calendar?: { events: CalendarEvent[]; windowStart: string; windowEnd: string };
   bookings?: { items: BookingItem[]; windowStart: string; windowEnd: string };
   location_coords?: { lat: number; lon: number };
+  incoming_location?: { lat?: number; lon?: number; placeLabel?: string; shortUrl?: string; nativePin?: boolean };
+  emotion?: { emotion: string; confidence: 'high' | 'low' };
 }
 
 interface SuggestRequest {
@@ -98,11 +100,54 @@ const AVAILABILITY_PATTERNS = [
   /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b/i,
 ];
 
+const INCOMING_LOCATION_PATTERNS = [
+  /maps\.(google|apple)\.com/i,
+  /maps\.app\.goo\.gl/i,
+  /goo\.gl\/maps/i,
+  /📍/u,
+  /(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})/,
+];
+
 function detectIntents(message: string): string[] {
   const intents: string[] = [];
   if (ETA_PATTERNS.some((re) => re.test(message))) intents.push('eta');
   if (AVAILABILITY_PATTERNS.some((re) => re.test(message))) intents.push('availability');
+  if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
   return intents.length > 0 ? intents : ['other'];
+}
+
+// Resolves a Maps short URL (goo.gl/maps or maps.app.goo.gl) by following its
+// redirect chain and extracting lat/lng from the final URL. 3s hard timeout.
+async function resolveShortMapsUrl(
+  shortUrl: string,
+): Promise<{ lat: number; lon: number; placeLabel?: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const res = await fetch(shortUrl, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' },
+    });
+    clearTimeout(timer);
+    const finalUrl = res.url;
+    res.body?.cancel().catch(() => {});
+    // Extract @lat,lng or ?q=lat,lng from the resolved URL
+    const m = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+           ?? finalUrl.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]);
+    const lon = parseFloat(m[2]);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    const placeMatch = finalUrl.match(/maps\/place\/([^/@?]+)/);
+    const placeLabel = placeMatch
+      ? decodeURIComponent(placeMatch[1].replace(/\+/g, ' ')).replace(/\+/g, ' ')
+      : undefined;
+    return { lat, lon, placeLabel };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
 }
 
 // ── Enrichment formatters ─────────────────────────────────────────────────────
@@ -145,9 +190,12 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
   maps: (data) => {
     const d = data as EnrichmentData['maps']!;
     if (d.currentLocation) {
-      return `User's current location: ${d.currentLocation}. No specific destination was found in calendar or saved places — suggest asking the other person to share their location (drop a pin or share via Google Maps) so an accurate ETA can be given.`;
+      return `User is currently in: ${d.currentLocation}. No routable destination was extracted from the conversation — use this location in the reply (e.g. "I'm in ${d.currentLocation}") and give a natural response. Do NOT ask them to drop a pin.`;
     }
-    return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}.`;
+    const locationLink = (d.userLat != null && d.userLon != null)
+      ? ` End the reply with your current location on a new line: https://maps.google.com/?q=${d.userLat.toFixed(5)},${d.userLon.toFixed(5)}`
+      : '';
+    return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}. Always include this travel time in the reply.${locationLink}`;
   },
   calendar: (data) => {
     const d = data as EnrichmentData['calendar']!;
@@ -162,6 +210,31 @@ const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => str
       return `  • [${label}] ${item.subject} (${date}) — ${item.snippet.slice(0, 120)}`;
     }).join('\n');
     return `Recent bookings and reservations (${d.items.length} found):\n${lines}`;
+  },
+  emotion: (data) => {
+    const d = data as EnrichmentData['emotion']!;
+    const guidance: Record<string, string> = {
+      anger:       'The sender appears angry or upset. Acknowledge their frustration genuinely before responding — avoid being defensive.',
+      urgency:     'The sender needs a quick response. Be direct and skip pleasantries.',
+      anxiety:     'The sender seems worried or stressed. Lead with reassurance before giving details.',
+      frustration: 'The sender seems frustrated. Acknowledge their concern before addressing the content.',
+      passive_agg: 'The sender may be expressing displeasure indirectly. Be warm and non-confrontational.',
+    };
+    const hint = guidance[d.emotion];
+    if (!hint) return '';
+    return d.confidence === 'high' ? hint : `Note (low confidence): ${hint}`;
+  },
+  incoming_location: (data) => {
+    const d = data as EnrichmentData['incoming_location']!;
+    if (d.lat != null && d.lon != null) {
+      const coord = `${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`;
+      const place = d.placeLabel ? `${d.placeLabel} (${coord})` : coord;
+      return `The other person has shared their location: ${place}. They may be waiting for you, sharing a meeting point, or providing directions. Respond naturally — acknowledge the pin and offer relevant context (your ETA, whether you're heading there, etc.).`;
+    }
+    if (d.nativePin) {
+      return `The other person has shared their location via a native pin. No coordinates are available in the notification. Acknowledge the share naturally — they may be waiting for you or sharing a meeting point.`;
+    }
+    return `The other person has shared a location link. Acknowledge the share and respond naturally.`;
   },
 };
 
@@ -198,10 +271,18 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
     .map(([key, value]) => ENRICHMENT_FORMATTERS[key]?.(value) ?? '')
     .filter(Boolean);
 
-  // ETA with no routable destination — ask the sender to share theirs
+  // ETA with no routable destination — hint Claude only when there is genuinely no
+  // location context. Skip if the sender already shared a pin/link (incoming_location)
+  // or if the message already names a place in words.
   const hasDestination = enrichments.maps != null && !enrichments.maps.currentLocation;
-  if (intents.includes('eta') && !hasDestination) {
-    contextParts.push('No destination is available from calendar or saved places. The reply should ask the other person to share their location (e.g. drop a pin or send a Google Maps link) so an accurate ETA can be given.');
+  const senderSharedLocation = intents.includes('incoming_location') || enrichments.incoming_location != null;
+  if (intents.includes('eta') && !hasDestination && !senderSharedLocation) {
+    contextParts.push(
+      'No destination is resolved from calendar or saved places. ' +
+      'If the message already mentions a specific location in words (a place name, street, or landmark), ' +
+      'respond naturally to that — do NOT ask for a pin. ' +
+      'Only suggest sharing a location (drop a pin or Google Maps link) if the message contains absolutely no location context.'
+    );
   }
 
   const thread = body.conversationThread;
@@ -333,6 +414,18 @@ export default {
     }
 
     const intents = body.intents ?? detectIntents(body.message);
+
+    // If the Kotlin side passed a short Maps URL it couldn't resolve, do it here
+    // (Cloudflare Workers can follow goo.gl/maps.app.goo.gl redirect chains freely).
+    const incomingLoc = body.enrichments?.incoming_location;
+    if (incomingLoc?.shortUrl && incomingLoc.lat == null) {
+      const resolved = await resolveShortMapsUrl(incomingLoc.shortUrl);
+      if (resolved) {
+        incomingLoc.lat = resolved.lat;
+        incomingLoc.lon = resolved.lon;
+        if (resolved.placeLabel) incomingLoc.placeLabel = resolved.placeLabel;
+      }
+    }
 
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

@@ -84,20 +84,30 @@ const AVAILABILITY_PATTERNS = [
   /\bwhat (?:is|are) the (?:date|day|time)\b/i,
 ];
 
+const INCOMING_LOCATION_PATTERNS = [
+  /maps\.(google|apple)\.com/i,
+  /maps\.app\.goo\.gl/i,
+  /goo\.gl\/maps/i,
+  /📍/u,
+  /(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})/,
+];
+
 // Which enrichments each intent requires. Add new intents and their data
 // sources here — call sites loop over this instead of branching per-intent.
 export const INTENT_ENRICHMENTS: Record<Intent, Enrichment[]> = {
-  eta:          ['maps'],
-  availability: ['calendar'],
-  booking:      ['bookings'],
-  other:        [],
+  eta:               ['maps'],
+  availability:      ['calendar'],
+  booking:           ['bookings'],
+  incoming_location: ['incoming_location'],
+  other:             [],
 };
 
 // Human-readable status shown while fetching each enrichment.
 export const ENRICHMENT_STATUS: Record<Enrichment, string> = {
-  maps:     'Fetching journey time…',
-  calendar: 'Checking your calendar…',
-  bookings: 'Checking your bookings…',
+  maps:              'Fetching journey time…',
+  calendar:          'Checking your calendar…',
+  bookings:          'Checking your bookings…',
+  incoming_location: 'Looking up shared location…',
 };
 
 // Formatters that turn enrichment data into a context string for the prompt.
@@ -137,6 +147,17 @@ export const ENRICHMENT_FORMATTERS: {
     }).join('\n');
     return `User's calendar events in the next 7 days (${d.events.length} total):\n${lines}`;
   },
+  incoming_location: (d) => {
+    if (d.lat != null && d.lon != null) {
+      const coord = `${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`;
+      const place = d.placeLabel ? `${d.placeLabel} (${coord})` : coord;
+      return `The other person has shared their location: ${place}. They may be waiting for you or providing a meeting point.`;
+    }
+    if (d.nativePin) {
+      return `The other person has shared a location pin. No coordinates available from the notification — acknowledge naturally.`;
+    }
+    return `The other person has shared a location link.`;
+  },
 };
 
 /** Returns all matching intents for a message. Falls back to ['other']. */
@@ -145,6 +166,7 @@ export function detectIntents(message: string): Intent[] {
   if (ETA_PATTERNS.some((re) => re.test(message))) intents.push('eta');
   if (AVAILABILITY_PATTERNS.some((re) => re.test(message))) intents.push('availability');
   if (BOOKING_PATTERNS.some((re) => re.test(message))) intents.push('booking');
+  if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
   return intents.length > 0 ? intents : ['other'];
 }
 

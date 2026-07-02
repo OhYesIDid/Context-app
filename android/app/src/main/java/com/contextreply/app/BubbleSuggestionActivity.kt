@@ -77,7 +77,7 @@ class BubbleSuggestionActivity : Activity() {
             else                                     -> null
         }
         val strategyOptions: List<Pair<String, String>>? = when (strategyIntent) {
-            "eta"          -> listOf("eta_direct" to "Straight shot", "eta_delay" to "Buy time", "eta_excuse" to "Soft excuse")
+            "eta"          -> listOf("eta_direct" to "Honest", "eta_delay" to "Buy time", "eta_excuse" to "Soft excuse")
             "availability" -> listOf("avail_yes" to "Open to it", "avail_maybe" to "Keep it open", "avail_no" to "Decline gently")
             else           -> null
         }
@@ -460,12 +460,12 @@ class BubbleSuggestionActivity : Activity() {
                 })
 
                 addView(ScrollView(this@BubbleSuggestionActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    // Fixed height = 4 lines of 13sp text at 1.25x line spacing (~68dp).
+                    // Content that overflows scrolls; fading edges show there's more.
+                    layoutParams = LinearLayout.LayoutParams(0, dp(68), 1f)
                     isVerticalScrollBarEnabled = false
-                    // Fading edges act as the scroll indicator — the top edge fades in
-                    // once the user has scrolled up, the bottom fades when there's more below.
                     isVerticalFadingEdgeEnabled = true
-                    setFadingEdgeLength(dp(20))
+                    setFadingEdgeLength(dp(16))
                     setBackgroundColor(BG)
                     quoteScroll = this
                     addView(TextView(this@BubbleSuggestionActivity).apply {
@@ -485,8 +485,7 @@ class BubbleSuggestionActivity : Activity() {
                 val tv = quoteText
                 val sv = quoteScroll
                 Thread {
-                    val thread = NotificationStore.getInstance(this).getThread(convKey)
-                    val messages = thread.takeLast(6)
+                    val messages = NotificationStore.getInstance(this).getUnreadMessages(convKey)
                     val formatted = messages.joinToString("\n") { (sender, text) ->
                         if (sender == null) "You: $text" else "$sender: $text"
                     }
@@ -504,7 +503,7 @@ class BubbleSuggestionActivity : Activity() {
                                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
                                 )
                                 val lp = sv.layoutParams as LinearLayout.LayoutParams
-                                lp.height = tv.measuredHeight.coerceAtMost(dp(160))
+                                lp.height = tv.measuredHeight.coerceAtMost(dp(68))
                                 sv.layoutParams = lp
                                 sv.fullScroll(ScrollView.FOCUS_DOWN)
                             }
@@ -716,11 +715,13 @@ class BubbleSuggestionActivity : Activity() {
             root.addView(banner)
         }
 
+        val isPro = Prefs.main(this).getBoolean("is_pro", false)
+
         // ── Strategy chips ────────────────────────────────────────────────────
         // Only shown for ETA and availability intents. First chip is pre-selected
         // (from Prefs or default). Tapping a chip updates selectedStrategy and
-        // triggers a regen if a reply is already showing.
-        if (strategyOptions != null && selectedStrategy != null) {
+        // triggers a regen if a reply is already showing. Pro only.
+        if (strategyOptions != null && selectedStrategy != null && isPro) {
             val strategyChipViews = mutableListOf<TextView>()
 
             fun refreshStrategyChips(selected: String) {
@@ -773,6 +774,26 @@ class BubbleSuggestionActivity : Activity() {
 
             refreshStrategyChips(selectedStrategy!!)
             root.addView(strategyRow)
+        } else if (strategyOptions != null && !isPro) {
+            val lockRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(10)
+                layoutParams = lp
+            }
+            lockRow.addView(TextView(this).apply {
+                text = "🔒 Reply strategy — Pro"
+                textSize = 11f
+                setTextColor(MUTED)
+                setPadding(dp(10), dp(5), dp(10), dp(5))
+                background = GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(1, BORDER)
+                }
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            })
+            root.addView(lockRow)
         }
 
         // ── Reply area: edit text (ready) or skeleton (loading) ───────────────
@@ -795,7 +816,7 @@ class BubbleSuggestionActivity : Activity() {
         }
         refreshTabsFn[0] = ::refreshTabs
 
-        if (!showSkeleton && available.size > 1) {
+        if (!showSkeleton && available.size > 1 && isPro) {
             val tabRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -823,11 +844,35 @@ class BubbleSuggestionActivity : Activity() {
             }
             refreshTabs(selectedIdx)
             root.addView(tabRow)
+        } else if (!showSkeleton && available.size > 1 && !isPro) {
+            // Show a locked Pro hint where tone pills would appear
+            val lockRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(14)
+                layoutParams = lp
+            }
+            val lockChip = TextView(this).apply {
+                text = "🔒 Tone learning — Pro"
+                textSize = 11f
+                setTextColor(MUTED)
+                setPadding(dp(10), dp(5), dp(10), dp(5))
+                background = GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(1, BORDER)
+                }
+                val lp2 = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                layoutParams = lp2
+            }
+            lockRow.addView(lockChip)
+            root.addView(lockRow)
         }
 
         // ── Intent context bar ────────────────────────────────────────────────
-        val intentLabels = mapOf("eta" to "ETA", "availability" to "Calendar")
-        val allKnownIntents = listOf("eta", "availability")
+        val intentLabels = mapOf("eta" to "ETA", "availability" to "Calendar", "incoming_location" to "📍 Location")
+        val allKnownIntents = listOf("eta", "availability", "incoming_location")
         val activeIntents = detectedIntents.filter { it != "other" }
         val unusedIntents = allKnownIntents.filter { it !in detectedIntents }
 
@@ -1133,7 +1178,17 @@ class BubbleSuggestionActivity : Activity() {
 
         if (isStale) triggerRegen()
 
-        setContentView(root)
+        // Wrap in a ScrollView so the whole bubble UI scrolls in landscape where the
+        // available height is ~360dp — less than the full portrait content height.
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(BG)
+            addView(root.also {
+                it.layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            })
+        })
     }
 
     override fun onDestroy() {

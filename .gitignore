@@ -17,3 +17,9 @@ npm-debug.*
 # Google services — contains API keys, must never be committed
 google-services.json
 android/google-services.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example

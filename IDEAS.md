@@ -7,9 +7,9 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ## Open Questions
 
-- Should the domain be `.app` or `.io`?
-- Free tier vs paid from day one?
-- Should the Cloudflare Worker proxy require auth (API key per user) or be open?
+- ~~Should the domain be `.app` or `.io`?~~ **get-context.app** ✓
+- ~~Free tier vs paid from day one?~~ **Freemium** — core suggestions free, Pro tier gates tone learning, strategy pills, default tone, suggest-all-messages ✓
+- ~~Should the Cloudflare Worker proxy require auth (API key per user) or be open?~~ **HMAC signing sufficient for launch** — blocks external callers; per-user server-side entitlement check deferred to post-launch if abuse becomes an issue ✓
 
 ---
 
@@ -18,7 +18,7 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 - **Same-name contact collision in conversation key** — `buildConversationKey()` (`ProTxtBgService.kt`) keys conversations by notification title (the display name shown by the messaging app). Two different contacts with the same name (e.g. two "John"s) will collide on the same `convKey`, causing their message buffers, bubble, and thread history to be shared. Rare but real. Tried fixing 2026-06-16 by keying on `sbn.id` instead, but that broke far worse — `sbn.id` was found to be reused across unrelated active conversations on the test device, causing frequent cross-conversation contamination. Reverted; title-based key stays until a verified-reliable per-conversation ID is found.
 - **`sbn.id` fallback collision (narrower version of the above)** — in the same function, if a notification has no `conversationTitle` and no `title` (or a group with no `conversationTitle`), the key falls back to `"id:${sbn.id}"` / `"group:${sbn.id}"`. Same collision risk as above, just rarer since most WhatsApp/Telegram notifications carry a title. Pre-existing, not introduced by the 2026-06-16 revert.
 - **No certificate pinning on outbound API calls** — `src/services/claude.ts`, `googleMaps.ts`, `googleCalendar.ts` all use plain `fetch` with no pinning. A MITM with a trusted root CA on the device could intercept traffic. (Critical, ~4h fix — see security audit)
-- **SQLite database unencrypted** — `src/services/database.ts` stores contacts, conversations, lat/lng, and writing style in cleartext on disk. Fix: SQLCipher or expo-sqlite encryption with a Keystore-backed key. (Medium, ~4h fix — see security audit)
+- ~~**SQLite database unencrypted**~~ — All sensitive text fields encrypted with AES-256-GCM (Keystore-backed). lat/lng stored in encrypted TEXT columns. Identifiers HMAC-SHA256 hashed for lookup. DB excluded from Android backup via `backup_rules.xml` / `data_extraction_rules.xml`. ✓
 
 ---
 
@@ -90,8 +90,9 @@ Worth building eventually; needs more thought or platform maturity.
 ### Suppress original app notification
 When our bubble appears, optionally cancel the original WhatsApp/Messenger notification from the shade via `cancelNotification(sbn.key)` in the NLS. Keeps the shade clean — only our bubble shows. Needs a user-facing toggle since it means the original notification won't reappear if the bubble is dismissed without acting. "Mark as read" already handles the explicit read path.
 
-### Android Auto
-Already on Android, already have ETA context. Suggest and send replies through the car dashboard. Natural fit with driving mode and ETA suggestions.
+### ~~Android Auto~~ ✓
+~~Already on Android, already have ETA context. Suggest and send replies through the car dashboard. Natural fit with driving mode and ETA suggestions.~~
+Shipped: `MessagingStyle` notification + `RemoteInput.setChoices()` with all tone variants. Auto shows the incoming message as a conversation card; user taps a choice to send directly. `automotive_app_desc.xml` declares notification support.
 
 ### IME keyboard extension
 A proper Android Input Method (keyboard replacement) that shows suggestions inline in the keyboard suggestion bar. More reliable than an accessibility overlay — works in every app without the overlay permission complexity. Significant engineering effort but eliminates the biggest setup friction.
@@ -124,7 +125,8 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - Apple Watch — tap to copy top suggestion to clipboard
 - Landscape orientation — make the bubble activity scrollable so long threads/replies aren't clipped when the device is rotated
 
-- Quoted message in the bubble (`messageExtra`/`quoteText` in `BubbleSuggestionActivity.kt`) is capped at 3 lines and truncates with an ellipsis — allow more quoted text and make that section scrollable or paginated for long bursts instead of clipping them
+- ~~Landscape orientation~~ ✓ — bubble wrapped in `ScrollView`; the quote section already scrolls within its fixed height; entire UI now scrollable when rotated.
+- ~~Quoted message capped at 3 lines~~ ✓ — quote section is a `ScrollView` with fading edges; height auto-fits to content up to `68dp` then scrolls.
 
 ### Personalisation
 - **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")

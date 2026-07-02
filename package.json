@@ -7,7 +7,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "deploy": "npx expo export -p web && wrangler deploy",
+    "preview": "npx expo export -p web && wrangler dev"
   },
   "dependencies": {
     "@expo/metro-config": "~54.0.14",
@@ -40,8 +42,10 @@
     "@babel/plugin-transform-private-methods": "^7.29.7",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
+    "googleapis": "^173.0.0",
     "patch-package": "^8.0.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "wrangler": "^4.105.0"
   },
   "private": true
 }

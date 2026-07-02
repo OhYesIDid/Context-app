@@ -7,6 +7,7 @@ import android.provider.Settings
 import android.util.Base64
 import java.security.SecureRandom
 import javax.crypto.Cipher
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import com.facebook.react.bridge.ReactApplicationContext
@@ -119,6 +120,16 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         } catch (_: Exception) {}
     }
 
+    // Atomically reads and clears the pending_contacts queue, returning a JSON
+    // array of {convKey, senderName, platform} objects for JS to process.
+    @ReactMethod
+    fun drainPendingContacts(promise: Promise) {
+        val prefs = Prefs.main(reactApplicationContext)
+        val json = prefs.getString("pending_contacts", "[]") ?: "[]"
+        prefs.edit().putString("pending_contacts", "[]").apply()
+        promise.resolve(json)
+    }
+
     // Atomically reads and clears the StyleEditQueue SharedPrefs, returning
     // the raw JSON array string so JS can drain it into SQLite.
     @ReactMethod
@@ -177,6 +188,39 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     fun cacheStyleProfile(profile: String) {
         Prefs.main(reactApplicationContext)
             .edit().putString("style_profile", profile).apply()
+    }
+
+    @ReactMethod
+    fun getSavedHome(promise: Promise) {
+        val prefs = Prefs.main(reactApplicationContext)
+        if (!prefs.contains("home_lat")) { promise.resolve(null); return }
+        promise.resolve(JSONObject().apply {
+            put("lat", prefs.getFloat("home_lat", 0f).toDouble())
+            put("lon", prefs.getFloat("home_lon", 0f).toDouble())
+        }.toString())
+    }
+
+    @ReactMethod
+    fun clearSavedHome() {
+        Prefs.main(reactApplicationContext).edit()
+            .remove("home_lat")
+            .remove("home_lon")
+            .remove(HomeDetectionWorker.FIXES_KEY)
+            .remove("home_detect_dismissed")
+            .apply()
+        HomeDetectionWorker.schedule(reactApplicationContext)
+    }
+
+    @ReactMethod
+    fun setProStatus(active: Boolean) {
+        Prefs.main(reactApplicationContext)
+            .edit().putBoolean("is_pro", active).apply()
+    }
+
+    @ReactMethod
+    fun setDefaultTone(tone: String) {
+        Prefs.main(reactApplicationContext)
+            .edit().putString("default_tone", tone).apply()
     }
 
     @ReactMethod
@@ -274,5 +318,21 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     fun getOrCreateDbKey(promise: Promise) {
         try { promise.resolve(Base64.encodeToString(getOrCreateSecretKey().encoded, Base64.NO_WRAP)) }
         catch (e: Exception) { promise.reject("DB_KEY_ERROR", e.message ?: "failed", e) }
+    }
+
+    // HMAC-SHA256 keyed hash of (platform + ":" + identifier) using the db encryption key.
+    // Used to build a stable, non-reversible lookup key for platform_identities.identifier
+    // so the plaintext phone number / username never sits in a queryable column.
+    @ReactMethod
+    fun hmacIdentifier(value: String, promise: Promise) {
+        try {
+            val key = getOrCreateSecretKey()
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(key.encoded, "HmacSHA256"))
+            val hash = mac.doFinal(value.toByteArray(Charsets.UTF_8))
+            promise.resolve(Base64.encodeToString(hash, Base64.NO_WRAP))
+        } catch (e: Exception) {
+            promise.reject("HMAC_ERROR", e.message ?: "hmac failed", e)
+        }
     }
 }

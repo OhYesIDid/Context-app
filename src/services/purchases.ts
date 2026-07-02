@@ -1,26 +1,41 @@
 import Purchases, { LOG_LEVEL, type CustomerInfo, type PurchasesOfferings, type PurchasesPackage } from 'react-native-purchases';
 import RevenueCatUI from 'react-native-purchases-ui';
+import { NativeModules } from 'react-native';
 
-const RC_API_KEY_ANDROID = 'test_roUNgKztgiwojQesGuqSdqagSfg';
+function syncProToNative(isPro: boolean) {
+  NativeModules.ProTxtSettings?.setProStatus(isPro);
+}
+
+const RC_API_KEY_ANDROID = process.env.EXPO_PUBLIC_RC_API_KEY_ANDROID ?? '';
 
 export const PRO_ENTITLEMENT = 'ConTxt Pro';
 
 export function configurePurchases() {
-  if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-  Purchases.configure({ apiKey: RC_API_KEY_ANDROID });
+  try {
+    if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    Purchases.configure({ apiKey: RC_API_KEY_ANDROID });
+  } catch (e) {
+    console.warn('RevenueCat configure failed:', e);
+  }
 }
 
 export async function checkProEntitlement(): Promise<boolean> {
   try {
     const info = await Purchases.getCustomerInfo();
-    return !!info.entitlements.active[PRO_ENTITLEMENT];
+    const isPro = !!info.entitlements.active[PRO_ENTITLEMENT];
+    syncProToNative(isPro);
+    return isPro;
   } catch {
     return false;
   }
 }
 
 export function addEntitlementListener(cb: (isPro: boolean) => void): () => void {
-  const handler = (info: CustomerInfo) => cb(!!info.entitlements.active[PRO_ENTITLEMENT]);
+  const handler = (info: CustomerInfo) => {
+    const isPro = !!info.entitlements.active[PRO_ENTITLEMENT];
+    syncProToNative(isPro);
+    cb(isPro);
+  };
   Purchases.addCustomerInfoUpdateListener(handler);
   return () => Purchases.removeCustomerInfoUpdateListener(handler);
 }

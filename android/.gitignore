@@ -20,3 +20,4 @@ local.properties
 *.keystore
 !debug.keystore
 keystore.properties
+play-store-key.json

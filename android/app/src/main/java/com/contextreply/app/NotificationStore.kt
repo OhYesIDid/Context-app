@@ -26,6 +26,7 @@ class NotificationStore private constructor(context: Context) {
         arr.put(JSONObject().apply {
             put("s", sender ?: JSONObject.NULL)
             put("t", text)
+            put("ts", System.currentTimeMillis())
         })
         // Cap at 20 messages — enough context for a reply without excess token cost
         val start = maxOf(0, arr.length() - 20)
@@ -48,9 +49,37 @@ class NotificationStore private constructor(context: Context) {
         }
     }
 
-    fun markReplied(convKey: String) {
-        prefs.edit().remove(storeKey(convKey)).apply()
+    /** Returns up to [maxCount] most-recent messages, newest-first, for ETA destination search. */
+    fun getEtaSearchThread(convKey: String, maxCount: Int = 10): List<Pair<String?, String>> {
+        val arr = load(storeKey(convKey))
+        val result = mutableListOf<Pair<String?, String>>()
+        for (i in arr.length() - 1 downTo 0) {
+            if (result.size >= maxCount) break
+            val obj = arr.optJSONObject(i) ?: continue
+            val text = obj.optString("t")
+            if (text.isEmpty()) continue
+            val sender = if (obj.isNull("s")) null else obj.optString("s").ifEmpty { null }
+            result.add(Pair(sender, text))
+        }
+        return result  // newest-first — .firstNotNullOfOrNull hits most-recent destination first
     }
+
+    fun getUnreadMessages(convKey: String): List<Pair<String?, String>> {
+        val thread = getThread(convKey)
+        val start = prefs.getInt(unreadKey(convKey), 0)
+        return thread.drop(start).ifEmpty { thread.takeLast(1) }
+    }
+
+    @Synchronized
+    fun setUnreadStart(convKey: String, idx: Int) {
+        prefs.edit().putInt(unreadKey(convKey), idx).apply()
+    }
+
+    fun markReplied(convKey: String) {
+        prefs.edit().remove(storeKey(convKey)).remove(unreadKey(convKey)).apply()
+    }
+
+    private fun unreadKey(convKey: String) = "unread_${storeKey(convKey)}"
 
     private fun storeKey(convKey: String) = "conv_${convKey.replace(Regex("[^a-zA-Z0-9_:.-]"), "_").take(200)}"
 
