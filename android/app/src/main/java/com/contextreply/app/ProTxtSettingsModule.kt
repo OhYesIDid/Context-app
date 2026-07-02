@@ -23,6 +23,11 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     override fun getName() = "ProTxtSettings"
 
     @ReactMethod
+    fun refreshBubbleState() {
+        ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()
+    }
+
+    @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
         Prefs.main(reactApplicationContext)
             .edit()

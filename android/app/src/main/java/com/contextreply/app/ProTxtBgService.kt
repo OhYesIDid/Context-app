@@ -329,6 +329,40 @@ class ProTxtBgService : NotificationListenerService() {
         groupConvKeys.clear()
     }
 
+    // Called when bubbles are found to be disabled (system setting or per-app preference).
+    // Re-posts every pending suggestion as a regular notification so replies are still visible.
+    internal fun downgradeBubblesIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val nm = getSystemService(NotificationManager::class.java)
+        val bubblesAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            nm.bubblePreference != NotificationManager.BUBBLE_PREFERENCE_NONE
+        } else {
+            @Suppress("DEPRECATION") nm.areBubblesEnabled()
+        }
+        if (bubblesAllowed) return
+        for (pb in pendingBubbles.values.toList()) {
+            val action = pb.suggestedActionJson?.let {
+                try { org.json.JSONObject(it) } catch (_: Exception) { null }
+            }
+            postSuggestionNotification(
+                replyText = pb.replyText,
+                formalText = pb.formalText,
+                briefText = pb.briefText,
+                replyPendingIntent = pb.replyPendingIntent,
+                remoteInputKey = pb.remoteInputKey,
+                notifId = pb.notifId,
+                convKey = pb.convKey,
+                intent = pb.intent,
+                openChatIntent = pb.openChatIntent,
+                message = pb.message,
+                detectedIntents = pb.detectedIntents,
+                suggestedAction = action,
+                markAsReadPendingIntent = pb.markAsReadPendingIntent,
+                repost = true,
+            )
+        }
+    }
+
     // fromUnlock=true  → skip repost entirely if the notification is still active — Android
     //   reinstates bubbles automatically; reposting causes a visible notification flash before
     //   the bubble metadata is processed. Only repost if the notification was cleared while locked.

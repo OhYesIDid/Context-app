@@ -177,6 +177,7 @@ export default function App() {
       ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
       }).catch(() => {});
+      ProTxtSettings.refreshBubbleState?.();
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };

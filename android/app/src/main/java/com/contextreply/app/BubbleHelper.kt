@@ -49,6 +49,17 @@ object BubbleHelper {
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        val bubblesAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
+        } else {
+            @Suppress("DEPRECATION") nm.areBubblesEnabled()
+        }
+        if (!bubblesAllowed) {
+            builder.setCategory(androidx.core.app.NotificationCompat.CATEGORY_MESSAGE)
+            return
+        }
+
         val contact = ProTxtBgService.stripAppPrefix(convKey.substringAfter(":"))
         // _v6: contact initial circle → shortcut icon → main bubble dot; app logo → BubbleMetadata badge
         val shortcutId = "cr_conv_v5_${convKey.hashCode().and(0x7FFFFFFF)}"
