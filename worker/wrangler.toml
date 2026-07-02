@@ -13,5 +13,5 @@ compatibility_date = "2024-11-01"
 # Preview namespace for local dev: wrangler kv namespace create "RATE_LIMIT" --preview
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
+id = "92f94d4f022e47d5bbd8bcbc1bf6e072"
+preview_id = "8718c4cd2c4740b9bbac28d530fb555e"
