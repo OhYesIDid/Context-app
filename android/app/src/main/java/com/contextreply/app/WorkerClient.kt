@@ -38,6 +38,8 @@ object WorkerClient {
         contactContext: String? = null,
         contactName: String? = null,
         strategy: String? = null,
+        importance: String? = null,
+        importanceReasons: List<String> = emptyList(),
     ): WorkerResult? {
         val prefs = Prefs.main(context)
         val styleProfile      = prefs.getString("style_profile", null)
@@ -68,6 +70,8 @@ object WorkerClient {
             if (contactContext != null) put("contactContext", contactContext)
             if (contactName != null) put("contactName", contactName)
             if (strategy != null) put("strategy", strategy)
+            if (importance != null && importance != "normal") put("importance", importance)
+            if (importanceReasons.isNotEmpty()) put("importanceReasons", JSONArray(importanceReasons))
         }.toString()
 
         var lastException: Exception? = null

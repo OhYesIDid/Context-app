@@ -27,6 +27,8 @@ import { loadFollowUps } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
 import { loadPendingCalendarActions } from './src/services/pendingCalendarActions';
 import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
+import { loadPendingReplies } from './src/services/pendingReplies';
+import type { PendingReply } from './src/services/pendingReplies';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -87,6 +89,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [pendingCalendarActions, setPendingCalendarActions] = useState<PendingCalendarAction[]>([]);
+  const [pendingReplies, setPendingReplies] = useState<PendingReply[]>([]);
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
@@ -179,6 +182,7 @@ export default function App() {
     checkProEntitlement().then(setIsPro);
     loadFollowUps().then(setFollowUps).catch(() => {});
     loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+    loadPendingReplies().then(setPendingReplies).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -192,6 +196,7 @@ export default function App() {
       }).catch(() => {});
       ProTxtSettings.refreshBubbleState?.();
       loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+      loadPendingReplies().then(setPendingReplies).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
@@ -372,6 +377,8 @@ export default function App() {
           followUps={followUps}
           pendingCalendarActions={pendingCalendarActions}
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
+          pendingReplies={pendingReplies}
+          onDismissPendingReply={(id) => setPendingReplies(prev => prev.filter(r => r.id !== id))}
           onGoToFollowUps={() => setActiveTab('followups')}
           onGoToSettings={() => setActiveTab('settings')}
           onOpenPaywall={openPaywall}
@@ -637,7 +644,10 @@ export default function App() {
           const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;
           return (
             <Pressable key={tab.key} style={styles.navItem} onPress={() => {
-              if (tab.key === 'home') loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+              if (tab.key === 'home') {
+                loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
+                loadPendingReplies().then(setPendingReplies).catch(() => {});
+              }
               setActiveTab(tab.key);
             }}>
               <View>

@@ -148,6 +148,45 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         } catch (_: Exception) {}
     }
 
+    // Returns current pending replies (conversations awaiting a reply, ranked by
+    // importance) as a JSON array without clearing them.
+    @ReactMethod
+    fun getPendingReplies(promise: Promise) {
+        val json = Prefs.main(reactApplicationContext)
+            .getString("pending_replies", "[]") ?: "[]"
+        promise.resolve(json)
+    }
+
+    // Removes a single pending reply by id — called when the user opens the
+    // conversation or dismisses it from the Pending Replies card.
+    @ReactMethod
+    fun clearPendingReply(id: String) {
+        val prefs = Prefs.main(reactApplicationContext)
+        try {
+            val arr = JSONArray(prefs.getString("pending_replies", "[]") ?: "[]")
+            val next = JSONArray()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            prefs.edit().putString("pending_replies", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Best-effort: launches the messaging app for a pending reply's conversation.
+    // We don't hold onto the original notification's contentIntent on the JS side,
+    // so this opens the app itself rather than the specific thread.
+    @ReactMethod
+    fun openConversationApp(convKey: String) {
+        val pkg = convKey.substringBefore(":")
+        try {
+            reactApplicationContext.packageManager.getLaunchIntentForPackage(pkg)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                reactApplicationContext.startActivity(this)
+            }
+        } catch (_: Exception) {}
+    }
+
     // Atomically reads and clears the pending_contacts queue, returning a JSON
     // array of {convKey, senderName, platform} objects for JS to process.
     @ReactMethod

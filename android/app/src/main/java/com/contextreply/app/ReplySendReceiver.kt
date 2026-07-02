@@ -76,6 +76,7 @@ class ReplySendReceiver : BroadcastReceiver() {
         // so the next message from this contact starts fresh.
         if (convKey != null) {
             NotificationStore.getInstance(context).markReplied(convKey)
+            ProTxtBgService.getInstance()?.clearPendingReply(convKey)
             ProTxtBgService.getInstance()?.activeBubbles?.remove(convKey)
             ProTxtBgService.getInstance()?.arrivalBuffer?.remove(convKey)
             ProTxtBgService.pendingBubbles.remove(convKey)

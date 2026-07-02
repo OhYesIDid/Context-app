@@ -76,6 +76,8 @@ interface SuggestRequest {
   contactContext?: string;
   contactName?: string;
   strategy?: string;
+  importance?: 'urgent' | 'elevated';
+  importanceReasons?: string[];
 }
 
 const STRATEGY_INSTRUCTIONS: Record<string, string> = {
@@ -317,6 +319,17 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
       'respond naturally to that — do NOT ask for a pin. ' +
       'Only suggest sharing a location (drop a pin or Google Maps link) if the message contains absolutely no location context.'
     );
+  }
+
+  // Reply-importance signal (arrival cadence + unanswered backlog — computed client-side,
+  // separate from the per-message "emotion" enrichment above). Only present when elevated.
+  if (body.importance === 'urgent') {
+    contextParts.push(
+      `This message is high priority to answer (${(body.importanceReasons ?? []).join(', ') || 'time-sensitive'}). ` +
+      'Keep the reply short and direct, and briefly acknowledge the wait if one is mentioned above.'
+    );
+  } else if (body.importance === 'elevated' && body.importanceReasons?.length) {
+    contextParts.push(`Note: ${body.importanceReasons.join(', ')}. A prompt, direct reply is appreciated here.`);
   }
 
   const thread = body.conversationThread;

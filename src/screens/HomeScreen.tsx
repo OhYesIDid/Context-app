@@ -11,6 +11,8 @@ import type { FollowUp } from '../services/followUps';
 import { formatDueLabel, urgency } from '../services/followUps';
 import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pendingCalendarActions';
 import type { PendingCalendarAction } from '../services/pendingCalendarActions';
+import { clearPendingReply, openPendingReplyConversation, platformLabel, sortPendingReplies } from '../services/pendingReplies';
+import type { PendingReply } from '../services/pendingReplies';
 
 const PURPLE = '#6366f1';
 const BG     = '#0c0c0e';
@@ -38,17 +40,23 @@ const URGENCY_TIME: Record<string, string> = {
   none:    MUTED,
 };
 
+const IMPORTANCE_DOT: Record<string, string> = {
+  urgent: RED, elevated: AMBER, normal: BORDER,
+};
+
 interface Props {
   followUps: FollowUp[];
   pendingCalendarActions: PendingCalendarAction[];
   onCalendarActionDismiss: (id: string) => void;
+  pendingReplies: PendingReply[];
+  onDismissPendingReply: (id: string) => void;
   onGoToFollowUps: () => void;
   onGoToSettings: () => void;
   onOpenPaywall: () => void;
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, onCalendarActionDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, onCalendarActionDismiss, pendingReplies, onDismissPendingReply, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -75,6 +83,9 @@ export default function HomeScreen({ followUps, pendingCalendarActions, onCalend
     todayItems.push({ icon: '✅', iconBg: '#22c55e20', title: 'You\'re all caught up', sub: 'No follow-ups due today' });
   }
 
+  const sortedReplies = sortPendingReplies(pendingReplies);
+  const urgentReplyCount = pendingReplies.filter(r => r.importance === 'urgent').length;
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* Header */}
@@ -84,6 +95,49 @@ export default function HomeScreen({ followUps, pendingCalendarActions, onCalend
           <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
       </View>
+
+      {/* Pending replies card */}
+      {sortedReplies.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+                <Text style={styles.cardIconText}>💬</Text>
+              </View>
+              <Text style={styles.cardTitle}>Pending Replies</Text>
+              {urgentReplyCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: RED }]}>
+                  <Text style={styles.badgeText}>{urgentReplyCount} urgent</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={styles.divider} />
+
+          {sortedReplies.slice(0, 5).map(reply => {
+            const meta = [reply.contactName, platformLabel(reply.platform)].filter(Boolean).join(' · ');
+            return (
+              <Pressable
+                key={reply.id}
+                style={styles.replyItem}
+                onPress={() => openPendingReplyConversation(reply.convKey)}
+              >
+                <View style={[styles.dot, { backgroundColor: IMPORTANCE_DOT[reply.importance] }]} />
+                <View style={styles.replyContent}>
+                  <Text style={styles.replyText} numberOfLines={1}>{reply.preview}</Text>
+                  <Text style={styles.replyMeta} numberOfLines={1}>
+                    {meta}
+                    {reply.unansweredCount > 1 ? ` · ${reply.unansweredCount} unread` : ''}
+                  </Text>
+                </View>
+                <Pressable hitSlop={10} onPress={() => { clearPendingReply(reply.id); onDismissPendingReply(reply.id); }}>
+                  <Text style={styles.calendarDismiss}>✕</Text>
+                </Pressable>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {/* Follow-ups card */}
       <View style={styles.card}>
@@ -276,5 +330,10 @@ const styles = StyleSheet.create({
   calendarAddBtn:  { backgroundColor: '#6366f122', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#6366f144' },
   calendarAddText: { fontSize: 12, color: PURPLE, fontWeight: '600' },
   calendarDismiss: { fontSize: 14, color: MUTED, paddingHorizontal: 4 },
+
+  replyItem:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  replyContent: { flex: 1, minWidth: 0 },
+  replyText:    { fontSize: 14, color: TEXT, fontWeight: '400' },
+  replyMeta:    { fontSize: 12, color: MUTED, marginTop: 1 },
 
 });

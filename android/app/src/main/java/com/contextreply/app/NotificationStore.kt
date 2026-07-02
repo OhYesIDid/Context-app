@@ -70,6 +70,17 @@ class NotificationStore private constructor(context: Context) {
         return thread.drop(start).ifEmpty { thread.takeLast(1) }
     }
 
+    /** Arrival timestamp of the first unread message — used to measure how long a
+     *  conversation has gone unanswered. Null if the store has no timestamped entries. */
+    fun getFirstUnreadTimestamp(convKey: String): Long? {
+        val arr = load(storeKey(convKey))
+        if (arr.length() == 0) return null
+        val start = prefs.getInt(unreadKey(convKey), 0)
+        val idx = start.coerceIn(0, arr.length() - 1)
+        val obj = arr.optJSONObject(idx) ?: return null
+        return if (obj.has("ts")) obj.optLong("ts") else null
+    }
+
     @Synchronized
     fun setUnreadStart(convKey: String, idx: Int) {
         prefs.edit().putInt(unreadKey(convKey), idx).apply()

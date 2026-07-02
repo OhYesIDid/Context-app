@@ -265,6 +265,7 @@ class ProTxtBgService : NotificationListenerService() {
             arrivalBuffer.remove(convKey)
             pendingBubbles.remove(convKey)
             NotificationStore.getInstance(context).markReplied(convKey)
+            clearPendingReply(convKey)
         }
     }
 
@@ -323,6 +324,7 @@ class ProTxtBgService : NotificationListenerService() {
             pendingJobs[convKey]?.cancel(false)
             pendingJobs.remove(convKey)
             NotificationStore.getInstance(this).markReplied(convKey)
+            clearPendingReply(convKey)
         }
         // Clear persisted set — cancelled bubbles no longer need tracking
         prefs.edit().putString("group_conv_keys", "[]").apply()
@@ -557,6 +559,7 @@ class ProTxtBgService : NotificationListenerService() {
             // Clear the cached thread so the next incoming message starts a fresh context
             // rather than appending to a thread that predates the user's outbound reply.
             NotificationStore.getInstance(this).markReplied(originalConvKey)
+            clearPendingReply(originalConvKey)
             // Capture what the user sent so the next suggestion knows their last reply.
             if (lastMsgOutbound) {
                 val outboundText = notifThread.last().second
@@ -599,6 +602,7 @@ class ProTxtBgService : NotificationListenerService() {
             val outboundText = notifThread[lastOutboundIdx].second
             ContactMemory.saveLastSent(this, convKey, outboundText)
             store.markReplied(convKey)
+            clearPendingReply(convKey)
             notifThread.drop(lastOutboundIdx + 1).forEach { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
@@ -685,6 +689,22 @@ class ProTxtBgService : NotificationListenerService() {
             if (effectiveIntentsStr != "other") {
                 conversationIntents[convKey] = Pair(effectiveIntentsStr, System.currentTimeMillis())
             }
+            // Importance assessment — independent of intent, so it also covers plain
+            // "other" messages that never reach a suggestion. Reuses the emotion signal
+            // (per-message tone) and layers in arrival cadence + unanswered backlog, which
+            // detectEmotionalCharge can't see on its own.
+            val emotionSignal = detectEmotionalCharge(latestMessage, fullThread)
+            val unreadCount = store.getUnreadMessages(convKey).size
+            val minutesWaiting = store.getFirstUnreadTimestamp(convKey)
+                ?.let { (System.currentTimeMillis() - it) / 60_000L }
+            val importance = MessageImportance.assess(emotionSignal, burstTexts.size, unreadCount, minutesWaiting)
+            if (!isGroup) {
+                upsertPendingReply(
+                    convKey, stripAppPrefix(convKey.substringAfter(":")), packageName,
+                    latestMessage, importance, unreadCount,
+                )
+            }
+
             val suggestAll = try { Prefs.main(this).getBoolean("suggest_all_messages", false) } catch (_: Exception) { false }
             // Also process "other" intent messages when the current bubble for this conversation
             // has an open calendar action — the next message may carry the confirmed time/place
@@ -710,7 +730,7 @@ class ProTxtBgService : NotificationListenerService() {
             runWorkerJob(
                 convKey, notifId, latestMessage, effectiveIntentsStr,
                 replyPendingIntent, remoteInputKey, openChatIntent,
-                markAsReadPendingIntent, packageName, userInApp,
+                markAsReadPendingIntent, packageName, userInApp, importance,
             )
         }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
     }
@@ -729,6 +749,7 @@ class ProTxtBgService : NotificationListenerService() {
         markAsReadPendingIntent: PendingIntent?,
         packageName: String,
         userInApp: Boolean,
+        importance: MessageImportance.Result = MessageImportance.Result(MessageImportance.Level.NORMAL, emptyList()),
     ) {
         val fullThread = store.getThread(convKey)
         val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
@@ -752,6 +773,8 @@ class ProTxtBgService : NotificationListenerService() {
                     lastSentReply = lastSent,
                     contactContext = contactContext,
                     contactName = senderName,
+                    importance = importance.levelKey,
+                    importanceReasons = importance.reasons,
                 ) ?: run {
                     android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                     if (activeBubbles.contains(convKey)) {
@@ -1969,6 +1992,64 @@ class ProTxtBgService : NotificationListenerService() {
                 put("createdAt", System.currentTimeMillis())
             })
             prefs.edit().putString("pending_calendar_actions", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Upserts a conversation into the pending_replies SharedPrefs list, keyed by convKey
+    // (same hash as notifId) so re-processing the same conversation updates rather than
+    // duplicates. createdAt is preserved across updates; updatedAt tracks recency for sorting.
+    private fun upsertPendingReply(
+        convKey: String,
+        contactName: String,
+        packageName: String,
+        preview: String,
+        importance: MessageImportance.Result,
+        unansweredCount: Int,
+    ) {
+        val prefs = Prefs.main(this)
+        try {
+            val existing = JSONArray(prefs.getString("pending_replies", "[]") ?: "[]")
+            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            val next = JSONArray()
+            var createdAt = System.currentTimeMillis()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                if (item.optString("id") == id) {
+                    createdAt = item.optLong("createdAt", createdAt)
+                } else {
+                    next.put(item)
+                }
+            }
+            next.put(JSONObject().apply {
+                put("id", id)
+                put("convKey", convKey)
+                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
+                put("platform", packageToPlatform(packageName) ?: JSONObject.NULL)
+                put("preview", preview.take(280))
+                put("importance", importance.levelKey)
+                put("importanceReasons", JSONArray(importance.reasons))
+                put("unansweredCount", unansweredCount)
+                put("createdAt", createdAt)
+                put("updatedAt", System.currentTimeMillis())
+            })
+            prefs.edit().putString("pending_replies", next.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // Removes a conversation from pending_replies once the user has replied — called
+    // alongside every NotificationStore.markReplied() site (send, dismiss, direct reply
+    // detected in-app, keyboard send).
+    fun clearPendingReply(convKey: String) {
+        val prefs = Prefs.main(this)
+        try {
+            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            val arr = JSONArray(prefs.getString("pending_replies", "[]") ?: "[]")
+            val next = JSONArray()
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) next.put(item)
+            }
+            prefs.edit().putString("pending_replies", next.toString()).apply()
         } catch (_: Exception) {}
     }
 
