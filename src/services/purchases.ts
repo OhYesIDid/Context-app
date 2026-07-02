@@ -42,7 +42,7 @@ export function addEntitlementListener(cb: (isPro: boolean) => void): () => void
 
 export async function fetchOfferings(): Promise<PurchasesOfferings | null> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), 5_000);
+    const timer = setTimeout(() => resolve(null), 15_000);
     Purchases.getOfferings()
       .then((o) => { clearTimeout(timer); resolve(o); })
       .catch(() => { clearTimeout(timer); resolve(null); });

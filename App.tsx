@@ -277,7 +277,10 @@ export default function App() {
     const offerings = await fetchOfferings();
     setPaywallOfferings(offerings);
     setPaywallFetchDone(true);
-    const pkgs = offerings?.current?.availablePackages ?? [];
+    // Fall back to any available package across all offerings if current is unset
+    const pkgs = offerings?.current?.availablePackages?.length
+      ? offerings.current.availablePackages
+      : Object.values(offerings?.all ?? {}).flatMap((o) => o.availablePackages ?? []);
     if (pkgs.length > 0) setPaywallSelectedPkg(pkgs[pkgs.length - 1]);
   };
 
@@ -945,13 +948,22 @@ export default function App() {
             {/* Package selection */}
             {!paywallFetchDone ? (
               <ActivityIndicator color={PURPLE} style={{ marginVertical: 24 }} />
-            ) : (paywallOfferings?.current?.availablePackages ?? []).length === 0 ? (
-              <Text style={[styles.setupStatus, { textAlign: 'center', marginVertical: 24 }]}>
-                Pricing not available right now. Try again later.
-              </Text>
+            ) : (paywallOfferings?.current?.availablePackages?.length ?? 0) === 0 &&
+                Object.values(paywallOfferings?.all ?? {}).flatMap((o) => o.availablePackages ?? []).length === 0 ? (
+              <View style={{ alignItems: 'center', marginVertical: 24, gap: 12 }}>
+                <Text style={[styles.setupStatus, { textAlign: 'center' }]}>
+                  Pricing not available right now.
+                </Text>
+                <Pressable onPress={openPaywall} style={{ paddingVertical: 8, paddingHorizontal: 20, borderRadius: 8, borderWidth: 1, borderColor: PURPLE }}>
+                  <Text style={{ color: PURPLE, fontSize: 14 }}>Try again</Text>
+                </Pressable>
+              </View>
             ) : (
               <View style={{ gap: 10, marginVertical: 20 }}>
-                {(paywallOfferings?.current?.availablePackages ?? []).map((pkg) => {
+                {(paywallOfferings?.current?.availablePackages?.length
+                  ? paywallOfferings.current.availablePackages
+                  : Object.values(paywallOfferings?.all ?? {}).flatMap((o) => o.availablePackages ?? [])
+                ).map((pkg) => {
                   const selected = paywallSelectedPkg?.identifier === pkg.identifier;
                   const isAnnual = pkg.packageType === 'ANNUAL' || pkg.identifier.toLowerCase().includes('annual');
                   return (
