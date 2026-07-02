@@ -1090,7 +1090,7 @@ class ProTxtBgService : NotificationListenerService() {
         "availability"      to listOf("calendar"),
         "location_share"    to listOf("location_coords"),
         "incoming_location" to listOf("incoming_location", "maps"),
-        "general"           to listOf<String>(),
+        "general"           to listOf("calendar"),
         "other"             to listOf<String>(),
     )
 
@@ -1202,7 +1202,7 @@ class ProTxtBgService : NotificationListenerService() {
                         }
                     }
                 }
-                "calendar" -> fetchCalendarData(message)?.let { cal ->
+                "calendar" -> fetchCalendarData(message, thread)?.let { cal ->
                     enrichments.put("calendar", cal)
                 }
                 "location_coords" -> getCurrentLocation()?.let { loc ->
@@ -1311,6 +1311,9 @@ class ProTxtBgService : NotificationListenerService() {
             Regex("""what (?:day|time|date) (?:is|are)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
             Regex("""what (?:is|are) the (?:day|time|date) (?:of|for)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
             Regex("""remind me (?:about|of)(?: my| the)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
+            // "What time does doodies bday start?" / "When does the party kick off?"
+            Regex("""what (?:day|time|date) does (.+?) (?:start|begin|kick off|happen|take place)\b""", RegexOption.IGNORE_CASE),
+            Regex("""when does (.+?) (?:start|begin|kick off|happen|take place)\b""", RegexOption.IGNORE_CASE),
         )
         return patterns.firstNotNullOfOrNull { re ->
             re.find(message)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length > 1 && it.length < 50 }
@@ -1346,9 +1349,45 @@ class ProTxtBgService : NotificationListenerService() {
         Regex("""\b(did you|were you|was it|how was|how did|did it go)\b""", RegexOption.IGNORE_CASE),
     ).any { it.containsMatchIn(message) }
 
-    private fun fetchCalendarData(message: String): JSONObject? {
-        val keyword = extractEventKeyword(message)
+    // Extracts a specific date anchor from the message (e.g. "30th July", "July 30").
+    // Returns an Instant at midnight UTC on that date in the current year (or next year if the
+    // date has already passed this year), or null if no specific date is found.
+    private fun extractMentionedDate(message: String): Instant? {
+        val monthNames = mapOf(
+            "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
+            "jul" to 7, "aug" to 8, "sep" to 9, "oct" to 10, "nov" to 11, "dec" to 12,
+            "january" to 1, "february" to 2, "march" to 3, "april" to 4, "june" to 6,
+            "july" to 7, "august" to 8, "september" to 9, "october" to 10, "november" to 11, "december" to 12,
+        )
+        val patterns = listOf(
+            // "30th July", "2nd August", "21st March"
+            Regex("""(\d{1,2})(?:st|nd|rd|th)?\s+(${monthNames.keys.joinToString("|")})""", RegexOption.IGNORE_CASE),
+            // "July 30", "August 2"
+            Regex("""(${monthNames.keys.joinToString("|")})\s+(\d{1,2})(?:st|nd|rd|th)?""", RegexOption.IGNORE_CASE),
+        )
+        for (re in patterns) {
+            val m = re.find(message) ?: continue
+            val (day, month) = if (m.groupValues[1].toIntOrNull() != null)
+                m.groupValues[1].toInt() to (monthNames[m.groupValues[2].lowercase()] ?: continue)
+            else
+                m.groupValues[2].toInt() to (monthNames[m.groupValues[1].lowercase()] ?: continue)
+            if (day < 1 || day > 31) continue
+            val now = java.time.LocalDate.now()
+            var candidate = java.time.LocalDate.of(now.year, month, minOf(day, java.time.YearMonth.of(now.year, month).lengthOfMonth()))
+            // If the date has already passed this year, use next year
+            if (candidate.isBefore(now)) candidate = candidate.withYear(now.year + 1)
+            return candidate.atStartOfDay(ZoneOffset.UTC).toInstant()
+        }
+        return null
+    }
+
+    private fun fetchCalendarData(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject? {
+        // Search the latest message first, then fall back to recent thread messages so that
+        // "What time does it start?" can resolve "it" from earlier in the conversation.
+        val recentTexts = listOf(message) + thread.takeLast(8).reversed().map { it.second }
+        val keyword = recentTexts.firstNotNullOfOrNull { extractEventKeyword(it) }
         val isPast = isPastTemporalQuery(message)
+        val mentionedDate = recentTexts.firstNotNullOfOrNull { extractMentionedDate(it) }
         return try {
             val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
             val token = GoogleAuthUtil.getToken(
@@ -1357,10 +1396,18 @@ class ProTxtBgService : NotificationListenerService() {
                 "oauth2:https://www.googleapis.com/auth/calendar.readonly"
             )
             val now = Instant.now()
-            // Look back only when the message clearly refers to a past event.
-            // Default to now so "Friday" means the upcoming Friday, not last Friday.
-            val windowStart = if (isPast) now.minus(14, ChronoUnit.DAYS) else now
-            val windowEnd = if (keyword != null) now.plus(90, ChronoUnit.DAYS) else now.plus(7, ChronoUnit.DAYS)
+            // If the message names a specific date, centre the window on that date (±3 days).
+            // Otherwise: look back only when clearly referring to a past event;
+            // use a 90-day window when an event keyword is present, 7 days otherwise.
+            val windowStart: Instant
+            val windowEnd: Instant
+            if (mentionedDate != null) {
+                windowStart = mentionedDate.minus(3, ChronoUnit.DAYS)
+                windowEnd   = mentionedDate.plus(3, ChronoUnit.DAYS)
+            } else {
+                windowStart = if (isPast) now.minus(14, ChronoUnit.DAYS) else now
+                windowEnd   = if (keyword != null) now.plus(90, ChronoUnit.DAYS) else now.plus(7, ChronoUnit.DAYS)
+            }
             val timeMin = URLEncoder.encode(OffsetDateTime.ofInstant(windowStart, ZoneOffset.UTC).toString(), "UTF-8")
             val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString(), "UTF-8")
 
