@@ -48,6 +48,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     fun setRemindersEnabled(enabled: Boolean) {
         Prefs.main(reactApplicationContext)
             .edit().putBoolean("reminders_enabled", enabled).apply()
+        if (!enabled) ReminderWorker.cancelAll(reactApplicationContext)
     }
 
     @ReactMethod
@@ -271,6 +272,7 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         promise.resolve(JSONObject().apply {
             put("lat", prefs.getFloat("home_lat", 0f).toDouble())
             put("lon", prefs.getFloat("home_lon", 0f).toDouble())
+            put("area", prefs.getString("home_area", null))
         }.toString())
     }
 
@@ -279,10 +281,34 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         Prefs.main(reactApplicationContext).edit()
             .remove("home_lat")
             .remove("home_lon")
+            .remove("home_area")
             .remove(HomeDetectionWorker.FIXES_KEY)
             .remove("home_detect_dismissed")
             .apply()
         HomeDetectionWorker.schedule(reactApplicationContext)
+    }
+
+    // ── Home candidate review (visual confirm before saving) ──────────────────
+
+    @ReactMethod
+    fun getPendingHomeCandidate(promise: Promise) {
+        val prefs = Prefs.main(reactApplicationContext)
+        if (!prefs.contains("home_candidate_lat")) { promise.resolve(null); return }
+        promise.resolve(JSONObject().apply {
+            put("lat", prefs.getFloat("home_candidate_lat", 0f).toDouble())
+            put("lon", prefs.getFloat("home_candidate_lon", 0f).toDouble())
+            put("area", prefs.getString("home_candidate_area", null))
+        }.toString())
+    }
+
+    @ReactMethod
+    fun confirmHomeLocation(lat: Double, lon: Double, area: String?) {
+        HomeDetectionWorker.confirmCandidate(reactApplicationContext, lat, lon, area)
+    }
+
+    @ReactMethod
+    fun dismissHomeCandidate() {
+        HomeDetectionWorker.dismissCandidate(reactApplicationContext)
     }
 
     @ReactMethod

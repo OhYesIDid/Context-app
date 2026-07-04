@@ -79,6 +79,17 @@ async function fetchEvents(
   }
 }
 
+// Proactive fetch for the Upcoming Events card — fixed window, no keyword logic.
+export async function getUpcomingCalendarEvents(days = 30): Promise<CalendarEvent[]> {
+  const accessToken = await getAccessToken();
+  const now = new Date();
+  const windowStart = new Date(now);
+  windowStart.setHours(0, 0, 0, 0);
+  const windowEnd = new Date(now);
+  windowEnd.setDate(now.getDate() + days);
+  return fetchEvents(accessToken, windowStart, windowEnd, 50);
+}
+
 // Fetches calendar data in one of two modes:
 //   event-lookup  — keyword found → q=<name>, 14d back + 90d forward
 //                   if 0 results  → fallback: no q, same range, maxResults 30

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -13,6 +13,7 @@ import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pen
 import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
+import type { UpcomingData } from '../services/upcomingEvents';
 
 const PURPLE = '#6366f1';
 const BG     = '#0c0c0e';
@@ -44,6 +45,7 @@ interface Props {
   followUps: FollowUp[];
   pendingCalendarActions: PendingCalendarAction[];
   pendingFollowUps: PendingFollowUp[];
+  upcomingData: UpcomingData;
   onCalendarActionDismiss: (id: string) => void;
   onFollowUpAdd: (item: PendingFollowUp) => void;
   onFollowUpDismiss: (id: string) => void;
@@ -53,7 +55,8 @@ interface Props {
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -236,6 +239,63 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         </View>
       )}
 
+      {/* Upcoming events card */}
+      {(upcomingData.calendarItems.length > 0 || upcomingData.bookingItems.length > 0) && (() => {
+        const allItems = [
+          ...upcomingData.calendarItems.map(i => ({ ...i, source: 'cal' as const })),
+          ...upcomingData.bookingItems.map(i => ({ ...i, source: 'gmail' as const })),
+        ];
+        const PREVIEW_COUNT = 5;
+        const shown = upcomingExpanded ? allItems : allItems.slice(0, PREVIEW_COUNT);
+        const hiddenCount = allItems.length - PREVIEW_COUNT;
+        return (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardIcon, { backgroundColor: '#f59e0b20' }]}>
+                  <Text style={styles.cardIconText}>🗓</Text>
+                </View>
+                <Text style={styles.cardTitle}>Upcoming</Text>
+                {allItems.length > 0 && (
+                  <View style={[styles.badge, { backgroundColor: '#f59e0b1a', borderWidth: 1, borderColor: '#f59e0b33' }]}>
+                    <Text style={[styles.badgeText, { color: AMBER }]}>{allItems.length}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={styles.divider} />
+
+            {shown.map(item => (
+              <View key={item.id} style={styles.upcomingItem}>
+                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? '#6366f115' : '#f59e0b15' }]}>
+                  <Text style={styles.upcomingIconText}>{item.icon}</Text>
+                </View>
+                <View style={styles.upcomingBody}>
+                  <Text style={styles.upcomingTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.upcomingSub}>{item.subtitle}</Text>
+                </View>
+                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? '#6366f115' : '#f59e0b15' }]}>
+                  <Text style={[styles.upcomingBadgeText, { color: item.source === 'cal' ? PURPLE : AMBER }]}>
+                    {item.source === 'cal' ? 'Cal' : 'Gmail'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+
+            {!upcomingExpanded && hiddenCount > 0 && (
+              <Pressable style={styles.showMoreBtn} onPress={() => setUpcomingExpanded(true)}>
+                <Text style={styles.showMoreText}>{hiddenCount} more…</Text>
+              </Pressable>
+            )}
+            {upcomingExpanded && allItems.length > PREVIEW_COUNT && (
+              <Pressable style={styles.showMoreBtn} onPress={() => setUpcomingExpanded(false)}>
+                <Text style={styles.showMoreText}>Show less</Text>
+              </Pressable>
+            )}
+          </View>
+        );
+      })()}
+
       {/* Today card */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -324,5 +384,16 @@ const styles = StyleSheet.create({
   calendarAddBtn:  { backgroundColor: '#6366f122', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#6366f144' },
   calendarAddText: { fontSize: 12, color: PURPLE, fontWeight: '600' },
   calendarDismiss: { fontSize: 14, color: MUTED, paddingHorizontal: 4 },
+
+  upcomingItem:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  upcomingIcon:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  upcomingIconText:  { fontSize: 16 },
+  upcomingBody:      { flex: 1, minWidth: 0 },
+  upcomingTitle:     { fontSize: 14, color: TEXT, fontWeight: '400' },
+  upcomingSub:       { fontSize: 12, color: MUTED, marginTop: 2 },
+  upcomingBadge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
+  upcomingBadgeText: { fontSize: 11, fontWeight: '600' },
+  showMoreBtn:       { paddingVertical: 10, paddingHorizontal: 14, borderTopWidth: 1, borderTopColor: BORDER },
+  showMoreText:      { fontSize: 13, color: PURPLE, fontWeight: '500' },
 
 });

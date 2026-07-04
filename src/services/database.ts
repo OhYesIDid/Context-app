@@ -643,6 +643,58 @@ export async function insertMemory(
   return { ...memory, id, createdAt: now, updatedAt: now };
 }
 
+// ── Contact detail queries ────────────────────────────────────────────────────
+
+export async function getContactById(id: string): Promise<Contact | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<ContactRow>('SELECT * FROM contacts WHERE id = ? AND deleted_at IS NULL', [id]);
+  return row ? await rowToContact(row) : null;
+}
+
+export async function getPlatformIdentitiesByContact(contactId: string): Promise<PlatformIdentity[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string; contact_id: string; platform: string; identifier: string;
+    identifier_type: string; confidence: number; user_confirmed: number;
+    created_at: string; updated_at: string;
+  }>('SELECT * FROM platform_identities WHERE contact_id = ? ORDER BY confidence DESC, user_confirmed DESC', [contactId]);
+  return Promise.all(rows.map(async r => ({
+    id: r.id,
+    contactId: r.contact_id,
+    platform: r.platform as PlatformIdentity['platform'],
+    identifier: (await decryptField(r.identifier)) ?? r.identifier,
+    identifierType: r.identifier_type as PlatformIdentity['identifierType'],
+    confidence: r.confidence,
+    userConfirmed: r.user_confirmed === 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  })));
+}
+
+export async function getSemanticMemoriesByContact(contactId: string, limit = 20): Promise<Memory[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string; contact_id: string | null; type: string; content: string;
+    relevance_score: number; created_at: string; updated_at: string;
+    last_confirmed_at: string | null;
+  }>(
+    `SELECT id, contact_id, type, content, relevance_score, created_at, updated_at, last_confirmed_at
+     FROM memories WHERE contact_id = ? AND type = 'semantic' AND deleted_at IS NULL
+     ORDER BY relevance_score DESC, created_at DESC LIMIT ?`,
+    [contactId, limit]
+  );
+  return Promise.all(rows.map(async r => ({
+    id: r.id,
+    contactId: r.contact_id ?? undefined,
+    type: r.type as Memory['type'],
+    content: (await decryptField(r.content)) ?? r.content,
+    relevanceScore: r.relevance_score,
+    lastConfirmedAt: r.last_confirmed_at ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  })));
+}
+
 // ── D1 sync (stub — implemented when cloud backup is enabled) ─────────────────
 
 export async function getPendingSyncItems(): Promise<{

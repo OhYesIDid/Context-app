@@ -136,12 +136,15 @@ class ReminderWorker(context: Context, params: WorkerParameters) : Worker(contex
             15L,      // 3 = critical: 15 minutes
         )
 
+        const val ALL_TAG = "reminder_all"
+
         fun schedule(context: Context, convKey: String, urgencyScore: Int) {
             val delay = URGENCY_DELAYS_MINUTES[urgencyScore.coerceIn(0, 3)]
             val tag = "reminder_$convKey".take(100)
             val request = OneTimeWorkRequestBuilder<ReminderWorker>()
                 .setInitialDelay(delay, TimeUnit.MINUTES)
                 .addTag(tag)
+                .addTag(ALL_TAG)
                 .setInputData(Data.Builder().putString(KEY_CONV_KEY, convKey).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
@@ -153,6 +156,17 @@ class ReminderWorker(context: Context, params: WorkerParameters) : Worker(contex
 
         fun cancel(context: Context, convKey: String) {
             WorkManager.getInstance(context).cancelAllWorkByTag("reminder_$convKey".take(100))
+        }
+
+        /** Cancels every pending reminder job and dismisses any reminder notifications already showing. */
+        fun cancelAll(context: Context) {
+            WorkManager.getInstance(context).cancelAllWorkByTag(ALL_TAG)
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                nm.activeNotifications
+                    .filter { it.notification.channelId == ProTxtBgService.CHANNEL_REMINDER_ID }
+                    .forEach { nm.cancel(it.id) }
+            }
         }
     }
 }

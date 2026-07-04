@@ -71,7 +71,6 @@
       android:name=".HomeConfirmReceiver"
       android:exported="false">
       <intent-filter>
-        <action android:name="com.contxt.app.ACTION_HOME_CONFIRM"/>
         <action android:name="com.contxt.app.ACTION_HOME_DISMISS"/>
       </intent-filter>
     </receiver>

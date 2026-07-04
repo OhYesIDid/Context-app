@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exclude the SQLite database from Google Drive auto-backup.
+     The AES-256-GCM key lives in EncryptedSharedPreferences which is Keystore-bound
+     and never backed up; restoring the DB without the key would be unreadable anyway,
+     but excluding it is cleaner and avoids leaking plaintext residuals (lat/lng, etc). -->
+<full-backup-content>
+  <exclude domain="database" path="contextreply.db" />
+  <exclude domain="database" path="contextreply.db-shm" />
+  <exclude domain="database" path="contextreply.db-wal" />
+</full-backup-content>

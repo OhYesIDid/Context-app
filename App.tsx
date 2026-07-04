@@ -23,6 +23,12 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import FollowUpsScreen from './src/screens/FollowUpsScreen';
+import ContactDetailModal from './src/screens/ContactDetailModal';
+import UpcomingScreen from './src/screens/UpcomingScreen';
+import HomeLocationConfirmModal from './src/screens/HomeLocationConfirmModal';
+import type { HomeCandidate } from './src/screens/HomeLocationConfirmModal';
+import { loadUpcomingEvents, UPCOMING_EMPTY } from './src/services/upcomingEvents';
+import type { UpcomingData } from './src/services/upcomingEvents';
 import { loadFollowUps, addFollowUp } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
 import { loadPendingCalendarActions } from './src/services/pendingCalendarActions';
@@ -83,7 +89,7 @@ const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
 const WHATSAPP_IMPORT_KEY = 'setup_whatsapp_messages';
 const SETUP_COMPLETE_KEY = 'setup_complete';
 
-type Tab = 'home' | 'followups' | 'history' | 'settings';
+type Tab = 'home' | 'followups' | 'upcoming' | 'settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -128,6 +134,10 @@ export default function App() {
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  const [upcomingData, setUpcomingData] = useState<UpcomingData>(UPCOMING_EMPTY);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [savedHome, setSavedHome] = useState<HomeCandidate | null>(null);
+  const [homeCandidate, setHomeCandidate] = useState<HomeCandidate | null>(null);
 
   useEffect(() => {
     if (contactsVisible) {
@@ -164,19 +174,24 @@ export default function App() {
       ProTxtSettings.getRemindersEnabled?.().then((v: boolean) => setRemindersEnabledState(v)).catch(() => {});
       ProTxtSettings.getSuggestAllMessages().then((all: boolean) => setSuggestAllMessagesState(all)).catch(() => {});
       ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
-      (async () => {
-        const prefs: Record<string, Record<string, string>> = {};
-        for (const [enrichment, fields] of Object.entries(ENRICHMENT_PREFERENCES)) {
-          prefs[enrichment] = {};
-          for (const field of fields ?? []) {
-            const val = await ProTxtSettings.getEnrichmentPreference(enrichment, field.key).catch(() => null);
-            prefs[enrichment][field.key] = val ?? field.defaultValue;
-          }
-        }
-        setEnrichmentPrefs(prefs);
-      })();
+      Promise.all(
+        Object.entries(ENRICHMENT_PREFERENCES).map(async ([enrichment, fields]) => {
+          const entries = await Promise.all(
+            (fields ?? []).map(async (field) => {
+              const val = await ProTxtSettings.getEnrichmentPreference(enrichment, field.key).catch(() => null);
+              return [field.key, val ?? field.defaultValue] as const;
+            })
+          );
+          return [enrichment, Object.fromEntries(entries)] as const;
+        })
+      ).then((results) => setEnrichmentPrefs(Object.fromEntries(results)))
+       .catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
+      }).catch(() => {});
+      ProTxtSettings.getSavedHome?.().then((json: string | null) => setSavedHome(json ? JSON.parse(json) : null)).catch(() => {});
+      ProTxtSettings.getPendingHomeCandidate?.().then((json: string | null) => {
+        if (json) setHomeCandidate(JSON.parse(json));
       }).catch(() => {});
       syncStyleProfile();
     }
@@ -193,6 +208,7 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
@@ -201,6 +217,9 @@ export default function App() {
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
+      }).catch(() => {});
+      ProTxtSettings.getPendingHomeCandidate?.().then((json: string | null) => {
+        if (json) setHomeCandidate(JSON.parse(json));
       }).catch(() => {});
       ProTxtSettings.refreshBubbleState?.();
       loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
@@ -211,10 +230,16 @@ export default function App() {
           .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
           .catch(() => {});
       }).catch(() => {});
+      loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
-  }, []);
+  }, [googleAuthed, gmailConnected]);
+
+  useEffect(() => {
+    if (!googleAuthed && !gmailConnected) return;
+    loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
+  }, [googleAuthed, gmailConnected]);
 
   useEffect(() => {
     if (!shareText) return;
@@ -391,6 +416,7 @@ export default function App() {
           followUps={followUps}
           pendingCalendarActions={pendingCalendarActions}
           pendingFollowUps={pendingFollowUps}
+          upcomingData={upcomingData}
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
           onFollowUpAdd={(item) => {
             setPendingFollowUps(prev => prev.filter(f => f.id !== item.id));
@@ -407,12 +433,13 @@ export default function App() {
       {activeTab === 'followups' && (
         <FollowUpsScreen followUps={followUps} setFollowUps={setFollowUps} />
       )}
-      {activeTab === 'history' && (
-        <View style={{ flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-          <Text style={{ fontSize: 36, marginBottom: 16 }}>🕐</Text>
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#f4f4f5', marginBottom: 8 }}>Reply history</Text>
-          <Text style={{ fontSize: 14, color: '#71717a', textAlign: 'center', lineHeight: 20 }}>Your past reply suggestions and conversations will appear here.</Text>
-        </View>
+      {activeTab === 'upcoming' && (
+        <UpcomingScreen
+          upcomingData={upcomingData}
+          googleAuthed={googleAuthed}
+          gmailConnected={gmailConnected}
+          onGoToSettings={() => setActiveTab('settings')}
+        />
       )}
       {activeTab === 'settings' && (
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
@@ -549,6 +576,27 @@ export default function App() {
               thumbColor={remindersEnabled ? PURPLE : MUTED}
             />
           </View>
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => {
+              if (!savedHome) return;
+              Alert.alert('Change home location', 'This clears the saved home so it can be detected again overnight.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear', style: 'destructive', onPress: () => { ProTxtSettings?.clearSavedHome?.(); setSavedHome(null); } },
+              ]);
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: savedHome ? '#4ade80' : MUTED }]} />
+              <View>
+                <Text style={styles.settingText}>Home location</Text>
+                <Text style={styles.setupStatus} numberOfLines={1}>
+                  {savedHome ? (savedHome.area ?? 'Saved') : 'Not detected yet — checked overnight'}
+                </Text>
+              </View>
+            </View>
+            {savedHome && <Text style={styles.setupAction}>Change</Text>}
+          </Pressable>
           {isPro ? (
             <Pressable style={[styles.settingRow, { borderBottomWidth: isPro ? 1 : 0 }]}>
               <View style={{ flex: 1, marginRight: 16 }}>
@@ -668,7 +716,7 @@ export default function App() {
         {([
           { key: 'home',      icon: '⌂',  label: 'Home'      },
           { key: 'followups', icon: '☑',  label: 'Follow-ups' },
-          { key: 'history',   icon: '🕐', label: 'History'   },
+          { key: 'upcoming',  icon: '🗓',  label: 'Upcoming'  },
           { key: 'settings',  icon: '⚙',  label: 'Settings'  },
         ] as { key: Tab; icon: string; label: string }[]).map(tab => {
           const active = activeTab === tab.key;
@@ -678,6 +726,9 @@ export default function App() {
               if (tab.key === 'home') {
                 loadPendingCalendarActions().then(setPendingCalendarActions).catch(() => {});
                 loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
+              }
+              if (tab.key === 'upcoming') {
+                loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
               }
               setActiveTab(tab.key);
             }}>
@@ -758,10 +809,13 @@ export default function App() {
                     {!contactSearch && <Text style={styles.setupHint}>Top 10 by interactions — search for others</Text>}
                     {shown.map((c) => (
                       <View key={c.id} style={styles.contactCard}>
-                        <Text style={styles.contactName}>{c.displayName}</Text>
+                        <Pressable onPress={() => setSelectedContactId(c.id)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <Text style={styles.contactName}>{c.displayName}</Text>
+                          <Text style={{ fontSize: 12, color: '#6366f1' }}>View profile</Text>
+                        </Pressable>
                         <Text style={styles.chipLabel}>Relationship</Text>
                         <View style={styles.chipRow}>
-                          {(['friend', 'colleague', 'family', 'partner', 'other'] as Relationship[]).map((r) => (
+                          {(['friend', 'colleague', 'family', 'partner', 'flatmate', 'other'] as Relationship[]).map((r) => (
                             <Pressable
                               key={r}
                               style={[styles.chip, c.relationship === r && styles.chipActive]}
@@ -800,6 +854,31 @@ export default function App() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Contact detail modal */}
+      <ContactDetailModal
+        contactId={selectedContactId}
+        onClose={() => setSelectedContactId(null)}
+        onPreferenceChange={(id, relationship, preferredTone) => {
+          setContacts(prev => prev.map(c => c.id === id ? { ...c, relationship, preferredTone } : c));
+          syncStyleProfile();
+          refreshContactListCache().catch(() => {});
+        }}
+      />
+
+      {/* Home location review — visual confirm before saving */}
+      <HomeLocationConfirmModal
+        candidate={homeCandidate}
+        onConfirm={(candidate) => {
+          ProTxtSettings?.confirmHomeLocation?.(candidate.lat, candidate.lon, candidate.area ?? null);
+          setSavedHome(candidate);
+          setHomeCandidate(null);
+        }}
+        onDismiss={() => {
+          ProTxtSettings?.dismissHomeCandidate?.();
+          setHomeCandidate(null);
+        }}
+      />
 
       {/* Service settings modal — only reachable when all services already active */}
       <Modal visible={serviceSettingsVisible} transparent animationType="slide" onRequestClose={() => setServiceSettingsVisible(false)}>
