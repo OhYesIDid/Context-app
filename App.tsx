@@ -43,7 +43,7 @@ import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchO
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
-import { configureGoogleSignin, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
+import { configureGoogleSignin, hasGmailScope, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
 import { getCalendarData } from './src/services/googleCalendar';
 import { getBookingsContext } from './src/services/googleBookings';
 import { getEtaData } from './src/services/googleMaps';
@@ -166,6 +166,7 @@ export default function App() {
     }).catch(() => setSetupComplete(false));
     configureGoogleSignin();
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
+    setGmailConnected(hasGmailScope());
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});

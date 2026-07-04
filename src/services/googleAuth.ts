@@ -50,6 +50,15 @@ export function isSignedIn(): boolean {
   return GoogleSignin.getCurrentUser() !== null;
 }
 
+// The native SDK persists granted scopes across app restarts (and process
+// kills) at the account level — this lets us restore `gmailConnected` on
+// launch instead of relying on the one-time "Connect" button tap, which only
+// ever set an in-memory flag that reset to false every time Android killed
+// the app.
+export function hasGmailScope(): boolean {
+  return GoogleSignin.getCurrentUser()?.scopes?.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false;
+}
+
 export async function requestGmailScope(): Promise<boolean> {
   try {
     const result = await GoogleSignin.addScopes({
