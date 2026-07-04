@@ -1,6 +1,7 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
+import React, { useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
+import { formatTripDateRange } from '../services/upcomingEvents';
 
 const PURPLE  = '#6366f1';
 const AMBER   = '#f59e0b';
@@ -34,9 +35,13 @@ function CalendarRow({ item }: { item: UpcomingCalendarItem }) {
   );
 }
 
+function openInGmail(gmailId: string) {
+  Linking.openURL(`https://mail.google.com/mail/u/0/#all/${gmailId}`).catch(() => {});
+}
+
 function BookingRow({ item }: { item: UpcomingBookingItem }) {
   return (
-    <View style={styles.item}>
+    <Pressable style={styles.item} onPress={() => openInGmail(item.gmailId)}>
       <View style={[styles.itemIcon, { backgroundColor: '#f59e0b15' }]}>
         <Text style={styles.itemIconText}>{item.icon}</Text>
       </View>
@@ -47,7 +52,33 @@ function BookingRow({ item }: { item: UpcomingBookingItem }) {
       <View style={[styles.badge, { backgroundColor: '#f59e0b15' }]}>
         <Text style={[styles.badgeText, { color: AMBER }]}>Gmail</Text>
       </View>
-    </View>
+    </Pressable>
+  );
+}
+
+function TripCard({ trip }: { trip: Trip }) {
+  const [expanded, setExpanded] = useState(false);
+  const dateRange = formatTripDateRange(trip.startDate, trip.endDate);
+  const dayLabel = trip.isToday ? 'Today · ' : trip.isTomorrow ? 'Tomorrow · ' : '';
+
+  return (
+    <Pressable style={styles.tripCard} onPress={() => setExpanded(v => !v)}>
+      <View style={styles.tripHeader}>
+        <View style={[styles.itemIcon, { backgroundColor: '#6366f115' }]}>
+          <Text style={styles.itemIconText}>🧳</Text>
+        </View>
+        <View style={styles.itemBody}>
+          <Text style={styles.itemTitle} numberOfLines={1}>{trip.destination}</Text>
+          <Text style={styles.itemSub}>{dayLabel}{dateRange} · {trip.items.length} booking{trip.items.length === 1 ? '' : 's'}</Text>
+        </View>
+        <Text style={styles.chevron}>{expanded ? '⌄' : '›'}</Text>
+      </View>
+      {expanded && (
+        <View style={styles.tripItems}>
+          {trip.items.map(item => <BookingRow key={item.id} item={item} />)}
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -58,18 +89,16 @@ function ItemRow({ item }: { item: UpcomingCalendarItem | UpcomingBookingItem })
 const byDate = (a: { date: Date }, b: { date: Date }) => a.date.getTime() - b.date.getTime();
 
 export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSettings }: Props) {
-  const { calendarItems, bookingItems } = upcomingData;
-  // Bookings with a resolved future travel date (e.g. a parsed flight date) join the
-  // Today/Tomorrow/Later timeline alongside calendar events; confirmations without one
-  // stay in "Recent bookings" below, ordered by when the email arrived.
-  const upcomingTravel = bookingItems.filter(b => b.isUpcomingTravel);
+  const { calendarItems, bookingItems, trips } = upcomingData;
+  // Bookings with a resolved future travel date are grouped into trip cards
+  // (below); calendar events keep their own Today/Tomorrow/Later timeline.
+  // Confirmations without a resolved date stay in "Recent bookings" below.
   const recentBookings = bookingItems.filter(b => !b.isUpcomingTravel);
-  const merged = [...calendarItems, ...upcomingTravel];
 
-  const today    = merged.filter(i => i.isToday).sort(byDate);
-  const tomorrow = merged.filter(i => i.isTomorrow).sort(byDate);
-  const later    = merged.filter(i => !i.isToday && !i.isTomorrow).sort(byDate);
-  const isEmpty  = merged.length === 0 && recentBookings.length === 0;
+  const today    = calendarItems.filter(i => i.isToday).sort(byDate);
+  const tomorrow = calendarItems.filter(i => i.isTomorrow).sort(byDate);
+  const later    = calendarItems.filter(i => !i.isToday && !i.isTomorrow).sort(byDate);
+  const isEmpty  = calendarItems.length === 0 && trips.length === 0 && recentBookings.length === 0;
   const notConnected = !googleAuthed;
 
   return (
@@ -105,9 +134,16 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSetti
           </View>
         )}
 
+        {trips.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>TRIPS</Text>
+            {trips.map(trip => <TripCard key={trip.id} trip={trip} />)}
+          </>
+        )}
+
         {today.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>TODAY</Text>
+            <Text style={[styles.sectionLabel, { marginTop: trips.length > 0 ? 20 : 0 }]}>TODAY</Text>
             {today.map(item => <ItemRow key={item.id} item={item} />)}
           </>
         )}
@@ -160,6 +196,11 @@ const styles = StyleSheet.create({
   itemSub:   { fontSize: 12, color: MUTED, marginTop: 2 },
   badge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   badgeText: { fontSize: 11, fontWeight: '600' },
+
+  tripCard:  { backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+  tripHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tripItems: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER, gap: 0 },
+  chevron:   { fontSize: 18, color: MUTED, flexShrink: 0 },
 
   emptyState:  { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
   emptyIcon:   { fontSize: 48, marginBottom: 16 },

@@ -49,19 +49,86 @@ export interface UpcomingBookingItem {
   isTomorrow: boolean;
   /** True when `date` is a resolved future travel date (parsed from the email), not just the confirmation's received date. */
   isUpcomingTravel: boolean;
+  /** End of the resolved date range (e.g. a return-flight date), if the email mentioned one. Falls back to `date` when grouping into a trip. */
+  travelDateEnd?: Date;
+  /** Best-effort destination name, e.g. parsed from a flight confirmation's route mention. */
+  destination?: string;
+  /** Gmail message ID — used to link back to the source email. */
+  gmailId: string;
 }
 
 export type UpcomingItem = UpcomingCalendarItem | UpcomingBookingItem;
 
+export interface Trip {
+  id: string;
+  /** Best-effort destination name; falls back to a generic "Trip" label when nothing parsed. */
+  destination: string;
+  startDate: Date;
+  endDate: Date;
+  items: UpcomingBookingItem[];
+  isToday: boolean;
+  isTomorrow: boolean;
+}
+
 export interface UpcomingData {
   calendarItems: UpcomingCalendarItem[];
   bookingItems: UpcomingBookingItem[];
+  trips: Trip[];
   fetchedAt: number;
   /** Set when the Gmail booking fetch failed outright (timeout, auth, API error) — surfaced in the UI instead of silently showing an empty list. */
   bookingsError?: string;
 }
 
-export const UPCOMING_EMPTY: UpcomingData = { calendarItems: [], bookingItems: [], fetchedAt: 0 };
+export const UPCOMING_EMPTY: UpcomingData = { calendarItems: [], bookingItems: [], trips: [], fetchedAt: 0 };
+
+// Bookings within this many days of each other's resolved date range are
+// treated as the same trip — a flight lands one day, a hotel check-in email
+// might resolve to the same or adjacent day depending on how its text parses.
+const TRIP_GROUPING_TOLERANCE_MS = 1.5 * 86400000;
+
+/**
+ * Groups upcoming-travel booking items into trips by overlapping (or
+ * near-overlapping) date range — not by destination text, since hotel/car
+ * rental confirmations format destinations far too inconsistently to match
+ * reliably against a flight's route. Date-range clustering is more robust:
+ * a flight, hotel, and car rental for the same trip will have overlapping
+ * date spans even when nothing in their text obviously matches.
+ */
+function groupIntoTrips(items: UpcomingBookingItem[], todayMs: number): Trip[] {
+  const sorted = [...items].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const clusters: UpcomingBookingItem[][] = [];
+
+  for (const item of sorted) {
+    const itemEnd = (item.travelDateEnd ?? item.date).getTime();
+    const cluster = clusters.find(c => {
+      const clusterEnd = Math.max(...c.map(i => (i.travelDateEnd ?? i.date).getTime()));
+      const clusterStart = Math.min(...c.map(i => i.date.getTime()));
+      return item.date.getTime() <= clusterEnd + TRIP_GROUPING_TOLERANCE_MS
+        && clusterStart <= itemEnd + TRIP_GROUPING_TOLERANCE_MS;
+    });
+    if (cluster) cluster.push(item);
+    else clusters.push([item]);
+  }
+
+  return clusters.map((clusterItems, idx) => {
+    const startDate = new Date(Math.min(...clusterItems.map(i => i.date.getTime())));
+    const endDate = new Date(Math.max(...clusterItems.map(i => (i.travelDateEnd ?? i.date).getTime())));
+    // Prefer a flight's destination (route text is the most reliable source), then any other item's.
+    const destination = clusterItems.find(i => i.bookingType === 'flight' && i.destination)?.destination
+      ?? clusterItems.find(i => i.destination)?.destination
+      ?? null;
+    const startMs = dayStart(startDate);
+    return {
+      id: `trip_${startDate.getTime()}_${idx}`,
+      destination: destination ?? 'Trip',
+      startDate,
+      endDate,
+      items: clusterItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
+      isToday: startMs === todayMs,
+      isTomorrow: startMs === todayMs + 86400000,
+    };
+  }).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+}
 
 function dayStart(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -100,6 +167,15 @@ function formatTravelSubtitle(date: Date): string {
   return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+function formatTripDateRange(start: Date, end: Date): string {
+  const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (dayStart(start) === dayStart(end)) return startStr;
+  const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${startStr} – ${endStr}`;
+}
+
+export { formatTripDateRange };
+
 export async function loadUpcomingEvents(googleAuthed: boolean): Promise<UpcomingData> {
   const [calResult, bookResult] = await Promise.allSettled([
     googleAuthed
@@ -137,7 +213,7 @@ export async function loadUpcomingEvents(googleAuthed: boolean): Promise<Upcomin
     .sort((a, b) => a.date.getTime() - b.date.getTime())
     .slice(0, 12);
 
-  const bookingItems: UpcomingBookingItem[] = bookings
+  const allBookingItems: UpcomingBookingItem[] = bookings
     .map(b => {
       const travelMs = b.travelDate ? new Date(b.travelDate).getTime() : NaN;
       const isUpcomingTravel = !Number.isNaN(travelMs) && travelMs >= todayMs;
@@ -146,6 +222,7 @@ export async function loadUpcomingEvents(googleAuthed: boolean): Promise<Upcomin
       return {
         kind: 'booking' as const,
         id: b.id,
+        gmailId: b.id,
         bookingType: b.type,
         icon: BOOKING_ICONS[b.type] ?? '📋',
         title: b.subject.length > 60 ? b.subject.slice(0, 57) + '…' : b.subject,
@@ -154,14 +231,18 @@ export async function loadUpcomingEvents(googleAuthed: boolean): Promise<Upcomin
         isToday: isUpcomingTravel && eventMs === todayMs,
         isTomorrow: isUpcomingTravel && eventMs === todayMs + 86400000,
         isUpcomingTravel,
+        travelDateEnd: b.travelDateEnd ? new Date(b.travelDateEnd) : undefined,
+        destination: b.destination,
       };
     })
     // Upcoming travel first (soonest first), then recent confirmations (most recent first).
     .sort((a, b) => {
       if (a.isUpcomingTravel !== b.isUpcomingTravel) return a.isUpcomingTravel ? -1 : 1;
       return a.isUpcomingTravel ? a.date.getTime() - b.date.getTime() : b.date.getTime() - a.date.getTime();
-    })
-    .slice(0, 8);
+    });
 
-  return { calendarItems, bookingItems, fetchedAt: Date.now(), bookingsError };
+  const trips = groupIntoTrips(allBookingItems.filter(b => b.isUpcomingTravel), todayMs);
+  const bookingItems = allBookingItems.slice(0, 8);
+
+  return { calendarItems, bookingItems, trips, fetchedAt: Date.now(), bookingsError };
 }

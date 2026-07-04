@@ -37,8 +37,11 @@ const MONTH_INDEX: Record<string, number> = {
 const MONTH_ALT = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
 
 const DATE_PATTERNS = [
-  new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?,?\\s*(\\d{4})?`, 'gi'),
-  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(\\d{4})?`, 'gi'),
+  new RegExp(`\\b(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?,?\\s*(\\d{4})?`, 'gi'),
+  // (?!\d) after the day group stops a bare "Month YYYY" mention (no day
+  // present) from being misparsed as day=<first 2 digits of the year> — e.g.
+  // "August 2026" would otherwise match as day 20, year undefined.
+  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?,?\\s*(\\d{4})?`, 'gi'),
   /\b(\d{4})-(\d{2})-(\d{2})\b/g,
 ];
 
@@ -119,6 +122,38 @@ export function extractTravelDate(text: string, reference: Date = new Date()): s
   const nearKeywords = nearestKeywordDates(scoped, reference);
   const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
   return pickBestDate(candidates, reference);
+}
+
+/**
+ * Same candidate selection as extractTravelDate, but keeps both ends of the
+ * range instead of just the earliest — a round-trip flight confirmation
+ * mentions both the outbound and return dates in one email, and we want the
+ * trip's full span, not just its start.
+ */
+export function extractTravelDateRange(text: string, reference: Date = new Date()): { start: string; end: string } | null {
+  const scoped = text.slice(0, 20_000);
+  const nearKeywords = nearestKeywordDates(scoped, reference);
+  const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
+  if (candidates.length === 0) return null;
+
+  const past = new Date(reference); past.setDate(past.getDate() - 1);
+  const future = new Date(reference); future.setDate(future.getDate() + 730);
+  const inRange = candidates.filter((d) => d >= past && d <= future).sort((a, b) => a.getTime() - b.getTime());
+  const pool = inRange.length > 0 ? inRange : [...candidates].sort((a, b) => a.getTime() - b.getTime());
+  if (pool.length === 0) return null;
+  return { start: pool[0].toISOString(), end: pool[pool.length - 1].toISOString() };
+}
+
+// Matches "London - Bilbao", "London to Bilbao" style route mentions — common
+// in flight confirmations, rare enough elsewhere (requires two capitalised
+// words either side) to be a reasonably safe heuristic. Takes the second city
+// as the destination, assuming outbound-first phrasing.
+const ROUTE_PATTERN = /\b[A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]{2,})?\s*(?:-|to)\s*([A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]{2,})?)\b/;
+
+/** Best-effort destination city/place, e.g. from a flight confirmation's route mention. Returns null if nothing route-shaped is found. */
+export function extractDestination(text: string): string | null {
+  const m = text.slice(0, 20_000).match(ROUTE_PATTERN);
+  return m ? m[1] : null;
 }
 
 // ── Gmail body extraction ──────────────────────────────────────────────────
@@ -233,7 +268,9 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
         // right next to the date here — a blind scan of a short snippet is
         // too likely to grab an unrelated date (a payment deadline, etc.)
         // and wrongly skip the more thorough full-body fetch below.
-        let travelDate = extractConfidentTravelDate(`${subject} ${snippet}`, now) ?? undefined;
+        const cheapText = `${subject} ${snippet}`;
+        let text = cheapText;
+        let travelDate = extractConfidentTravelDate(cheapText, now) ?? undefined;
         if (!travelDate) {
           try {
             const fullRes = await fetch(
@@ -243,10 +280,18 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
             const full = await fullRes.json() as { payload?: GmailPart };
             const bodyText = extractBodyText(full.payload);
             travelDate = extractTravelDate(bodyText, now) ?? undefined;
+            if (bodyText) text = bodyText;
           } catch {
             // Best-effort — fall back to no travel date rather than failing the whole booking.
           }
         }
+
+        // Reuses whichever text resolved the date above — a round-trip
+        // confirmation mentions both legs in the same email, so the range's
+        // end often differs from travelDate; the destination is a bonus
+        // label for grouping multiple bookings into one trip, not guaranteed.
+        const range = extractTravelDateRange(text, now);
+        const destination = extractDestination(text) ?? undefined;
 
         return {
           id,
@@ -256,6 +301,8 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
           from,
           date: parseEmailDate(get('Date')),
           travelDate,
+          travelDateEnd: range?.end,
+          destination,
         };
       })
     );
