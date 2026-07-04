@@ -205,6 +205,7 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
 
     const listData = await listRes.json() as { messages?: { id: string }[] };
     const messages = listData.messages ?? [];
+    console.log(`DBGUPCOMING listRes.status=${listRes.status} messages.length=${messages.length}`); // TEMP-DEBUG
     const now = new Date();
 
     const items: BookingItem[] = await Promise.all(
