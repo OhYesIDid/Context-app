@@ -100,13 +100,12 @@ function formatTravelSubtitle(date: Date): string {
   return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: boolean): Promise<UpcomingData> {
-  console.error(`DBGUPCOMING call googleAuthed=${googleAuthed} gmailConnected=${gmailConnected}`); // TEMP-DEBUG
+export async function loadUpcomingEvents(googleAuthed: boolean): Promise<UpcomingData> {
   const [calResult, bookResult] = await Promise.allSettled([
     googleAuthed
       ? getUpcomingCalendarEvents(30)
       : Promise.resolve([] as CalendarEvent[]),
-    gmailConnected
+    googleAuthed
       ? getBookingsContext(30)
       : Promise.resolve({ items: [] as BookingItem[], windowStart: '', windowEnd: '' }),
   ]);
@@ -116,10 +115,6 @@ export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: 
   const bookingsError = bookResult.status === 'rejected'
     ? (bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason))
     : undefined;
-  console.error(`DBGUPCOMING result calStatus=${calResult.status} bookStatus=${bookResult.status} bookingsCount=${bookings.length} bookingsError=${bookingsError} eventsCount=${events.length}`); // TEMP-DEBUG
-  if (bookResult.status === 'fulfilled') {
-    console.error(`DBGUPCOMING bookings=${JSON.stringify(bookings.map(b => ({ subject: b.subject, date: b.date, travelDate: b.travelDate })))}`); // TEMP-DEBUG
-  }
   const now = new Date();
   const todayMs = dayStart(now);
 

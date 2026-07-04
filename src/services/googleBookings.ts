@@ -197,6 +197,10 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
 
     if (listRes.status === 401) { invalidateToken(); throw new Error('Gmail access token expired. Please sign out and sign in again.'); }
     if (listRes.status === 403) {
+      // Don't keep reusing a token that's missing the gmail.readonly scope —
+      // force a fresh fetch on the next attempt instead of reusing this one
+      // for up to the full 45-minute cache TTL.
+      invalidateToken();
       throw new Error('Gmail access not granted. Please sign out and sign in again to allow booking lookups.');
     }
     if (!listRes.ok) {
@@ -205,7 +209,6 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
 
     const listData = await listRes.json() as { messages?: { id: string }[] };
     const messages = listData.messages ?? [];
-    console.error(`DBGUPCOMING listRes.status=${listRes.status} messages.length=${messages.length}`); // TEMP-DEBUG
     const now = new Date();
 
     const items: BookingItem[] = await Promise.all(

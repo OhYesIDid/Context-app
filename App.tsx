@@ -43,7 +43,7 @@ import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchO
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
 import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
-import { configureGoogleSignin, hasGmailScope, initAuth, isSignedIn, requestGmailScope, signOut } from './src/services/googleAuth';
+import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
 import { getCalendarData } from './src/services/googleCalendar';
 import { getBookingsContext } from './src/services/googleBookings';
 import { getEtaData } from './src/services/googleMaps';
@@ -117,7 +117,6 @@ export default function App() {
   const [newContactTone, setNewContactTone] = useState<Tone | undefined>(undefined);
   const [newContactSaving, setNewContactSaving] = useState(false);
   const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
-  const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
   const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
   const [serviceSettingsVisible, setServiceSettingsVisible] = useState(false);
@@ -165,10 +164,7 @@ export default function App() {
       setSetupComplete(map[SETUP_COMPLETE_KEY] === 'true');
     }).catch(() => setSetupComplete(false));
     configureGoogleSignin();
-    initAuth().then(() => {
-      setGoogleAuthed(isSignedIn());
-      setGmailConnected(hasGmailScope());
-    });
+    initAuth().then(() => setGoogleAuthed(isSignedIn()));
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
@@ -233,16 +229,16 @@ export default function App() {
           .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
           .catch(() => {});
       }).catch(() => {});
-      loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
+      loadUpcomingEvents(googleAuthed).then(setUpcomingData).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
-  }, [googleAuthed, gmailConnected]);
+  }, [googleAuthed]);
 
   useEffect(() => {
-    if (!googleAuthed && !gmailConnected) return;
-    loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
-  }, [googleAuthed, gmailConnected]);
+    if (!googleAuthed) return;
+    loadUpcomingEvents(googleAuthed).then(setUpcomingData).catch(() => {});
+  }, [googleAuthed]);
 
   useEffect(() => {
     if (!shareText) return;
@@ -255,7 +251,7 @@ export default function App() {
           try {
             if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
             if (key === 'calendar' && googleAuthed) enrichments.calendar = await getCalendarData(shareText);
-            if (key === 'bookings' && gmailConnected) enrichments.bookings = await getBookingsContext(Number(enrichmentPrefs.bookings?.lookbackDays ?? 30));
+            if (key === 'bookings' && googleAuthed) enrichments.bookings = await getBookingsContext(Number(enrichmentPrefs.bookings?.lookbackDays ?? 30));
           } catch {}
         }
         const input: SuggestReplyInput = { originalMessage: shareText, intents: detected as Intent[], enrichments };
@@ -440,7 +436,6 @@ export default function App() {
         <UpcomingScreen
           upcomingData={upcomingData}
           googleAuthed={googleAuthed}
-          gmailConnected={gmailConnected}
           onGoToSettings={() => setActiveTab('settings')}
         />
       )}
@@ -689,11 +684,11 @@ export default function App() {
             <View style={{ flex: 1 }}>
               <Text style={styles.settingText}>Gmail Bookings</Text>
               <Text style={styles.setupStatus}>
-                {gmailConnected ? 'Connected — booking lookups on' : 'Connect to look up reservations'}
+                {googleAuthed ? 'Booking lookups on' : 'Sign in with Google to enable'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {gmailConnected && <Text style={[styles.setupStatus, { color: '#4ade80' }]}>✓</Text>}
+              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80' }]}>✓</Text>}
               <Text style={styles.chevron}>›</Text>
             </View>
           </Pressable>
@@ -731,7 +726,7 @@ export default function App() {
                 loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
               }
               if (tab.key === 'upcoming') {
-                loadUpcomingEvents(googleAuthed, gmailConnected).then(setUpcomingData).catch(() => {});
+                loadUpcomingEvents(googleAuthed).then(setUpcomingData).catch(() => {});
               }
               setActiveTab(tab.key);
             }}>
@@ -956,21 +951,10 @@ export default function App() {
             <Text style={styles.modalTitle}>Gmail Bookings</Text>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingText}>{gmailConnected ? 'Gmail connected' : 'Connect Gmail'}</Text>
-                <Text style={styles.setupStatus}>{gmailConnected ? 'Booking lookups enabled' : 'Required to look up reservations'}</Text>
+                <Text style={styles.settingText}>{googleAuthed ? 'Gmail connected' : 'Sign in with Google'}</Text>
+                <Text style={styles.setupStatus}>{googleAuthed ? 'Booking lookups enabled' : 'Sign in with Google in Settings to enable'}</Text>
               </View>
-              {gmailConnected ? (
-                <Text style={[styles.setupStatus, { color: '#4ade80', fontWeight: '600' }]}>✓ On</Text>
-              ) : (
-                <Pressable style={styles.smallButton} onPress={async () => {
-                  if (!googleAuthed) { Alert.alert('Sign in first', 'Please sign in with Google Calendar first.'); return; }
-                  const ok = await requestGmailScope();
-                  if (ok) setGmailConnected(true);
-                  else Alert.alert('Permission denied', 'Gmail access is needed to look up your bookings.');
-                }}>
-                  <Text style={styles.smallButtonText}>Connect</Text>
-                </Pressable>
-              )}
+              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80', fontWeight: '600' }]}>✓ On</Text>}
             </View>
             <Text style={[styles.modalSection, { marginTop: 16 }]}>LOOKBACK PERIOD</Text>
             <View style={styles.chipRow}>

@@ -6,6 +6,10 @@ export function configureGoogleSignin(): void {
     scopes: [
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/contacts.readonly',
+      // Granted upfront with the base sign-in (not via a separate addScopes()
+      // call) — incremental authorization was producing tokens that Gmail's
+      // API rejected with 403 even after the scope showed as "connected".
+      'https://www.googleapis.com/auth/gmail.readonly',
     ],
     offlineAccess: false,
   });
@@ -48,26 +52,6 @@ export function invalidateToken(): void {
 
 export function isSignedIn(): boolean {
   return GoogleSignin.getCurrentUser() !== null;
-}
-
-// The native SDK persists granted scopes across app restarts (and process
-// kills) at the account level — this lets us restore `gmailConnected` on
-// launch instead of relying on the one-time "Connect" button tap, which only
-// ever set an in-memory flag that reset to false every time Android killed
-// the app.
-export function hasGmailScope(): boolean {
-  return GoogleSignin.getCurrentUser()?.scopes?.includes('https://www.googleapis.com/auth/gmail.readonly') ?? false;
-}
-
-export async function requestGmailScope(): Promise<boolean> {
-  try {
-    const result = await GoogleSignin.addScopes({
-      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
-    });
-    return result !== null;
-  } catch {
-    return false;
-  }
 }
 
 export async function signOut(): Promise<void> {

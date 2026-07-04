@@ -14,7 +14,6 @@ const MUTED   = '#71717a';
 interface Props {
   upcomingData: UpcomingData;
   googleAuthed: boolean;
-  gmailConnected: boolean;
   onGoToSettings: () => void;
 }
 
@@ -58,7 +57,7 @@ function ItemRow({ item }: { item: UpcomingCalendarItem | UpcomingBookingItem })
 
 const byDate = (a: { date: Date }, b: { date: Date }) => a.date.getTime() - b.date.getTime();
 
-export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnected, onGoToSettings }: Props) {
+export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSettings }: Props) {
   const { calendarItems, bookingItems } = upcomingData;
   // Bookings with a resolved future travel date (e.g. a parsed flight date) join the
   // Today/Tomorrow/Later timeline alongside calendar events; confirmations without one
@@ -71,7 +70,7 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnec
   const tomorrow = merged.filter(i => i.isTomorrow).sort(byDate);
   const later    = merged.filter(i => !i.isToday && !i.isTomorrow).sort(byDate);
   const isEmpty  = merged.length === 0 && recentBookings.length === 0;
-  const notConnected = !googleAuthed && !gmailConnected;
+  const notConnected = !googleAuthed;
 
   return (
     <View style={styles.root}>
@@ -90,8 +89,8 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnec
         {isEmpty && notConnected && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🗓</Text>
-            <Text style={styles.emptyTitle}>Connect Calendar or Gmail</Text>
-            <Text style={styles.emptySub}>Link Google Calendar and Gmail in Settings to see upcoming events and booking confirmations here.</Text>
+            <Text style={styles.emptyTitle}>Sign in with Google</Text>
+            <Text style={styles.emptySub}>Sign in with Google in Settings to see upcoming calendar events and booking confirmations here.</Text>
             <Pressable style={styles.connectBtn} onPress={onGoToSettings}>
               <Text style={styles.connectBtnText}>Go to Settings</Text>
             </Pressable>
