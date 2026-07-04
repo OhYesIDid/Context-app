@@ -165,8 +165,10 @@ export default function App() {
       setSetupComplete(map[SETUP_COMPLETE_KEY] === 'true');
     }).catch(() => setSetupComplete(false));
     configureGoogleSignin();
-    initAuth().then(() => setGoogleAuthed(isSignedIn()));
-    setGmailConnected(hasGmailScope());
+    initAuth().then(() => {
+      setGoogleAuthed(isSignedIn());
+      setGmailConnected(hasGmailScope());
+    });
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
