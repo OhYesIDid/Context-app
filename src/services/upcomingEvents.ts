@@ -57,6 +57,8 @@ export interface UpcomingData {
   calendarItems: UpcomingCalendarItem[];
   bookingItems: UpcomingBookingItem[];
   fetchedAt: number;
+  /** Set when the Gmail booking fetch failed outright (timeout, auth, API error) — surfaced in the UI instead of silently showing an empty list. */
+  bookingsError?: string;
 }
 
 export const UPCOMING_EMPTY: UpcomingData = { calendarItems: [], bookingItems: [], fetchedAt: 0 };
@@ -110,6 +112,9 @@ export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: 
 
   const events = calResult.status === 'fulfilled' ? calResult.value : [];
   const bookings = bookResult.status === 'fulfilled' ? bookResult.value.items : [];
+  const bookingsError = bookResult.status === 'rejected'
+    ? (bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason))
+    : undefined;
   const now = new Date();
   const todayMs = dayStart(now);
 
@@ -158,5 +163,5 @@ export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: 
     })
     .slice(0, 8);
 
-  return { calendarItems, bookingItems, fetchedAt: Date.now() };
+  return { calendarItems, bookingItems, fetchedAt: Date.now(), bookingsError };
 }

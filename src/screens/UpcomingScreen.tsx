@@ -4,6 +4,7 @@ import type { UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '..
 
 const PURPLE  = '#6366f1';
 const AMBER   = '#f59e0b';
+const RED     = '#ef4444';
 const BG      = '#0c0c0e';
 const SURFACE = '#18181b';
 const BORDER  = '#27272a';
@@ -79,6 +80,13 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnec
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        {upcomingData.bookingsError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerTitle}>Couldn't check Gmail for bookings</Text>
+            <Text style={styles.errorBannerText}>{upcomingData.bookingsError}</Text>
+          </View>
+        )}
+
         {isEmpty && notConnected && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🗓</Text>
@@ -140,6 +148,10 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },
 
   sectionLabel: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+
+  errorBanner:      { backgroundColor: '#ef444415', borderWidth: 1, borderColor: '#ef444433', borderRadius: 14, padding: 12, marginBottom: 16 },
+  errorBannerTitle: { fontSize: 13, fontWeight: '600', color: RED, marginBottom: 4 },
+  errorBannerText:  { fontSize: 12, color: MUTED },
 
   item:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
   itemIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
