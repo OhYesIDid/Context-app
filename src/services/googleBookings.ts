@@ -1,7 +1,10 @@
 import type { BookingContext, BookingItem, BookingType } from '../types';
 import { getAccessToken, invalidateToken } from './googleAuth';
 
-const REQUEST_TIMEOUT_MS = 15_000;
+// 25s (was 15s): the full-body fallback fetch adds a second, larger sequential
+// round-trip for any message where subject/snippet don't confidently resolve a
+// date — the whole getBookingsContext call shares this one timeout budget.
+const REQUEST_TIMEOUT_MS = 25_000;
 
 function classifyBooking(subject: string, from: string): BookingType {
   const s = (subject + ' ' + from).toLowerCase();
@@ -74,25 +77,48 @@ function findDatesInText(text: string, reference: Date): Date[] {
   return dates;
 }
 
-/** Extracts the most likely travel/event date from free text (subject, snippet, or full body). */
-export function extractTravelDate(text: string, reference: Date = new Date()): string | null {
-  const scoped = text.slice(0, 20_000);
+// HTML emails routinely put far more markup between a label like "Departing"
+// and its actual value than a hand-typed test string would — measured against
+// a real flight confirmation, tag-stripped distances landed at 69-166 chars
+// for genuinely related keyword/date pairs (vs. 300-900 for unrelated
+// instructional text mentioning "check-in" elsewhere in the email).
+const KEYWORD_WINDOW = 180;
 
-  const nearKeywords: Date[] = [];
+function nearestKeywordDates(scoped: string, reference: Date): Date[] {
+  const dates: Date[] = [];
   for (const m of scoped.matchAll(TRAVEL_KEYWORDS)) {
     const start = m.index ?? 0;
-    nearKeywords.push(...findDatesInText(scoped.slice(start, start + 60), reference));
+    dates.push(...findDatesInText(scoped.slice(start, start + KEYWORD_WINDOW), reference));
   }
+  return dates;
+}
 
-  const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
+function pickBestDate(candidates: Date[], reference: Date): string | null {
   if (candidates.length === 0) return null;
-
   const past = new Date(reference); past.setDate(past.getDate() - 1);
   const future = new Date(reference); future.setDate(future.getDate() + 730);
   const inRange = candidates.filter((d) => d >= past && d <= future).sort((a, b) => a.getTime() - b.getTime());
-
   const best = inRange[0] ?? [...candidates].sort((a, b) => a.getTime() - b.getTime())[0];
   return best ? best.toISOString() : null;
+}
+
+/**
+ * High-confidence only: a date sitting right next to a travel keyword
+ * ("departing", "check-in", ...). Used on cheap subject/snippet text, where a
+ * blind whole-text scan is too likely to latch onto an unrelated date (a
+ * payment deadline, an order number that looks like a date, etc.) and wrongly
+ * skip the more thorough full-body fetch.
+ */
+export function extractConfidentTravelDate(text: string, reference: Date = new Date()): string | null {
+  return pickBestDate(nearestKeywordDates(text.slice(0, 20_000), reference), reference);
+}
+
+/** Extracts the most likely travel/event date from free text — falls back to a blind scan of the whole body if no keyword-adjacent date is found. */
+export function extractTravelDate(text: string, reference: Date = new Date()): string | null {
+  const scoped = text.slice(0, 20_000);
+  const nearKeywords = nearestKeywordDates(scoped, reference);
+  const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
+  return pickBestDate(candidates, reference);
 }
 
 // ── Gmail body extraction ──────────────────────────────────────────────────
@@ -199,9 +225,11 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
         const snippet = msg.snippet ?? '';
 
         // Cheap first pass: subject + snippet often already contain the date
-        // (airlines routinely put it in the subject line). Only pay for a
-        // full-body fetch when that comes up empty.
-        let travelDate = extractTravelDate(`${subject} ${snippet}`, now) ?? undefined;
+        // (airlines routinely put it in the subject line). Require a keyword
+        // right next to the date here — a blind scan of a short snippet is
+        // too likely to grab an unrelated date (a payment deadline, etc.)
+        // and wrongly skip the more thorough full-body fetch below.
+        let travelDate = extractConfidentTravelDate(`${subject} ${snippet}`, now) ?? undefined;
         if (!travelDate) {
           try {
             const fullRes = await fetch(
