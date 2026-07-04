@@ -51,12 +51,25 @@ function BookingRow({ item }: { item: UpcomingBookingItem }) {
   );
 }
 
+function ItemRow({ item }: { item: UpcomingCalendarItem | UpcomingBookingItem }) {
+  return item.kind === 'calendar' ? <CalendarRow item={item} /> : <BookingRow item={item} />;
+}
+
+const byDate = (a: { date: Date }, b: { date: Date }) => a.date.getTime() - b.date.getTime();
+
 export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnected, onGoToSettings }: Props) {
   const { calendarItems, bookingItems } = upcomingData;
-  const today    = calendarItems.filter(i => i.isToday);
-  const tomorrow = calendarItems.filter(i => i.isTomorrow);
-  const later    = calendarItems.filter(i => !i.isToday && !i.isTomorrow);
-  const isEmpty  = calendarItems.length === 0 && bookingItems.length === 0;
+  // Bookings with a resolved future travel date (e.g. a parsed flight date) join the
+  // Today/Tomorrow/Later timeline alongside calendar events; confirmations without one
+  // stay in "Recent bookings" below, ordered by when the email arrived.
+  const upcomingTravel = bookingItems.filter(b => b.isUpcomingTravel);
+  const recentBookings = bookingItems.filter(b => !b.isUpcomingTravel);
+  const merged = [...calendarItems, ...upcomingTravel];
+
+  const today    = merged.filter(i => i.isToday).sort(byDate);
+  const tomorrow = merged.filter(i => i.isTomorrow).sort(byDate);
+  const later    = merged.filter(i => !i.isToday && !i.isTomorrow).sort(byDate);
+  const isEmpty  = merged.length === 0 && recentBookings.length === 0;
   const notConnected = !googleAuthed && !gmailConnected;
 
   return (
@@ -88,28 +101,28 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, gmailConnec
         {today.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>TODAY</Text>
-            {today.map(item => <CalendarRow key={item.id} item={item} />)}
+            {today.map(item => <ItemRow key={item.id} item={item} />)}
           </>
         )}
 
         {tomorrow.length > 0 && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>TOMORROW</Text>
-            {tomorrow.map(item => <CalendarRow key={item.id} item={item} />)}
+            {tomorrow.map(item => <ItemRow key={item.id} item={item} />)}
           </>
         )}
 
         {later.length > 0 && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>LATER</Text>
-            {later.map(item => <CalendarRow key={item.id} item={item} />)}
+            {later.map(item => <ItemRow key={item.id} item={item} />)}
           </>
         )}
 
-        {bookingItems.length > 0 && (
+        {recentBookings.length > 0 && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>RECENT BOOKINGS</Text>
-            {bookingItems.map(item => <BookingRow key={item.id} item={item} />)}
+            {recentBookings.map(item => <BookingRow key={item.id} item={item} />)}
           </>
         )}
       </ScrollView>

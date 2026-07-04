@@ -241,10 +241,15 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
 
       {/* Upcoming events card */}
       {(upcomingData.calendarItems.length > 0 || upcomingData.bookingItems.length > 0) && (() => {
-        const allItems = [
+        // Anything with a real date (calendar events + bookings with a resolved travel
+        // date) sorts chronologically first; confirmations with no known travel date
+        // (just "confirmed N days ago") are appended after.
+        const dated = [
           ...upcomingData.calendarItems.map(i => ({ ...i, source: 'cal' as const })),
-          ...upcomingData.bookingItems.map(i => ({ ...i, source: 'gmail' as const })),
-        ];
+          ...upcomingData.bookingItems.filter(b => b.isUpcomingTravel).map(i => ({ ...i, source: 'gmail' as const })),
+        ].sort((a, b) => a.date.getTime() - b.date.getTime());
+        const recent = upcomingData.bookingItems.filter(b => !b.isUpcomingTravel).map(i => ({ ...i, source: 'gmail' as const }));
+        const allItems = [...dated, ...recent];
         const PREVIEW_COUNT = 5;
         const shown = upcomingExpanded ? allItems : allItems.slice(0, PREVIEW_COUNT);
         const hiddenCount = allItems.length - PREVIEW_COUNT;

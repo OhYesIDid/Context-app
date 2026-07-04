@@ -40,7 +40,8 @@ export interface BookingItem {
   subject: string;
   snippet: string;
   from: string;
-  date: string;             // ISO string parsed from email Date header
+  date: string;             // ISO string parsed from email Date header (when the confirmation arrived)
+  travelDate?: string;      // ISO string parsed from the email body/subject (when the trip/event actually happens), if found
   relevanceFrom?: string;   // Phase 2: populated by local sync when booking activates
   relevanceUntil?: string;  // Phase 2: populated by local sync when booking expires
 }

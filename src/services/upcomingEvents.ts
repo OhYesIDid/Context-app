@@ -45,6 +45,10 @@ export interface UpcomingBookingItem {
   title: string;
   subtitle: string;
   date: Date;
+  isToday: boolean;
+  isTomorrow: boolean;
+  /** True when `date` is a resolved future travel date (parsed from the email), not just the confirmation's received date. */
+  isUpcomingTravel: boolean;
 }
 
 export type UpcomingItem = UpcomingCalendarItem | UpcomingBookingItem;
@@ -85,6 +89,15 @@ function formatBookingSubtitle(item: BookingItem): string {
   return `Confirmed ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
 }
 
+function formatTravelSubtitle(date: Date): string {
+  const now = new Date();
+  const todayMs = dayStart(now);
+  const eventMs = dayStart(date);
+  if (eventMs === todayMs) return 'Today';
+  if (eventMs === todayMs + 86400000) return 'Tomorrow';
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: boolean): Promise<UpcomingData> {
   const [calResult, bookResult] = await Promise.allSettled([
     googleAuthed
@@ -120,16 +133,29 @@ export async function loadUpcomingEvents(googleAuthed: boolean, gmailConnected: 
     .slice(0, 12);
 
   const bookingItems: UpcomingBookingItem[] = bookings
-    .map(b => ({
-      kind: 'booking' as const,
-      id: b.id,
-      bookingType: b.type,
-      icon: BOOKING_ICONS[b.type] ?? '📋',
-      title: b.subject.length > 60 ? b.subject.slice(0, 57) + '…' : b.subject,
-      subtitle: formatBookingSubtitle(b),
-      date: new Date(b.date),
-    }))
-    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .map(b => {
+      const travelMs = b.travelDate ? new Date(b.travelDate).getTime() : NaN;
+      const isUpcomingTravel = !Number.isNaN(travelMs) && travelMs >= todayMs;
+      const date = isUpcomingTravel ? new Date(travelMs) : new Date(b.date);
+      const eventMs = dayStart(date);
+      return {
+        kind: 'booking' as const,
+        id: b.id,
+        bookingType: b.type,
+        icon: BOOKING_ICONS[b.type] ?? '📋',
+        title: b.subject.length > 60 ? b.subject.slice(0, 57) + '…' : b.subject,
+        subtitle: isUpcomingTravel ? formatTravelSubtitle(date) : formatBookingSubtitle(b),
+        date,
+        isToday: isUpcomingTravel && eventMs === todayMs,
+        isTomorrow: isUpcomingTravel && eventMs === todayMs + 86400000,
+        isUpcomingTravel,
+      };
+    })
+    // Upcoming travel first (soonest first), then recent confirmations (most recent first).
+    .sort((a, b) => {
+      if (a.isUpcomingTravel !== b.isUpcomingTravel) return a.isUpcomingTravel ? -1 : 1;
+      return a.isUpcomingTravel ? a.date.getTime() - b.date.getTime() : b.date.getTime() - a.date.getTime();
+    })
     .slice(0, 8);
 
   return { calendarItems, bookingItems, fetchedAt: Date.now() };
