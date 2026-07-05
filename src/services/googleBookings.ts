@@ -219,7 +219,10 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - lookbackDays);
 
-  const query = `(category:travel OR category:purchases) newer_than:${lookbackDays}d`;
+  // Scoped to travel + event confirmations only — category:purchases pulled
+  // in every online order/bill regardless of relevance, which is not what
+  // the Upcoming tab's booking view is for.
+  const query = `(category:travel OR ticket OR tickets OR event OR concert OR theatre OR theater OR cinema OR eventbrite) newer_than:${lookbackDays}d`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -246,7 +249,15 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
     const messages = listData.messages ?? [];
     const now = new Date();
 
-    const items: BookingItem[] = await Promise.all(
+    // Only travel/event bookings belong in the Upcoming tab — a delivery or
+    // restaurant confirmation slipping through the query above (Gmail's
+    // categorization is approximate) shouldn't consume a full-body fetch or
+    // show up as a "booking", and definitely shouldn't be eligible for trip
+    // grouping (a stray date inside one can otherwise corrupt a real trip's
+    // date range).
+    const RELEVANT_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'event'];
+
+    const items: (BookingItem | null)[] = await Promise.all(
       messages.slice(0, 10).map(async ({ id }) => {
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
@@ -262,6 +273,9 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
         const subject = get('Subject');
         const from = get('From');
         const snippet = msg.snippet ?? '';
+
+        const type = classifyBooking(subject, from);
+        if (!RELEVANT_TYPES.includes(type)) return null;
 
         // Cheap first pass: subject + snippet often already contain the date
         // (airlines routinely put it in the subject line). Require a keyword
@@ -295,7 +309,7 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
 
         return {
           id,
-          type: classifyBooking(subject, from),
+          type,
           subject,
           snippet,
           from,
@@ -307,7 +321,7 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
       })
     );
 
-    return { items, windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
+    return { items: items.filter((item): item is BookingItem => item !== null), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error('Bookings request timed out — check your connection and try again.');
