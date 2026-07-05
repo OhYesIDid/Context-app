@@ -95,6 +95,149 @@ interface EnrichmentData {
   emotion?: { emotion: string; confidence: 'high' | 'low' };
 }
 
+// ── Booking classification ────────────────────────────────────────────────────
+// Replaces regex/keyword-based email classification and date extraction
+// (previously in src/services/googleBookings.ts). Every hand-written pattern
+// there eventually broke on real vendor variance it didn't anticipate — this
+// hands the "read this email and figure out what it means" step to the model
+// actually suited to free-form text, while the cheap Gmail search filter
+// (category + vendor keywords) still does all the volume control upstream of
+// this call.
+
+type ClassifiedBookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'event' | null;
+
+interface ClassifyCandidate {
+  id: string;
+  subject: string;
+  from: string;
+  // The cheap pass sends the Gmail snippet; if the model can't resolve a
+  // confident date from that alone, the caller re-sends this same shape with
+  // the full decoded email body instead.
+  text: string;
+}
+
+interface ClassifyBookingsRequest {
+  candidates: ClassifyCandidate[];
+}
+
+interface ClassifiedBooking {
+  id: string;
+  type: ClassifiedBookingType;
+  // false = type looks right but there isn't enough text here to resolve a
+  // date confidently — caller should retry this id with the full email body.
+  confident: boolean;
+  travelDate?: string;
+  travelDateEnd?: string;
+  destination?: string;
+}
+
+const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and extract key details. You will be given a batch of emails (id, subject, sender, and either a short snippet or the full body text). For EACH one:
+
+1. Decide if it is a genuine booking CONFIRMATION for the recipient's own upcoming travel or event: flight, hotel, train, bus/coach, or ticketed event.
+   - type = null (and skip the rest) if it is: a bill or receipt for something unrelated to travel, a delivery/shipping notice, a promotional/marketing email, a booking that is still PENDING/requested (not yet confirmed), a CANCELLED booking, a reply/forward of a thread (subject starts with "Re:" or "Fwd:"), or a notification about someone ELSE's booking (e.g. an Airbnb host being told a guest is arriving at their own listed property — that is not the recipient's own travel).
+   - Named ticketing vendors only for type "event" (Eventbrite, Ticketmaster, etc.) — a bare mention of the word "ticket" or "event" in a promotional email is not a booking.
+2. If it is a genuine booking, extract:
+   - travelDate: the trip's start date (ISO 8601 date, e.g. "2026-08-06").
+   - travelDateEnd: the return/end date, ONLY if this is a round trip or multi-day stay with a distinct end date. Omit entirely otherwise (do not repeat travelDate).
+   - destination: best-effort city or place name, if determinable. Omit if unclear.
+3. Round-trip and multi-leg emails use inconsistent label pairs for outbound vs inbound legs across different vendors — e.g. "Departure:"/"Return:", "Departing:"/"Arrival:", "Outbound:"/"Inbound:". Read whichever pair is actually used; do not expect one specific pair.
+4. Airline "online check-in" window mentions (e.g. "online check-in opens 24 hours before departure", "check-in available from...") describe when self-service check-in opens, NOT the travel date — ignore any date attached specifically to that phrase.
+5. If the subject/sender clearly indicates a real booking type but there is not enough text here to confidently resolve a date (this will usually be true when given only a short snippet, not the full body), set confident: false and omit the date fields — the caller will retry with the full email body.
+
+Respond ONLY with valid JSON, no markdown, no explanation:
+{"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"event"|null,"confident":true|false,"travelDate":"...","travelDateEnd":"...","destination":"..."}]}`;
+
+const CLASSIFY_MODEL = 'claude-sonnet-4-6';
+const CLASSIFY_MAX_TOKENS = 4096;
+
+function parseClassifyResponse(raw: string, candidateIds: string[]): ClassifiedBooking[] {
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  let parsed: { results?: unknown[] };
+  try {
+    parsed = JSON.parse(cleaned) as { results?: unknown[] };
+  } catch {
+    // Malformed output — treat every candidate in this batch as unresolved
+    // rather than guessing; the caller will just retry on the next sync.
+    return candidateIds.map((id) => ({ id, type: null, confident: false }));
+  }
+  const idSet = new Set(candidateIds);
+  const validTypes = new Set(['flight', 'hotel', 'train', 'bus', 'event']);
+  const results = (parsed.results ?? [])
+    .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+    .filter((r) => typeof r.id === 'string' && idSet.has(r.id))
+    .map((r): ClassifiedBooking => {
+      const type = typeof r.type === 'string' && validTypes.has(r.type) ? r.type as ClassifiedBookingType : null;
+      return {
+        id: r.id as string,
+        type,
+        confident: r.confident === true,
+        travelDate: typeof r.travelDate === 'string' ? r.travelDate : undefined,
+        travelDateEnd: typeof r.travelDateEnd === 'string' ? r.travelDateEnd : undefined,
+        destination: typeof r.destination === 'string' ? r.destination : undefined,
+      };
+    });
+  // Any candidate the model dropped entirely is treated as unresolved, not
+  // silently excluded — a missing id is a model error, not evidence it's not
+  // a booking.
+  const resultIds = new Set(results.map((r) => r.id));
+  for (const id of candidateIds) {
+    if (!resultIds.has(id)) results.push({ id, type: null, confident: false });
+  }
+  return results;
+}
+
+async function handleClassifyBookings(rawBody: string, env: Env): Promise<Response> {
+  let body: ClassifyBookingsRequest;
+  try {
+    body = JSON.parse(rawBody) as ClassifyBookingsRequest;
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+  if (!Array.isArray(body.candidates) || body.candidates.length === 0) {
+    return new Response(JSON.stringify({ results: [] }), {
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+
+  const candidateIds = body.candidates.map((c) => c.id);
+  const userPrompt = JSON.stringify(body.candidates.map((c) => ({
+    id: c.id, subject: c.subject, from: c.from, text: c.text.slice(0, 8000),
+  })));
+
+  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: CLASSIFY_MODEL,
+      max_tokens: CLASSIFY_MAX_TOKENS,
+      system: CLASSIFY_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!claudeRes.ok) {
+    const err = await claudeRes.json().catch(() => ({})) as { error?: { message?: string } };
+    return new Response(
+      JSON.stringify({ error: err?.error?.message ?? `Claude API error ${claudeRes.status}` }),
+      { status: 502, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
+    );
+  }
+
+  const data = await claudeRes.json() as { content?: { text: string }[] };
+  const raw = data.content?.[0]?.text?.trim() ?? '';
+  const results = parseClassifyResponse(raw, candidateIds);
+
+  return new Response(JSON.stringify({ results }), {
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  });
+}
+
 interface SuggestRequest {
   message: string;
   intents?: string[];
@@ -549,6 +692,14 @@ export default {
           },
         });
       }
+    }
+
+    // Booking classification — POST /classify-bookings. Shares the auth and
+    // rate-limit checks above with the default /suggest handling below, but
+    // has its own request/response shape, so it's routed before the
+    // SuggestRequest parsing rather than folded into it.
+    if (new URL(request.url).pathname === '/classify-bookings') {
+      return handleClassifyBookings(rawBody, env);
     }
 
     let body: SuggestRequest;

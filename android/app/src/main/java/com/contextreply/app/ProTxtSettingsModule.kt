@@ -52,6 +52,28 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // Signs a worker request the same way WorkerClient.kt does for the native
+    // background reply-suggestion path — reused here so the JS-side booking
+    // classification calls (googleBookings.ts) can pass the worker's HMAC
+    // check too, without duplicating WORKER_SECRET into the JS bundle at all.
+    @ReactMethod
+    fun signWorkerRequest(timestamp: String, body: String, promise: Promise) {
+        try {
+            val secret = BuildConfig.WORKER_SECRET
+            if (secret.isEmpty()) {
+                promise.resolve("")
+                return
+            }
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+            val signature = mac.doFinal("$timestamp.$body".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            promise.resolve(signature)
+        } catch (e: Exception) {
+            promise.reject("SIGN_FAILED", e)
+        }
+    }
+
     @ReactMethod
     fun refreshBubbleState() {
         ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()

@@ -1,3 +1,4 @@
+import { NativeModules } from 'react-native';
 import type { BookingContext, BookingItem, BookingType } from '../types';
 import { getAccessToken, invalidateToken } from './googleAuth';
 
@@ -7,55 +8,7 @@ import { getAccessToken, invalidateToken } from './googleAuth';
 // this one timeout budget.
 const REQUEST_TIMEOUT_MS = 35_000;
 
-function classifyBooking(subject: string, from: string): BookingType {
-  // A reply/forward carries quoted history from the original thread, which
-  // confuses date extraction, and isn't itself a fresh confirmation.
-  if (/^\s*(re|fwd?)\s*:/i.test(subject)) return 'other';
-
-  // Underscores/hyphens are \w characters, so \b treats them as part of a
-  // word, not a boundary — "en_flight_noreply@trip.com" (a real sender
-  // address) is one unbroken "word" to \bflight\b and never matches.
-  // Normalizing them to spaces first lets \b work the way a human reading
-  // "en_flight_noreply" as three separate words would expect.
-  const s = (subject + ' ' + from).toLowerCase().replace(/[_-]/g, ' ');
-
-  // A cancelled or still-pending (not yet confirmed) booking isn't upcoming
-  // travel regardless of type — a pending request can still be rejected or
-  // expire.
-  if (/cancell?ed/.test(s)) return 'other';
-  if (/pending.{0,20}(?:reservation|booking)/.test(s)) return 'other';
-
-  if (/\b(?:flight|airline|airways|boarding pass|easyjet|ryanair|ba\.com|lufthansa|heathrow|gatwick)\b/.test(s)) return 'flight';
-
-  // Airbnb host-side notifications (about someone else's stay at the user's
-  // own listed room) share every keyword a genuine hotel confirmation has
-  // ("airbnb", "reservation") — exclude the host-facing phrasing Airbnb
-  // actually sends before falling through to the generic hotel match, so a
-  // guest booking the user's spare room doesn't get treated as the user's
-  // own upcoming trip. Some of these ("Reservation confirmed - Marcel
-  // Krämer arrives 11 Aug") use the exact same "reservation/booking
-  // confirmed" wording a genuine guest-side confirmation would — no single
-  // phrase distinguishes them, so the "<name> arrives <date>" structure is
-  // checked too, gated behind the sender actually being Airbnb to avoid
-  // ever misreading an unrelated email that happens to mention someone
-  // else's arrival time.
-  if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|(?:reservation|booking)\s+request|you have a new (?:reservation|booking)/.test(s)) return 'other';
-  if (/airbnb/.test(from.toLowerCase()) && /\barrives?\s+\d{1,2}\b|\bis\s+arriving\b|\bchecks?\s?in(?:s|g)?\s+\d{1,2}\b/i.test(subject)) return 'other';
-
-  if (/\b(?:hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation)\b/.test(s)) return 'hotel';
-  // \b boundaries matter here specifically — "tfl" (Transport for London)
-  // is a bare substring of "netflix", so a Netflix payment receipt was
-  // getting misclassified as a train booking without them.
-  if (/\b(?:train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern)\b/.test(s)) return 'train';
-  if (/\b(?:coach|bus station|national express|megabus|flixbus|stagecoach|greyhound)\b/.test(s)) return 'bus';
-  if (/\b(?:delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd)\b/.test(s)) return 'delivery';
-  if (/\b(?:restaurant|reservation|opentable|resy|sevenrooms)\b/.test(s)) return 'restaurant';
-  // Named ticketing vendors only — bare words like "ticket"/"event"/"concert"
-  // match any promotional email that mentions them (a venue's marketing
-  // blast, a "big event this weekend" newsletter), not just real bookings.
-  if (/\b(?:eventbrite|ticketmaster|seetickets|see tickets|ticketek|dice\.fm|songkick|gigantic\.com|skiddle|wegottickets|fatsoma|axs\.com)\b/.test(s)) return 'event';
-  return 'other';
-}
+const WORKER_URL = process.env.EXPO_PUBLIC_WORKER_URL;
 
 function parseEmailDate(raw: string): string {
   try {
@@ -65,167 +18,66 @@ function parseEmailDate(raw: string): string {
   }
 }
 
-// ── Travel date extraction ─────────────────────────────────────────────────
-// Best-effort: airline/hotel/train confirmations phrase dates wildly
-// differently, so this is a heuristic, not a guarantee. Keyword-adjacent
-// matches are trusted over bare full-text scans.
+// ── Booking classification ──────────────────────────────────────────────────
+// Regex/keyword classification and date extraction used to live here. It hit
+// a structural ceiling: every fix uncovered a differently-shaped bug (Gmail
+// category labels that don't mean what they say, round-trip label pairs that
+// vary by vendor, an airline's "online check-in" text sitting right next to
+// the real date, a bare abbreviation colliding with an unrelated word inside
+// a sender address). Interpreting free-form vendor text is exactly what an
+// LLM is suited for and regex isn't — this delegates that step to Claude via
+// a dedicated worker endpoint, while the Gmail search filter below (category
+// + vendor keywords) still does all the volume control before any of this
+// runs, same as before.
 
-const MONTH_INDEX: Record<string, number> = {
-  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-};
-const MONTH_ALT = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+interface ClassifyCandidate {
+  id: string;
+  subject: string;
+  from: string;
+  text: string;
+}
 
-const DATE_PATTERNS = [
-  new RegExp(`\\b(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?,?\\s*(\\d{4})?`, 'gi'),
-  // (?!\d) after the day group stops a bare "Month YYYY" mention (no day
-  // present) from being misparsed as day=<first 2 digits of the year> — e.g.
-  // "August 2026" would otherwise match as day 20, year undefined.
-  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?,?\\s*(\\d{4})?`, 'gi'),
-  /\b(\d{4})-(\d{2})-(\d{2})\b/g,
-];
+interface ClassifiedBooking {
+  id: string;
+  type: BookingType | null;
+  confident: boolean;
+  travelDate?: string;
+  travelDateEnd?: string;
+  destination?: string;
+}
 
-// "return"/"inbound" cover round-trip labels like "Departure: ... / Return:
-// ..." — without them, a round-trip email that happens to resolve its
-// outbound date via keyword-adjacency never falls back to the blind
-// whole-text scan (since that fallback only triggers when ZERO
-// keyword-adjacent candidates are found), silently dropping the return date
-// even though it's sitting right next to a "Return:" label.
-const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|check[- ]?in|arriv(?:al|ing)|outbound|inbound|return(?:ing)?|boarding|travel date|flight date|date of travel|estimated delivery/gi;
+async function classifyBookingsBatch(candidates: ClassifyCandidate[]): Promise<ClassifiedBooking[]> {
+  if (candidates.length === 0) return [];
+  if (!WORKER_URL) throw new Error('EXPO_PUBLIC_WORKER_URL is not set — booking classification requires the worker.');
 
-// Airline confirmation emails routinely mention when the *online check-in
-// window* opens ("Online Check-in Available Time: 18:00 Aug 5 - 15:00 Aug
-// 6"), which is the day before departure, not the travel date. Excluding
-// this phrase from TRAVEL_KEYWORDS alone isn't enough — if it's the only
-// keyword match in the email, removing it just leaves zero keyword-adjacent
-// candidates, which falls through to the blind whole-text scan, and that
-// scan doesn't check keywords at all so it picks the wrong date right back
-// up. Blanking out a window of text around the phrase (verified against a
-// real Wizz Air/Trip.com confirmation) keeps it out of both extraction
-// paths at once.
-const CHECKIN_WINDOW_MENTION = /online\s+check[- ]?in|check[- ]?in\s+(?:is\s+)?available/gi;
-const CHECKIN_WINDOW_REDACT_CHARS = 300;
+  const rawBody = JSON.stringify({ candidates });
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  // The worker requires HMAC-SHA256 signing (same as the native reply-
+  // suggestion path) — signed natively so WORKER_SECRET never needs to be
+  // duplicated into the JS bundle.
+  const signature: string = await NativeModules.ProTxtSettings.signWorkerRequest(timestamp, rawBody);
 
-function redactCheckinWindows(text: string): string {
-  let result = text;
-  for (const m of text.matchAll(CHECKIN_WINDOW_MENTION)) {
-    const start = m.index ?? 0;
-    const end = Math.min(text.length, start + CHECKIN_WINDOW_REDACT_CHARS);
-    result = result.slice(0, start) + ' '.repeat(end - start) + result.slice(end);
+  const res = await fetch(`${WORKER_URL}/classify-bookings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Timestamp': timestamp,
+      ...(signature ? { 'X-Signature': signature } : {}),
+    },
+    body: rawBody,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(err.error ?? `Booking classification failed (${res.status})`);
   }
-  return result;
-}
-
-function buildDate(year: number | undefined, month: number, day: number, reference: Date): Date | null {
-  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
-  if (year) return new Date(year, month, day, 12, 0, 0);
-  // No year in the text — assume this year, but roll to next year if that's
-  // more than a few days in the past (email is dated relative to "now").
-  const guess = new Date(reference.getFullYear(), month, day, 12, 0, 0);
-  const graceCutoff = new Date(reference);
-  graceCutoff.setDate(graceCutoff.getDate() - 3);
-  return guess < graceCutoff ? new Date(reference.getFullYear() + 1, month, day, 12, 0, 0) : guess;
-}
-
-function findDatesInText(text: string, reference: Date): Date[] {
-  const dates: Date[] = [];
-
-  for (const m of text.matchAll(DATE_PATTERNS[0])) {
-    const day = parseInt(m[1], 10);
-    const month = MONTH_INDEX[m[2].toLowerCase().slice(0, 3)];
-    const d = buildDate(m[3] ? parseInt(m[3], 10) : undefined, month, day, reference);
-    if (d) dates.push(d);
-  }
-  for (const m of text.matchAll(DATE_PATTERNS[1])) {
-    const month = MONTH_INDEX[m[1].toLowerCase().slice(0, 3)];
-    const day = parseInt(m[2], 10);
-    const d = buildDate(m[3] ? parseInt(m[3], 10) : undefined, month, day, reference);
-    if (d) dates.push(d);
-  }
-  for (const m of text.matchAll(DATE_PATTERNS[2])) {
-    const d = buildDate(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), reference);
-    if (d) dates.push(d);
-  }
-  return dates;
-}
-
-// HTML emails routinely put far more markup between a label like "Departing"
-// and its actual value than a hand-typed test string would — measured against
-// a real flight confirmation, tag-stripped distances landed at 69-166 chars
-// for genuinely related keyword/date pairs (vs. 300-900 for unrelated
-// instructional text mentioning "check-in" elsewhere in the email).
-const KEYWORD_WINDOW = 180;
-
-function nearestKeywordDates(scoped: string, reference: Date): Date[] {
-  const dates: Date[] = [];
-  for (const m of scoped.matchAll(TRAVEL_KEYWORDS)) {
-    const start = m.index ?? 0;
-    dates.push(...findDatesInText(scoped.slice(start, start + KEYWORD_WINDOW), reference));
-  }
-  return dates;
-}
-
-function pickBestDate(candidates: Date[], reference: Date): string | null {
-  if (candidates.length === 0) return null;
-  const past = new Date(reference); past.setDate(past.getDate() - 1);
-  const future = new Date(reference); future.setDate(future.getDate() + 730);
-  const inRange = candidates.filter((d) => d >= past && d <= future).sort((a, b) => a.getTime() - b.getTime());
-  const best = inRange[0] ?? [...candidates].sort((a, b) => a.getTime() - b.getTime())[0];
-  return best ? best.toISOString() : null;
-}
-
-/**
- * High-confidence only: a date sitting right next to a travel keyword
- * ("departing", "check-in", ...). Used on cheap subject/snippet text, where a
- * blind whole-text scan is too likely to latch onto an unrelated date (a
- * payment deadline, an order number that looks like a date, etc.) and wrongly
- * skip the more thorough full-body fetch.
- */
-export function extractConfidentTravelDate(text: string, reference: Date = new Date()): string | null {
-  return pickBestDate(nearestKeywordDates(redactCheckinWindows(text.slice(0, 20_000)), reference), reference);
-}
-
-/** Extracts the most likely travel/event date from free text — falls back to a blind scan of the whole body if no keyword-adjacent date is found. */
-export function extractTravelDate(text: string, reference: Date = new Date()): string | null {
-  const scoped = redactCheckinWindows(text.slice(0, 20_000));
-  const nearKeywords = nearestKeywordDates(scoped, reference);
-  const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
-  return pickBestDate(candidates, reference);
-}
-
-/**
- * Same candidate selection as extractTravelDate, but keeps both ends of the
- * range instead of just the earliest — a round-trip flight confirmation
- * mentions both the outbound and return dates in one email, and we want the
- * trip's full span, not just its start.
- */
-export function extractTravelDateRange(text: string, reference: Date = new Date()): { start: string; end: string } | null {
-  const scoped = redactCheckinWindows(text.slice(0, 20_000));
-  const nearKeywords = nearestKeywordDates(scoped, reference);
-  const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
-  if (candidates.length === 0) return null;
-
-  const past = new Date(reference); past.setDate(past.getDate() - 1);
-  const future = new Date(reference); future.setDate(future.getDate() + 730);
-  const inRange = candidates.filter((d) => d >= past && d <= future).sort((a, b) => a.getTime() - b.getTime());
-  const pool = inRange.length > 0 ? inRange : [...candidates].sort((a, b) => a.getTime() - b.getTime());
-  if (pool.length === 0) return null;
-  return { start: pool[0].toISOString(), end: pool[pool.length - 1].toISOString() };
-}
-
-// Matches "London - Bilbao", "London to Bilbao" style route mentions — common
-// in flight confirmations, rare enough elsewhere (requires two capitalised
-// words either side) to be a reasonably safe heuristic. Takes the second city
-// as the destination, assuming outbound-first phrasing.
-const ROUTE_PATTERN = /\b[A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]{2,})?\s*(?:-|to)\s*([A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]{2,})?)\b/;
-
-/** Best-effort destination city/place, e.g. from a flight confirmation's route mention. Returns null if nothing route-shaped is found. */
-export function extractDestination(text: string): string | null {
-  const m = text.slice(0, 20_000).match(ROUTE_PATTERN);
-  return m ? m[1] : null;
+  const data = await res.json() as { results?: ClassifiedBooking[] };
+  return data.results ?? [];
 }
 
 // ── Gmail body extraction ──────────────────────────────────────────────────
+// MIME parsing only — nothing here interprets what the email means, just
+// decodes the raw content so classifyBookingsBatch has readable text to work
+// with when a cheap subject/snippet pass isn't confident enough.
 
 interface GmailPart {
   mimeType?: string;
@@ -308,7 +160,7 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // -category:promotions cuts marketing/spam off at the source instead —
   // the bare keyword search tried previously ("ticket", "event", "concert")
   // matched any promotional email mentioning those words, which is exactly
-  // the spam this excludes; the type allowlist below does the rest.
+  // the spam this excludes; classification below does the rest.
   //
   // Confirmed live: a real Trip.com "Payment Successful"/"Flight Booking
   // Confirmed" pair was tagged category:updates by Gmail — neither travel
@@ -370,22 +222,9 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
       }
     }
 
-    const now = new Date();
-
-    // Only travel/event bookings belong in the Upcoming tab — a delivery or
-    // restaurant confirmation slipping through the query above (Gmail's
-    // categorization is approximate) shouldn't consume a full-body fetch or
-    // show up as a "booking", and definitely shouldn't be eligible for trip
-    // grouping (a stray date inside one can otherwise corrupt a real trip's
-    // date range).
-    const RELEVANT_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'bus', 'event'];
-
-    // Irrelevant messages (Airbnb host notifications, other purchases still
-    // matched by the query above) only cost a cheap metadata fetch each —
-    // the RELEVANT_TYPES filter below runs before any full-body fetch, so
-    // processing more of them doesn't add much latency, since they all run
-    // concurrently via Promise.all.
-    const items: (BookingItem | null)[] = await Promise.all(
+    // Fetch metadata (subject/from/snippet/date) for every candidate — cheap,
+    // and needed regardless of how classification happens.
+    const metas = await Promise.all(
       messageIds.slice(0, maxMessages).map(async (id) => {
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
@@ -398,58 +237,63 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
         };
         const headers = msg.payload?.headers ?? [];
         const get = (name: string) => headers.find((h) => h.name === name)?.value ?? '';
-        const subject = get('Subject');
-        const from = get('From');
-        const snippet = msg.snippet ?? '';
-
-        const type = classifyBooking(subject, from);
-        if (!RELEVANT_TYPES.includes(type)) return null;
-
-        // Cheap first pass: subject + snippet often already contain the date
-        // (airlines routinely put it in the subject line). Require a keyword
-        // right next to the date here — a blind scan of a short snippet is
-        // too likely to grab an unrelated date (a payment deadline, etc.)
-        // and wrongly skip the more thorough full-body fetch below.
-        const cheapText = `${subject} ${snippet}`;
-        let text = cheapText;
-        let travelDate = extractConfidentTravelDate(cheapText, now) ?? undefined;
-        if (!travelDate) {
-          try {
-            const fullRes = await fetch(
-              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const full = await fullRes.json() as { payload?: GmailPart };
-            const bodyText = extractBodyText(full.payload);
-            travelDate = extractTravelDate(bodyText, now) ?? undefined;
-            if (bodyText) text = bodyText;
-          } catch {
-            // Best-effort — fall back to no travel date rather than failing the whole booking.
-          }
-        }
-
-        // Reuses whichever text resolved the date above — a round-trip
-        // confirmation mentions both legs in the same email, so the range's
-        // end often differs from travelDate; the destination is a bonus
-        // label for grouping multiple bookings into one trip, not guaranteed.
-        const range = extractTravelDateRange(text, now);
-        const destination = extractDestination(text) ?? undefined;
-
-        return {
-          id,
-          type,
-          subject,
-          snippet,
-          from,
-          date: parseEmailDate(get('Date')),
-          travelDate,
-          travelDateEnd: range?.end,
-          destination,
-        };
+        return { id, subject: get('Subject'), from: get('From'), snippet: msg.snippet ?? '', date: get('Date') };
       })
     );
 
-    return { items: items.filter((item): item is BookingItem => item !== null), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
+    // Tier 1: one batched call with cheap subject+snippet text for every
+    // candidate. Most resolve here — no full-body Gmail fetch needed.
+    const tier1 = await classifyBookingsBatch(
+      metas.map((m) => ({ id: m.id, subject: m.subject, from: m.from, text: m.snippet }))
+    );
+    const tier1ById = new Map(tier1.map((r) => [r.id, r]));
+
+    // Tier 2: only for candidates the model flagged as a real booking type
+    // but not confident enough on the snippet alone — fetch the full body
+    // and retry just that subset in a second, smaller batched call.
+    const needsFullBody = metas.filter((m) => {
+      const r = tier1ById.get(m.id);
+      return r && r.type !== null && !r.confident;
+    });
+
+    let tier2ById = new Map<string, ClassifiedBooking>();
+    if (needsFullBody.length > 0) {
+      const withBodies = await Promise.all(
+        needsFullBody.map(async (m) => {
+          try {
+            const fullRes = await fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const full = await fullRes.json() as { payload?: GmailPart };
+            return { id: m.id, subject: m.subject, from: m.from, text: extractBodyText(full.payload) };
+          } catch {
+            return { id: m.id, subject: m.subject, from: m.from, text: '' };
+          }
+        })
+      );
+      const tier2 = await classifyBookingsBatch(withBodies.filter((c) => c.text.length > 0));
+      tier2ById = new Map(tier2.map((r) => [r.id, r]));
+    }
+
+    const mapped: (BookingItem | null)[] = metas.map((m) => {
+      const resolved = tier2ById.get(m.id) ?? tier1ById.get(m.id);
+      if (!resolved || resolved.type === null) return null;
+      return {
+        id: m.id,
+        type: resolved.type,
+        subject: m.subject,
+        snippet: m.snippet,
+        from: m.from,
+        date: parseEmailDate(m.date),
+        travelDate: resolved.travelDate,
+        travelDateEnd: resolved.travelDateEnd,
+        destination: resolved.destination,
+      };
+    });
+    const items = mapped.filter((item): item is BookingItem => item !== null);
+
+    return { items, windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error('Bookings request timed out — check your connection and try again.');
