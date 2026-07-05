@@ -20,7 +20,7 @@ function classifyBooking(subject: string, from: string): BookingType {
   if (/cancell?ed/.test(s)) return 'other';
   if (/pending.{0,20}(?:reservation|booking)/.test(s)) return 'other';
 
-  if (/flight|airline|airways|boarding pass|easyjet|ryanair|ba\.com|lufthansa|heathrow|gatwick/.test(s)) return 'flight';
+  if (/\b(?:flight|airline|airways|boarding pass|easyjet|ryanair|ba\.com|lufthansa|heathrow|gatwick)\b/.test(s)) return 'flight';
 
   // Airbnb host-side notifications (about someone else's stay at the user's
   // own listed room) share every keyword a genuine hotel confirmation has
@@ -37,14 +37,17 @@ function classifyBooking(subject: string, from: string): BookingType {
   if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|(?:reservation|booking)\s+request|you have a new (?:reservation|booking)/.test(s)) return 'other';
   if (/airbnb/.test(from.toLowerCase()) && /\barrives?\s+\d{1,2}\b|\bis\s+arriving\b|\bchecks?\s?in(?:s|g)?\s+\d{1,2}\b/i.test(subject)) return 'other';
 
-  if (/hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation/.test(s)) return 'hotel';
-  if (/train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern/.test(s)) return 'train';
-  if (/delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd/.test(s)) return 'delivery';
-  if (/restaurant|reservation|opentable|resy|sevenrooms/.test(s)) return 'restaurant';
+  if (/\b(?:hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation)\b/.test(s)) return 'hotel';
+  // \b boundaries matter here specifically — "tfl" (Transport for London)
+  // is a bare substring of "netflix", so a Netflix payment receipt was
+  // getting misclassified as a train booking without them.
+  if (/\b(?:train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern)\b/.test(s)) return 'train';
+  if (/\b(?:delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd)\b/.test(s)) return 'delivery';
+  if (/\b(?:restaurant|reservation|opentable|resy|sevenrooms)\b/.test(s)) return 'restaurant';
   // Named ticketing vendors only — bare words like "ticket"/"event"/"concert"
   // match any promotional email that mentions them (a venue's marketing
   // blast, a "big event this weekend" newsletter), not just real bookings.
-  if (/eventbrite|ticketmaster|seetickets|see tickets|ticketek|dice\.fm|songkick|gigantic\.com|skiddle|wegottickets|fatsoma|axs\.com/.test(s)) return 'event';
+  if (/\b(?:eventbrite|ticketmaster|seetickets|see tickets|ticketek|dice\.fm|songkick|gigantic\.com|skiddle|wegottickets|fatsoma|axs\.com)\b/.test(s)) return 'event';
   return 'other';
 }
 
@@ -300,10 +303,18 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // the bare keyword search tried previously ("ticket", "event", "concert")
   // matched any promotional email mentioning those words, which is exactly
   // the spam this excludes; the type allowlist below does the rest.
+  //
+  // Confirmed live: a real Trip.com "Payment Successful"/"Flight Booking
+  // Confirmed" pair was tagged category:updates by Gmail — neither travel
+  // nor purchases — and so never got fetched at all, regardless of any
+  // fetch-cap or pagination fix. category:updates alone is enormous (tens
+  // of thousands of messages: bank alerts, shipping notices, etc.), so it's
+  // scoped to known travel-vendor keywords rather than included wholesale.
+  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster';
   const dateFilter = sinceDate
     ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
     : `newer_than:${lookbackDays}d`;
-  const query = `(category:travel OR category:purchases) -category:promotions ${dateFilter}`;
+  const query = `(category:travel OR category:purchases OR (category:updates (${UPDATES_VENDOR_TERMS}))) -category:promotions ${dateFilter}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

@@ -1,7 +1,7 @@
 import type { BookingType, CalendarEvent, BookingItem } from '../types';
 import { getUpcomingCalendarEvents } from './googleCalendar';
 import { getBookingsContext } from './googleBookings';
-import { getCachedBookings, getLastBookingsSyncAt, upsertBookings } from './database';
+import { getCachedBookings, getLastBookingsSyncAt, pruneBookingsNotIn, upsertBookings } from './database';
 
 export const BOOKING_ICONS: Record<BookingType, string> = {
   flight:      '✈️',
@@ -197,10 +197,15 @@ async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem
     // only needs to cover the gap since the last one — the "since" date is
     // omitted rather than always 30 days, which is what let the crowding-out
     // problem happen in the first place.
-    const context = lastSyncAt
-      ? await getBookingsContext(30, lastSyncAt, 30)
-      : await getBookingsContext(30);
+    const isFullSync = !lastSyncAt;
+    const context = isFullSync
+      ? await getBookingsContext(30)
+      : await getBookingsContext(30, lastSyncAt, 30);
     await upsertBookings(context.items);
+    // Only a full sync can safely prune — an incremental sync only covers a
+    // narrow recent window, so older cached rows outside it would look
+    // "missing" and get wrongly deleted.
+    if (isFullSync) await pruneBookingsNotIn(context.items.map((b) => b.id));
     return { items: await getCachedBookings() };
   } catch (err) {
     // Network/auth failure — degrade to whatever's cached rather than

@@ -809,3 +809,20 @@ export async function getLastBookingsSyncAt(): Promise<Date | null> {
   );
   return row?.max_synced ? new Date(row.max_synced) : null;
 }
+
+// upsertBookings only ever adds/updates — a row that was cached under an
+// older, buggier classification (e.g. a stray false positive) would
+// otherwise sit there forever, since a later fetch simply never returns it
+// again to overwrite it. Only call this after a FULL backfill, not an
+// incremental sync — an incremental fetch only covers a narrow recent
+// window, so anything outside it would look "not present" and get wrongly
+// deleted.
+export async function pruneBookingsNotIn(currentIds: string[]): Promise<void> {
+  const db = await getDatabase();
+  if (currentIds.length === 0) {
+    await db.runAsync('DELETE FROM bookings');
+    return;
+  }
+  const placeholders = currentIds.map(() => '?').join(',');
+  await db.runAsync(`DELETE FROM bookings WHERE id NOT IN (${placeholders})`, currentIds);
+}
