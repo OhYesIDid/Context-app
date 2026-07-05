@@ -15,7 +15,20 @@ let _db: SQLite.SQLiteDatabase | null = null;
 let _encryptDone = false;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (_db) return _db;
+  if (_db) {
+    // A cached native connection can go stale (observed live: "NativeDatabase
+    // .prepareAsync has been rejected" on every call after the app spent time
+    // backgrounded) while this JS-side reference survives — every caller's
+    // query then fails silently forever, since nothing ever re-opens it. A
+    // cheap liveness check here catches that and transparently reopens,
+    // instead of every downstream caller having to guard against it.
+    try {
+      await _db.getFirstAsync('SELECT 1');
+      return _db;
+    } catch {
+      _db = null;
+    }
+  }
   _db = await SQLite.openDatabaseAsync('contextreply.db');
   await _migrate(_db);
   if (!_encryptDone) {
