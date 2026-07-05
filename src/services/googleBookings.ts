@@ -13,8 +13,11 @@ function classifyBooking(subject: string, from: string): BookingType {
 
   const s = (subject + ' ' + from).toLowerCase();
 
-  // A cancelled booking isn't upcoming travel regardless of type.
+  // A cancelled or still-pending (not yet confirmed) booking isn't upcoming
+  // travel regardless of type — a pending request can still be rejected or
+  // expire.
   if (/cancell?ed/.test(s)) return 'other';
+  if (/pending.{0,20}(?:reservation|booking)/.test(s)) return 'other';
 
   if (/flight|airline|airways|boarding pass|easyjet|ryanair|ba\.com|lufthansa|heathrow|gatwick/.test(s)) return 'flight';
 
@@ -30,7 +33,7 @@ function classifyBooking(subject: string, from: string): BookingType {
   // checked too, gated behind the sender actually being Airbnb to avoid
   // ever misreading an unrelated email that happens to mention someone
   // else's arrival time.
-  if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|new (?:reservation|booking) request|you have a new (?:reservation|booking)/.test(s)) return 'other';
+  if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|(?:reservation|booking)\s+request|you have a new (?:reservation|booking)/.test(s)) return 'other';
   if (/airbnb/.test(from.toLowerCase()) && /\barrives?\s+\d{1,2}\b|\bis\s+arriving\b|\bchecks?\s?in(?:s|g)?\s+\d{1,2}\b/i.test(subject)) return 'other';
 
   if (/hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation/.test(s)) return 'hotel';
@@ -283,7 +286,7 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
 
   try {
     const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=15`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=30`,
       { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
@@ -311,8 +314,14 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
     // date range).
     const RELEVANT_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'event'];
 
+    // Irrelevant messages (Airbnb host notifications, other purchases still
+    // matched by the query above) only cost a cheap metadata fetch each —
+    // the RELEVANT_TYPES filter below runs before any full-body fetch, so
+    // processing more of them doesn't add much latency. It matters because
+    // a real booking's confirmation emails can otherwise get crowded out of
+    // a small top-N window by irrelevant messages that arrived more recently.
     const items: (BookingItem | null)[] = await Promise.all(
-      messages.slice(0, 10).map(async ({ id }) => {
+      messages.slice(0, 25).map(async ({ id }) => {
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
           `&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
