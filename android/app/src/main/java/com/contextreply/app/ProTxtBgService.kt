@@ -604,9 +604,16 @@ class ProTxtBgService : NotificationListenerService() {
             val outboundText = notifThread[lastOutboundIdx].second
             ContactMemory.saveLastSent(this, convKey, outboundText)
             store.markReplied(convKey)
-            notifThread.drop(lastOutboundIdx + 1).forEach { (sender, msgText) ->
+            val postReplyMessages = notifThread.drop(lastOutboundIdx + 1)
+            postReplyMessages.forEach { (sender, msgText) ->
                 store.appendMessage(convKey, sender, msgText)
             }
+            // arrivalBuffer is a separate backlog (built up across debounce firings, used
+            // for the "message" field itself) from store (used for the conversation
+            // thread) — reseeding store alone still leaves the pre-reply text sitting in
+            // arrivalBuffer, so the next real message gets concatenated onto something
+            // the user already answered directly in the app. Reseed both the same way.
+            arrivalBuffer[convKey] = postReplyMessages.map { it.second }.toMutableList()
         } else if (store.isEmpty(convKey)) {
             // No outbound in thread, first message from this conversation — seed store with
             // full EXTRA_MESSAGES context. WhatsApp/Telegram bundle recent history here,

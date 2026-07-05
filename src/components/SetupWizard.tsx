@@ -41,11 +41,10 @@ const STEPS = [
   { id: 'nls',           required: true,  skipLabel: null           }, // 1 — hard gate
   { id: 'notif_perm',    required: true,  skipLabel: null           }, // 2 — auto-advances
   { id: 'bubbles',       required: true,  skipLabel: null           }, // 3 — soft gate
-  { id: 'accessibility', required: false, skipLabel: 'Skip for now' }, // 4
-  { id: 'location',      required: false, skipLabel: 'Skip'         }, // 5
-  { id: 'google_cal',    required: false, skipLabel: 'Skip'         }, // 6
-  { id: 'contacts',      required: false, skipLabel: 'Skip'         }, // 7
-  { id: 'done',          required: true,  skipLabel: null           }, // 8
+  { id: 'location',      required: false, skipLabel: 'Skip'         }, // 4
+  { id: 'google_cal',    required: false, skipLabel: 'Skip'         }, // 5
+  { id: 'contacts',      required: false, skipLabel: 'Skip'         }, // 6
+  { id: 'done',          required: true,  skipLabel: null           }, // 7
 ] as const;
 
 const SETUP_COMPLETE_KEY       = 'setup_complete';
@@ -61,8 +60,6 @@ export default function SetupWizard({ onComplete }: Props) {
   const [notifPermGranted, setNotifPermGranted]             = useState(false);
   const [bubbleLabel, setBubbleLabel]                       = useState('Notifications → Bubbles');
   const [hasOpenedBubbles, setHasOpenedBubbles]             = useState(false);
-  const [accessibilityEnabled, setAccessibilityEnabled]     = useState(false);
-  const [hasOpenedAccessibility, setHasOpenedAccessibility] = useState(false);
   const [locationGranted, setLocationGranted]               = useState(false);
   const [googleAuthed, setGoogleAuthed]                     = useState(false);
   const [googleContactsCount, setGoogleContactsCount]       = useState<number | null>(null);
@@ -107,17 +104,15 @@ export default function SetupWizard({ onComplete }: Props) {
     if (Platform.OS === 'android' && ConTxtSettings) {
       Promise.all([
         ConTxtSettings.isNlsConnected().catch(() => false),
-        ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false),
         ConTxtSettings.getBubbleSettingsLabel().catch(() => 'Notifications → Bubbles'),
-      ]).then(([nls, a11y, label]: [boolean, boolean, string]) => {
+      ]).then(([nls, label]: [boolean, string]) => {
         setNlsConnected(nls);
-        setAccessibilityEnabled(a11y);
         setBubbleLabel(label);
       });
     }
   }, []);
 
-  // Re-check NLS / accessibility when returning from system settings screens
+  // Re-check NLS when returning from system settings screens
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active' || Platform.OS !== 'android' || !ConTxtSettings) return;
@@ -129,10 +124,6 @@ export default function SetupWizard({ onComplete }: Props) {
       }
       if (s === 3 && hasOpenedBubblesRef.current) {
         advance();
-      }
-      if (s === 4) {
-        const ok: boolean = await ConTxtSettings.isAccessibilityServiceEnabled().catch(() => false);
-        setAccessibilityEnabled(ok);
       }
     });
     return () => sub.remove();
@@ -176,14 +167,7 @@ export default function SetupWizard({ onComplete }: Props) {
     setHasOpenedBubbles(true);
   };
 
-  // Step 4 — accessibility
-  const handleAccessibilityButton = () => {
-    if (accessibilityEnabled) { advance(); return; }
-    ConTxtSettings?.openAccessibilitySettings?.();
-    setHasOpenedAccessibility(true);
-  };
-
-  // Step 5 — location (fine then background, always advances)
+  // Step 4 — location (fine then background, always advances)
   const handleLocationGrant = async () => {
     try {
       const fine = await PermissionsAndroid.request(
@@ -317,23 +301,12 @@ export default function SetupWizard({ onComplete }: Props) {
       case 4:
         return (
           <>
-            <Text style={s.icon}>♿</Text>
-            <Text style={s.stepTitle}>Overlay while you chat</Text>
-            <Text style={s.stepDesc}>Enables a suggestion strip above your keyboard — no need to leave the conversation.</Text>
-            <View style={[s.pill, accessibilityEnabled ? s.pillGreen : s.pillRed]}>
-              <Text style={s.pillText}>{accessibilityEnabled ? '🟢  Enabled' : '🔴  Not enabled'}</Text>
-            </View>
-          </>
-        );
-      case 5:
-        return (
-          <>
             <Text style={s.icon}>📍</Text>
             <Text style={s.stepTitle}>ETA suggestions</Text>
             <Text style={s.stepDesc}>When someone asks where you are, ConTxt can include your estimated arrival time.</Text>
           </>
         );
-      case 6:
+      case 5:
         return (
           <>
             <Text style={s.icon}>📅</Text>
@@ -341,7 +314,7 @@ export default function SetupWizard({ onComplete }: Props) {
             <Text style={s.stepDesc}>See your calendar so ConTxt can suggest times when you're free.</Text>
           </>
         );
-      case 7:
+      case 6:
         return (
           <>
             <Text style={s.icon}>👥</Text>
@@ -371,7 +344,7 @@ export default function SetupWizard({ onComplete }: Props) {
             </View>
           </>
         );
-      case 8:
+      case 7:
         return (
           <>
             <Text style={s.icon}>✅</Text>
@@ -401,22 +374,15 @@ export default function SetupWizard({ onComplete }: Props) {
           onPress={handleBubblesButton}
         />
       );
-      case 4: return (
-        <WizardBtn
-          label={accessibilityEnabled ? 'Enabled ✓  —  Continue' : 'Open Accessibility Settings'}
-          disabled={!accessibilityEnabled && hasOpenedAccessibility}
-          onPress={handleAccessibilityButton}
-        />
-      );
-      case 5: return <WizardBtn label="Grant location" onPress={handleLocationGrant} />;
-      case 6: return (
+      case 4: return <WizardBtn label="Grant location" onPress={handleLocationGrant} />;
+      case 5: return (
         <WizardBtn
           label={googleAuthed ? 'Connected ✓  —  Continue' : 'Sign in with Google'}
           onPress={handleGoogleSignIn}
         />
       );
-      case 7: return <WizardBtn label="Continue" onPress={advance} />;
-      case 8: return <WizardBtn label="Start using ConTxt" onPress={handleComplete} />;
+      case 6: return <WizardBtn label="Continue" onPress={advance} />;
+      case 7: return <WizardBtn label="Start using ConTxt" onPress={handleComplete} />;
       default: return null;
     }
   };
