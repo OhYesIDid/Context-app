@@ -255,6 +255,12 @@ interface SuggestRequest {
   contactContext?: string;
   contactName?: string;
   strategy?: string;
+  // Set client-side via a plain no-model-call text match against the user's
+  // own first name (Notification.EXTRA_SELF_DISPLAY_NAME) — a strong signal
+  // in a noisy group thread about which specific message is actually meant
+  // for the user, since debounced group batches can otherwise contain
+  // several unrelated messages from different people at once.
+  mentionHint?: string;
 }
 
 const STRATEGY_INSTRUCTIONS: Record<string, string> = {
@@ -506,8 +512,25 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
   }
 
   const thread = body.conversationThread;
+  // Inferred, not passed explicitly — a thread with more than one distinct
+  // non-null sender name can only happen in a group (a 1:1 thread only ever
+  // has one other speaker, or null for the user's own outbound messages).
+  // "the other person" as a closing instruction is factually wrong for a
+  // real group thread with several named speakers each asking something
+  // different, so branch on that rather than always assuming a single
+  // other party.
+  const distinctSenders = new Set((thread ?? []).map((m) => m.sender).filter((s): s is string => s != null));
+  const isMultiParty = distinctSenders.size > 1;
+  const closingInstruction = isMultiParty
+    ? 'Write a reply that naturally addresses the unanswered messages. This is a group conversation with multiple speakers — address the most relevant one(s) by name rather than writing as if there is a single other person.'
+    : 'Write a reply that naturally addresses all unanswered messages from the other person.';
+  // A no-model-call text match found the user's own name directly in one of
+  // the batched messages — a stronger, more specific signal than "most
+  // recent message" once a group debounce batch holds several unrelated
+  // messages from different people.
+  const mentionNote = body.mentionHint ? `\n${body.mentionHint}` : '';
   const messageBlock = thread && thread.length > 1
-    ? `<conversation>\n${thread.map((m) => `${m.sender ?? 'Me'}: ${m.text}`).join('\n')}\n</conversation>\nWrite a reply that naturally addresses all unanswered messages from the other person.`
+    ? `<conversation>\n${thread.map((m) => `${m.sender ?? 'Me'}: ${m.text}`).join('\n')}\n</conversation>\n${closingInstruction}${mentionNote}`
     : `<message>${body.message}</message>`;
 
   const memoryParts: string[] = [];

@@ -712,6 +712,7 @@ class ProTxtBgService : NotificationListenerService() {
                 convKey, notifId, latestMessage, effectiveIntentsStr,
                 replyPendingIntent, remoteInputKey, openChatIntent,
                 markAsReadPendingIntent, packageName, userInApp,
+                selfName = selfName,
             )
             val remindersEnabled = try { Prefs.main(this).getBoolean("reminders_enabled", true) } catch (_: Exception) { true }
             if (remindersEnabled) {
@@ -736,12 +737,23 @@ class ProTxtBgService : NotificationListenerService() {
         markAsReadPendingIntent: PendingIntent?,
         packageName: String,
         userInApp: Boolean,
+        selfName: String? = null,
     ) {
         val fullThread = store.getThread(convKey)
         val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
         val contactContext = ContactSignals.getContactContext(this, convKey)
         val senderName = stripAppPrefix(convKey.substringAfter(":"))
+        // Lightweight, no-model-call signal for group threads: if a recent inbound
+        // message names the user directly (plain text or "@name"), that's a strong
+        // hint about which message is actually meant for them — useful once a group
+        // debounce batch contains several unrelated messages from different people.
+        // Deliberately a plain first-name match, not the full display name — people
+        // write "hey Tommy" or "@Tommy", not "hey Tommy Garnell".
+        val mentionHint = selfName?.trim()?.split(" ")?.firstOrNull()?.takeIf { it.length >= 2 }?.let { firstName ->
+            val pattern = Regex("(?i)(?<![\\w@])@?${Regex.escape(firstName)}(?![\\w])")
+            fullThread.lastOrNull { (sender, text) -> sender != null && pattern.containsMatchIn(text) }
+        }?.let { (sender, text) -> "$sender directly addressed you by name in: \"$text\" — prioritize replying to this." }
         // Tracks whether THIS job has finished — distinct from activeBubbles, which stays
         // true for any live, un-actioned bubble (including a successful suggestion the user
         // just hasn't tapped yet). The watchdog must not mistake "still live" for "still
@@ -759,6 +771,7 @@ class ProTxtBgService : NotificationListenerService() {
                     lastSentReply = lastSent,
                     contactContext = contactContext,
                     contactName = senderName,
+                    mentionHint = mentionHint,
                 ) ?: run {
                     android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                     if (activeBubbles.contains(convKey)) {

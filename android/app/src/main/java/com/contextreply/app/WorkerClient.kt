@@ -38,6 +38,7 @@ object WorkerClient {
         contactContext: String? = null,
         contactName: String? = null,
         strategy: String? = null,
+        mentionHint: String? = null,
     ): WorkerResult? {
         val prefs = Prefs.main(context)
         val styleProfile      = prefs.getString("style_profile", null)
@@ -68,6 +69,7 @@ object WorkerClient {
             if (contactContext != null) put("contactContext", contactContext)
             if (contactName != null) put("contactName", contactName)
             if (strategy != null) put("strategy", strategy)
+            if (mentionHint != null) put("mentionHint", mentionHint)
         }.toString()
 
         var lastException: Exception? = null
