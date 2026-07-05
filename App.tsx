@@ -11,6 +11,7 @@ import {
   Linking,
   Modal,
   NativeModules,
+  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
@@ -99,6 +100,7 @@ export default function App() {
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
+  const [locationGranted, setLocationGranted] = useState(false);
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
   const [bubbleLabel, setBubbleLabel] = useState('Notifications → Bubbles');
   const [googleContactsCount, setGoogleContactsCount] = useState<number | null>(null);
@@ -119,7 +121,6 @@ export default function App() {
   const [enrichmentPrefs, setEnrichmentPrefs] = useState<Record<string, Record<string, string>>>({});
   const [gmailSettingsVisible, setGmailSettingsVisible] = useState(false);
   const [mapsSettingsVisible, setMapsSettingsVisible] = useState(false);
-  const [serviceSettingsVisible, setServiceSettingsVisible] = useState(false);
   const [keyboardDefault, setKeyboardDefault] = useState(false);
   const [isPro, setIsPro] = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
@@ -167,6 +168,7 @@ export default function App() {
     initAuth().then(() => setGoogleAuthed(isSignedIn()));
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
+      PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
@@ -212,6 +214,7 @@ export default function App() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
+      PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
@@ -447,81 +450,173 @@ export default function App() {
           <Text style={styles.subtitle}>Reply suggestions in the background</Text>
         </View>
 
-        {/* SERVICE — collapsed when all active, expanded when action needed */}
-        <Text style={styles.sectionLabel}>SERVICE</Text>
+        {/* ACCOUNT */}
+        <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.sectionCard}>
-          {notifPermission && accessibilityEnabled ? (
-            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setServiceSettingsVisible(true)}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: '#4ade80' }]} />
-                <Text style={styles.settingText}>Service active</Text>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingText}>Google account</Text>
+              <Text style={styles.setupStatus}>
+                {googleAuthed ? 'Connected — Calendar availability & Gmail bookings enabled' : 'Sign in to enable availability suggestions & booking lookups'}
+              </Text>
+            </View>
+            {googleAuthed ? (
+              <Pressable onPress={async () => { await signOut(); setGoogleAuthed(false); }}>
+                <Text style={styles.setupAction}>Sign out</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.smallButton} onPress={async () => {
+                try {
+                  await GoogleSignin.hasPlayServices();
+                  await GoogleSignin.signIn();
+                  setGoogleAuthed(true);
+                } catch (err) {
+                  Alert.alert('Sign-in error', err instanceof Error ? err.message : 'Sign-in failed');
+                }
+              }}>
+                <Text style={styles.smallButtonText}>Sign in</Text>
+              </Pressable>
+            )}
+          </View>
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => {
+              if (!savedHome) return;
+              Alert.alert('Change home location', 'This clears the saved home so it can be detected again overnight.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear', style: 'destructive', onPress: () => { ProTxtSettings?.clearSavedHome?.(); setSavedHome(null); } },
+              ]);
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: savedHome ? '#4ade80' : MUTED }]} />
+              <View>
+                <Text style={styles.settingText}>Home location</Text>
+                <Text style={styles.setupStatus} numberOfLines={1}>
+                  {savedHome ? (savedHome.area ?? 'Saved') : 'Not detected yet — checked overnight'}
+                </Text>
               </View>
-              <Text style={[styles.categoryValue, { fontSize: 12 }]}>Manage ›</Text>
+            </View>
+            {savedHome && <Text style={styles.setupAction}>Change</Text>}
+          </Pressable>
+          {isPro ? (
+            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => presentCustomerCenter()}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingText}>ConTxt Pro</Text>
+                <Text style={styles.setupStatus}>Active</Text>
+              </View>
+              <Text style={styles.setupAction}>Manage ›</Text>
             </Pressable>
           ) : (
-            <>
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
-                  <View>
-                    <Text style={styles.settingText}>Notification access</Text>
-                    <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
+            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => openPaywall()}>
+              <View style={{ flex: 1, marginRight: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.settingText, { flexShrink: 1 }]}>ConTxt Pro</Text>
+                  <View style={[styles.proBadge, { flexShrink: 0 }]}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
                   </View>
                 </View>
-                {!notifPermission && <Text style={styles.setupAction}>Open</Text>}
-              </Pressable>
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
-                  <View>
-                    <Text style={styles.settingText}>Suggestion bubbles</Text>
-                    <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
-                  </View>
-                </View>
-                <Text style={styles.setupAction}>Open</Text>
-              </Pressable>
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
-                  <View>
-                    <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
-                    <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
-                  </View>
-                </View>
-                {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
-              </Pressable>
-              <Pressable
-                style={[styles.settingRow, { borderBottomWidth: 0 }]}
-                onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
-                  <View>
-                    <Text style={styles.settingText}>Keyboard overlay <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
-                    <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
-                  </View>
-                </View>
-                {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
-              </Pressable>
-            </>
+                <Text style={styles.setupStatus}>Free plan — upgrade for tone control & more</Text>
+              </View>
+              <Text style={styles.setupAction}>Upgrade ›</Text>
+            </Pressable>
           )}
         </View>
 
-        {/* BEHAVIOUR */}
-        <Text style={styles.sectionLabel}>BEHAVIOUR</Text>
+        {/* PERMISSIONS */}
+        <Text style={styles.sectionLabel}>PERMISSIONS</Text>
         <View style={styles.sectionCard}>
-          {isPro ? (
-            <View style={styles.settingRow}>
-              <Text style={styles.settingText}>Default tone</Text>
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
+              <View>
+                <Text style={styles.settingText}>Notification access</Text>
+                <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
+              </View>
+            </View>
+            {!notifPermission && <Text style={styles.setupAction}>Open</Text>}
+          </Pressable>
+          <Pressable
+            style={styles.settingRow}
+            onPress={async () => {
+              const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+              setLocationGranted(result === PermissionsAndroid.RESULTS.GRANTED);
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: locationGranted ? '#4ade80' : '#f87171' }]} />
+              <View>
+                <Text style={styles.settingText}>Location</Text>
+                <Text style={styles.setupStatus}>{locationGranted ? 'Enabled — used for ETA suggestions' : 'Tap to enable'}</Text>
+              </View>
+            </View>
+            {!locationGranted && <Text style={styles.setupAction}>Open</Text>}
+          </Pressable>
+          <Pressable
+            style={[styles.settingRow, { borderBottomWidth: 0 }]}
+            onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
+              <View>
+                <Text style={styles.settingText}>Keyboard overlay <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
+                <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
+              </View>
+            </View>
+            {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
+          </Pressable>
+        </View>
+
+        {/* REPLY SURFACES */}
+        <Text style={styles.sectionLabel}>REPLY SURFACES</Text>
+        <View style={styles.sectionCard}>
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
+              <View>
+                <Text style={styles.settingText}>Suggestion bubbles</Text>
+                <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
+              </View>
+            </View>
+            <Text style={styles.setupAction}>Open</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.settingRow, { borderBottomWidth: 0 }]}
+            onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
+          >
+            <View style={styles.settingLeft}>
+              <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
+              <View>
+                <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
+                <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
+              </View>
+            </View>
+            {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
+          </Pressable>
+        </View>
+
+        {/* REPLY PREFERENCES */}
+        <Text style={styles.sectionLabel}>REPLY PREFERENCES</Text>
+        <View style={styles.sectionCard}>
+          <Pressable style={styles.settingRow} onPress={() => { if (!isPro) openPaywall(); }} disabled={isPro}>
+            <View style={{ flex: 1, marginRight: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.settingText}>Default tone</Text>
+                {!isPro && (
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.setupStatus}>Casual, formal, brief — with reply strategy</Text>
+            </View>
+            {isPro ? (
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {(['formal', 'casual', 'brief'] as Tone[]).map((t) => (
                   <Pressable
@@ -535,21 +630,10 @@ export default function App() {
                   </Pressable>
                 ))}
               </View>
-            </View>
-          ) : (
-            <Pressable style={styles.settingRow} onPress={() => openPaywall()}>
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.settingText, { flexShrink: 1 }]}>Default tone &amp; reply strategy</Text>
-                  <View style={[styles.proBadge, { flexShrink: 0 }]}>
-                    <Text style={styles.proBadgeText}>PRO</Text>
-                  </View>
-                </View>
-                <Text style={styles.setupStatus}>Casual, formal, brief — with reply strategy</Text>
-              </View>
+            ) : (
               <Text style={styles.setupAction}>Upgrade ›</Text>
-            </Pressable>
-          )}
+            )}
+          </Pressable>
           <View style={styles.settingRow}>
             <View style={{ flex: 1, marginRight: 16 }}>
               <Text style={styles.settingText}>Skip group messages</Text>
@@ -574,33 +658,21 @@ export default function App() {
               thumbColor={remindersEnabled ? PURPLE : MUTED}
             />
           </View>
-          <Pressable
-            style={styles.settingRow}
-            onPress={() => {
-              if (!savedHome) return;
-              Alert.alert('Change home location', 'This clears the saved home so it can be detected again overnight.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: () => { ProTxtSettings?.clearSavedHome?.(); setSavedHome(null); } },
-              ]);
-            }}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: savedHome ? '#4ade80' : MUTED }]} />
-              <View>
-                <Text style={styles.settingText}>Home location</Text>
-                <Text style={styles.setupStatus} numberOfLines={1}>
-                  {savedHome ? (savedHome.area ?? 'Saved') : 'Not detected yet — checked overnight'}
-                </Text>
-              </View>
-            </View>
-            {savedHome && <Text style={styles.setupAction}>Change</Text>}
-          </Pressable>
-          {isPro ? (
-            <Pressable style={[styles.settingRow, { borderBottomWidth: isPro ? 1 : 0 }]}>
-              <View style={{ flex: 1, marginRight: 16 }}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => { if (!isPro) openPaywall(); }} disabled={isPro}>
+            <View style={{ flex: 1, marginRight: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={styles.settingText}>Suggest replies for all messages</Text>
-                <Text style={styles.setupStatus}>Suggesting replies for every incoming message</Text>
+                {!isPro && (
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                )}
               </View>
+              <Text style={styles.setupStatus}>
+                {isPro ? 'Suggesting replies for every incoming message' : 'Upgrade to suggest replies for every message'}
+              </Text>
+            </View>
+            {isPro ? (
               <Switch
                 value={suggestAllMessages}
                 onValueChange={(v) => {
@@ -610,81 +682,20 @@ export default function App() {
                 trackColor={{ false: BORDER, true: PURPLE + '99' }}
                 thumbColor={suggestAllMessages ? PURPLE : MUTED}
               />
-            </Pressable>
-          ) : (
-            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => openPaywall()}>
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.settingText, { flexShrink: 1 }]}>Suggest replies for all messages</Text>
-                  <View style={[styles.proBadge, { flexShrink: 0 }]}>
-                    <Text style={styles.proBadgeText}>PRO</Text>
-                  </View>
-                </View>
-                <Text style={styles.setupStatus}>Upgrade to suggest replies for every message</Text>
-              </View>
+            ) : (
               <Text style={styles.setupAction}>Upgrade ›</Text>
-            </Pressable>
-          )}
-          {isPro && (
-            <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => presentCustomerCenter()}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingText}>Manage subscription</Text>
-                <Text style={styles.setupStatus}>ConTxt Pro — Active</Text>
-              </View>
-              <Text style={styles.setupAction}>Manage ›</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* CONTACTS */}
-        <Text style={styles.sectionLabel}>CONTACTS</Text>
-        <View style={styles.sectionCard}>
-          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setContactsVisible(true)}>
-            <View>
-              <Text style={styles.settingText}>Manage contacts</Text>
-              <Text style={styles.setupStatus}>
-                {contacts.length > 0
-                  ? `${contacts.length} imported — set tone & relationship`
-                  : 'Import and configure contacts'}
-              </Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
+            )}
           </Pressable>
         </View>
 
-        {/* ENHANCEMENTS */}
-        <Text style={styles.sectionLabel}>ENHANCEMENTS</Text>
+        {/* ENRICHMENT SOURCES */}
+        <Text style={styles.sectionLabel}>ENRICHMENT SOURCES</Text>
         <View style={styles.sectionCard}>
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingText}>Google Calendar</Text>
-              <Text style={styles.setupStatus}>
-                {googleAuthed ? 'Connected — availability suggestions on' : 'Sign in to suggest your availability'}
-              </Text>
-            </View>
-            {googleAuthed ? (
-              <Pressable onPress={async () => { await signOut(); setGoogleAuthed(false); }}>
-                <Text style={styles.setupAction}>Sign out</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={styles.smallButton} onPress={async () => {
-                try {
-                  await GoogleSignin.hasPlayServices();
-                  await GoogleSignin.signIn();
-                  setGoogleAuthed(true);
-                } catch (err) {
-                  Alert.alert('Sign-in error', err instanceof Error ? err.message : 'Sign-in failed');
-                }
-              }}>
-                <Text style={styles.smallButtonText}>Sign in</Text>
-              </Pressable>
-            )}
-          </View>
           <Pressable style={styles.settingRow} onPress={() => setGmailSettingsVisible(true)}>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingText}>Gmail Bookings</Text>
               <Text style={styles.setupStatus}>
-                {googleAuthed ? 'Booking lookups on' : 'Sign in with Google to enable'}
+                {googleAuthed ? 'Booking lookups on' : 'Requires Google account above'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -703,6 +714,22 @@ export default function App() {
               </Text>
               <Text style={styles.chevron}>›</Text>
             </View>
+          </Pressable>
+        </View>
+
+        {/* CONTACTS */}
+        <Text style={styles.sectionLabel}>CONTACTS</Text>
+        <View style={styles.sectionCard}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setContactsVisible(true)}>
+            <View>
+              <Text style={styles.settingText}>Manage contacts</Text>
+              <Text style={styles.setupStatus}>
+                {contacts.length > 0
+                  ? `${contacts.length} imported — set tone & relationship`
+                  : 'Import and configure contacts'}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
           </Pressable>
         </View>
 
@@ -878,70 +905,6 @@ export default function App() {
         }}
       />
 
-      {/* Service settings modal — only reachable when all services already active */}
-      <Modal visible={serviceSettingsVisible} transparent animationType="slide" onRequestClose={() => setServiceSettingsVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setServiceSettingsVisible(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Service</Text>
-            <Pressable
-              style={styles.settingRow}
-              onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
-                <View>
-                  <Text style={styles.settingText}>Notification access</Text>
-                  <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
-                </View>
-              </View>
-              <Text style={styles.setupAction}>Open</Text>
-            </Pressable>
-            <Pressable
-              style={styles.settingRow}
-              onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
-                <View>
-                  <Text style={styles.settingText}>Keyboard overlay</Text>
-                  <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
-                </View>
-              </View>
-              <Text style={styles.setupAction}>Open</Text>
-            </Pressable>
-            <Pressable
-              style={styles.settingRow}
-              onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
-                <View>
-                  <Text style={styles.settingText}>Suggestion bubbles</Text>
-                  <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
-                </View>
-              </View>
-              <Text style={styles.setupAction}>Open</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.settingRow, { borderBottomWidth: 0 }]}
-              onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
-                <View>
-                  <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
-                  <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
-                </View>
-              </View>
-              {!keyboardDefault && <Text style={styles.setupAction}>Set up</Text>}
-            </Pressable>
-            <Pressable style={styles.modalClose} onPress={() => setServiceSettingsVisible(false)}>
-              <Text style={styles.modalCloseText}>Done</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* Gmail Bookings modal */}
       <Modal visible={gmailSettingsVisible} transparent animationType="slide" onRequestClose={() => setGmailSettingsVisible(false)}>
