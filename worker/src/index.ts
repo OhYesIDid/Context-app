@@ -217,6 +217,12 @@ async function handleClassifyBookings(rawBody: string, env: Env): Promise<Respon
       model: CLASSIFY_MODEL,
       max_tokens: CLASSIFY_MAX_TOKENS,
       system: CLASSIFY_SYSTEM_PROMPT,
+      // This is a "read facts from this email" task, not a creative one —
+      // near-zero temperature avoids run-to-run variance on date/destination
+      // extraction (observed live: the same email text resolved a correct
+      // date on one call and a wrong one on another at the default
+      // temperature).
+      temperature: 0,
       messages: [{ role: 'user', content: userPrompt }],
     }),
   });
