@@ -229,7 +229,7 @@ export default function App() {
           .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
           .catch(() => {});
       }).catch(() => {});
-      loadUpcomingEvents(googleAuthed).then(setUpcomingData).catch(() => {});
+      loadUpcomingEvents(googleAuthed, setUpcomingData).catch(() => {});
     });
     const removeEntitlementListener = addEntitlementListener(setIsPro);
     return () => { sub.remove(); removeEntitlementListener(); };
@@ -726,7 +726,7 @@ export default function App() {
                 loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
               }
               if (tab.key === 'upcoming') {
-                loadUpcomingEvents(googleAuthed).then(setUpcomingData).catch(() => {});
+                loadUpcomingEvents(googleAuthed, setUpcomingData).catch(() => {});
               }
               setActiveTab(tab.key);
             }}>

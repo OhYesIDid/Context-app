@@ -80,6 +80,8 @@ export interface UpcomingData {
   fetchedAt: number;
   /** Set when the Gmail booking fetch failed outright (timeout, auth, API error) — surfaced in the UI instead of silently showing an empty list. */
   bookingsError?: string;
+  /** True while a real Gmail sync (not just a cache read) is in flight — lets the UI show a subtle "Updating…" hint instead of looking frozen during a full resync. */
+  isSyncing?: boolean;
 }
 
 export const UPCOMING_EMPTY: UpcomingData = { calendarItems: [], bookingItems: [], trips: [], fetchedAt: 0 };
@@ -194,6 +196,14 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 const BOOKINGS_SYNC_LOGIC_VERSION = '5';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
+async function isBookingsSyncDue(): Promise<boolean> {
+  const lastSyncAt = await getLastBookingsSyncAt();
+  const syncedLogicVersion = await AsyncStorage.getItem(BOOKINGS_SYNC_LOGIC_VERSION_KEY);
+  return !lastSyncAt
+    || Date.now() - lastSyncAt.getTime() > BOOKINGS_SYNC_INTERVAL_MS
+    || syncedLogicVersion !== BOOKINGS_SYNC_LOGIC_VERSION;
+}
+
 async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem[]; error?: string }> {
   if (!googleAuthed) return { items: [] };
 
@@ -227,21 +237,8 @@ async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem
   }
 }
 
-export async function loadUpcomingEvents(googleAuthed: boolean): Promise<UpcomingData> {
-  const [calResult, bookResult] = await Promise.allSettled([
-    googleAuthed
-      ? getUpcomingCalendarEvents(30)
-      : Promise.resolve([] as CalendarEvent[]),
-    syncBookings(googleAuthed),
-  ]);
-
-  const events = calResult.status === 'fulfilled' ? calResult.value : [];
-  const bookings = bookResult.status === 'fulfilled' ? bookResult.value.items : [];
-  const bookingsError = bookResult.status === 'fulfilled'
-    ? bookResult.value.error
-    : (bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason));
-  const now = new Date();
-  const todayMs = dayStart(now);
+function buildUpcomingData(events: CalendarEvent[], bookings: BookingItem[], bookingsError: string | undefined, isSyncing: boolean): UpcomingData {
+  const todayMs = dayStart(new Date());
 
   const calendarItems: UpcomingCalendarItem[] = events
     .filter(e => new Date(e.start).getTime() >= todayMs)
@@ -293,5 +290,43 @@ export async function loadUpcomingEvents(googleAuthed: boolean): Promise<Upcomin
   const trips = groupIntoTrips(allBookingItems.filter(b => b.isUpcomingTravel), todayMs);
   const bookingItems = allBookingItems.slice(0, 8);
 
-  return { calendarItems, bookingItems, trips, fetchedAt: Date.now(), bookingsError };
+  return { calendarItems, bookingItems, trips, fetchedAt: Date.now(), bookingsError, isSyncing };
+}
+
+/**
+ * @param onUpdate Fired twice when a real Gmail sync is due: immediately with
+ *   whatever's already cached (feels instant for the common case), then again
+ *   once the fresh sync resolves. Fired once, synchronously with the final
+ *   result, when no sync is due — cached data and fresh data are the same
+ *   thing in that case, so there's nothing to show early. Callers that only
+ *   care about the final result can ignore it and use the returned Promise.
+ */
+export async function loadUpcomingEvents(googleAuthed: boolean, onUpdate?: (data: UpcomingData) => void): Promise<UpcomingData> {
+  if (!googleAuthed) {
+    const empty = buildUpcomingData([], [], undefined, false);
+    onUpdate?.(empty);
+    return empty;
+  }
+
+  const [events, cachedBookings, syncDue] = await Promise.all([
+    getUpcomingCalendarEvents(30).catch(() => [] as CalendarEvent[]),
+    getCachedBookings().catch(() => [] as BookingItem[]),
+    isBookingsSyncDue().catch(() => false),
+  ]);
+
+  if (!syncDue) {
+    const data = buildUpcomingData(events, cachedBookings, undefined, false);
+    onUpdate?.(data);
+    return data;
+  }
+
+  // A real sync is about to run (first launch, interval elapsed, or a logic
+  // version bump) — paint cached bookings immediately rather than blocking
+  // the whole screen on the Gmail fetch + classification round trip below.
+  onUpdate?.(buildUpcomingData(events, cachedBookings, undefined, true));
+
+  const bookResult = await syncBookings(googleAuthed);
+  const finalData = buildUpcomingData(events, bookResult.items, bookResult.error, false);
+  onUpdate?.(finalData);
+  return finalData;
 }
