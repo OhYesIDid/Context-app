@@ -1,6 +1,6 @@
 export type Intent = 'eta' | 'availability' | 'booking' | 'incoming_location' | 'other';
 export type Enrichment = 'maps' | 'calendar' | 'bookings' | 'incoming_location';
-export type BookingType = 'flight' | 'hotel' | 'train' | 'delivery' | 'restaurant' | 'event' | 'other';
+export type BookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'delivery' | 'restaurant' | 'event' | 'other';
 export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
 export type MemoryType = 'episodic' | 'semantic' | 'spatial' | 'relational' | 'conversation_history';

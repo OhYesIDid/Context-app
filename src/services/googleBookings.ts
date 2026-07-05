@@ -47,6 +47,7 @@ function classifyBooking(subject: string, from: string): BookingType {
   // is a bare substring of "netflix", so a Netflix payment receipt was
   // getting misclassified as a train booking without them.
   if (/\b(?:train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern)\b/.test(s)) return 'train';
+  if (/\b(?:coach|bus station|national express|megabus|flixbus|stagecoach|greyhound)\b/.test(s)) return 'bus';
   if (/\b(?:delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd)\b/.test(s)) return 'delivery';
   if (/\b(?:restaurant|reservation|opentable|resy|sevenrooms)\b/.test(s)) return 'restaurant';
   // Named ticketing vendors only — bare words like "ticket"/"event"/"concert"
@@ -315,7 +316,7 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // fetch-cap or pagination fix. category:updates alone is enormous (tens
   // of thousands of messages: bank alerts, shipping notices, etc.), so it's
   // scoped to known travel-vendor keywords rather than included wholesale.
-  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster';
+  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster OR "national express" OR "bus station" OR megabus OR flixbus';
   const dateFilter = sinceDate
     ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
     : `newer_than:${lookbackDays}d`;
@@ -377,7 +378,7 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
     // show up as a "booking", and definitely shouldn't be eligible for trip
     // grouping (a stray date inside one can otherwise corrupt a real trip's
     // date range).
-    const RELEVANT_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'event'];
+    const RELEVANT_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'bus', 'event'];
 
     // Irrelevant messages (Airbnb host notifications, other purchases still
     // matched by the query above) only cost a cheap metadata fetch each —

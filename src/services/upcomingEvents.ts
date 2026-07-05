@@ -8,6 +8,7 @@ export const BOOKING_ICONS: Record<BookingType, string> = {
   flight:      '✈️',
   hotel:       '🏨',
   train:       '🚂',
+  bus:         '🚌',
   delivery:    '📦',
   restaurant:  '🍽️',
   event:       '🎟️',
@@ -190,7 +191,7 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // BOOKINGS_SYNC_INTERVAL_MS on a device that already synced recently under
 // the old (buggy) logic — exactly what happened going from v51 to v52,
 // where v51's forced-debug sync had just reset the timer.
-const BOOKINGS_SYNC_LOGIC_VERSION = '3';
+const BOOKINGS_SYNC_LOGIC_VERSION = '4';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem[]; error?: string }> {
