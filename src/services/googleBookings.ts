@@ -65,13 +65,30 @@ const DATE_PATTERNS = [
   /\b(\d{4})-(\d{2})-(\d{2})\b/g,
 ];
 
-// Excludes "online check-in" / "check-in available" phrasing — airline
-// confirmation emails routinely mention when the *online check-in window*
-// opens (usually the day before departure), which is not the travel date
-// and was corrupting extraction whenever an email had both a real "check-in"
-// mention (hotel) or "Departing"/"Arrival" label AND this airline-specific
-// self-service phrasing.
-const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|(?<!online )check[- ]?in(?!\s+available)|arriv(?:al|ing)|outbound|boarding|travel date|flight date|date of travel|estimated delivery/gi;
+const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|check[- ]?in|arriv(?:al|ing)|outbound|boarding|travel date|flight date|date of travel|estimated delivery/gi;
+
+// Airline confirmation emails routinely mention when the *online check-in
+// window* opens ("Online Check-in Available Time: 18:00 Aug 5 - 15:00 Aug
+// 6"), which is the day before departure, not the travel date. Excluding
+// this phrase from TRAVEL_KEYWORDS alone isn't enough — if it's the only
+// keyword match in the email, removing it just leaves zero keyword-adjacent
+// candidates, which falls through to the blind whole-text scan, and that
+// scan doesn't check keywords at all so it picks the wrong date right back
+// up. Blanking out a window of text around the phrase (verified against a
+// real Wizz Air/Trip.com confirmation) keeps it out of both extraction
+// paths at once.
+const CHECKIN_WINDOW_MENTION = /online\s+check[- ]?in|check[- ]?in\s+(?:is\s+)?available/gi;
+const CHECKIN_WINDOW_REDACT_CHARS = 300;
+
+function redactCheckinWindows(text: string): string {
+  let result = text;
+  for (const m of text.matchAll(CHECKIN_WINDOW_MENTION)) {
+    const start = m.index ?? 0;
+    const end = Math.min(text.length, start + CHECKIN_WINDOW_REDACT_CHARS);
+    result = result.slice(0, start) + ' '.repeat(end - start) + result.slice(end);
+  }
+  return result;
+}
 
 function buildDate(year: number | undefined, month: number, day: number, reference: Date): Date | null {
   if (month < 0 || month > 11 || day < 1 || day > 31) return null;
@@ -139,12 +156,12 @@ function pickBestDate(candidates: Date[], reference: Date): string | null {
  * skip the more thorough full-body fetch.
  */
 export function extractConfidentTravelDate(text: string, reference: Date = new Date()): string | null {
-  return pickBestDate(nearestKeywordDates(text.slice(0, 20_000), reference), reference);
+  return pickBestDate(nearestKeywordDates(redactCheckinWindows(text.slice(0, 20_000)), reference), reference);
 }
 
 /** Extracts the most likely travel/event date from free text — falls back to a blind scan of the whole body if no keyword-adjacent date is found. */
 export function extractTravelDate(text: string, reference: Date = new Date()): string | null {
-  const scoped = text.slice(0, 20_000);
+  const scoped = redactCheckinWindows(text.slice(0, 20_000));
   const nearKeywords = nearestKeywordDates(scoped, reference);
   const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
   return pickBestDate(candidates, reference);
@@ -157,7 +174,7 @@ export function extractTravelDate(text: string, reference: Date = new Date()): s
  * trip's full span, not just its start.
  */
 export function extractTravelDateRange(text: string, reference: Date = new Date()): { start: string; end: string } | null {
-  const scoped = text.slice(0, 20_000);
+  const scoped = redactCheckinWindows(text.slice(0, 20_000));
   const nearKeywords = nearestKeywordDates(scoped, reference);
   const candidates = nearKeywords.length > 0 ? nearKeywords : findDatesInText(scoped, reference);
   if (candidates.length === 0) return null;
