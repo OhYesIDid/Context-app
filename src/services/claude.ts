@@ -1,3 +1,4 @@
+import { NativeModules } from 'react-native';
 import type { EnrichmentData, ReplyOptions, SuggestReplyInput } from '../types';
 import { ENRICHMENT_FORMATTERS } from '../utils/intentDetector';
 
@@ -56,16 +57,26 @@ async function callViaWorker(input: SuggestReplyInput): Promise<ReplyOptions> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    const rawBody = JSON.stringify({
+      message: input.originalMessage,
+      intents: input.intents,
+      conversationThread: input.conversationThread?.map((m) => ({ sender: m.sender, text: m.text })),
+      enrichments: input.enrichments,
+    });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    // The worker requires HMAC-SHA256 signing (same as the native
+    // reply-suggestion path) — signed natively so WORKER_SECRET never needs
+    // to be duplicated into the JS bundle.
+    const signature: string = await NativeModules.ProTxtSettings.signWorkerRequest(timestamp, rawBody);
     const res = await fetch(`${WORKER_URL}/suggest`, {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: input.originalMessage,
-        intents: input.intents,
-        conversationThread: input.conversationThread?.map((m) => ({ sender: m.sender, text: m.text })),
-        enrichments: input.enrichments,
-      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Timestamp': timestamp,
+        ...(signature ? { 'X-Signature': signature } : {}),
+      },
+      body: rawBody,
     });
     const data = await res.json() as { reply?: string; replies?: Partial<ReplyOptions>; error?: string };
     if (res.status === 429) throw new Error('rate_limited');

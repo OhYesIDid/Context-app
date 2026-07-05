@@ -723,6 +723,16 @@ class BubbleSuggestionActivity : Activity() {
 
         val isPro = Prefs.main(this).getBoolean("is_pro", false)
 
+        // ── View sections, assembled in final display order near the end of
+        // onCreate (see "Assemble sections" below) rather than mounted inline
+        // as each is built — lets tone tabs sit directly above the reply text,
+        // and strategy/intent chips collapse behind "More options", without
+        // restructuring any of the construction logic itself.
+        var strategySectionView: View? = null
+        var toneSectionView: View? = null
+        var addActionBarView: View? = null
+        var addActionRowView: View? = null
+
         // ── Strategy chips ────────────────────────────────────────────────────
         // Only shown for ETA and availability intents. First chip is pre-selected
         // (from Prefs or default). Tapping a chip updates selectedStrategy and
@@ -779,7 +789,7 @@ class BubbleSuggestionActivity : Activity() {
             }
 
             refreshStrategyChips(selectedStrategy!!)
-            root.addView(strategyRow)
+            strategySectionView = strategyRow
         } else if (strategyOptions != null && !isPro) {
             val lockRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -799,12 +809,11 @@ class BubbleSuggestionActivity : Activity() {
                 }
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             })
-            root.addView(lockRow)
+            strategySectionView = lockRow
         }
 
-        // ── Reply area: edit text (ready) or skeleton (loading) ───────────────
-        root.addView(replyEdit)
-        root.addView(skeletonContainer)
+        // ── Reply area: edit text (ready) or skeleton (loading) — mounted
+        // later, directly below the tone pills (see "Assemble sections").
 
         // ── Tone pills ────────────────────────────────────────────────────────
         val tabViews = mutableMapOf<String, TextView>()
@@ -849,7 +858,7 @@ class BubbleSuggestionActivity : Activity() {
                 tabRow.addView(tab)
             }
             refreshTabs(selectedIdx)
-            root.addView(tabRow)
+            toneSectionView = tabRow
         } else if (!showSkeleton && available.size > 1 && !isPro) {
             // Show a locked Pro hint where tone pills would appear
             val lockRow = LinearLayout(this).apply {
@@ -873,7 +882,7 @@ class BubbleSuggestionActivity : Activity() {
                 layoutParams = lp2
             }
             lockRow.addView(lockChip)
-            root.addView(lockRow)
+            toneSectionView = lockRow
         }
 
         // ── Intent context bar ────────────────────────────────────────────────
@@ -938,11 +947,14 @@ class BubbleSuggestionActivity : Activity() {
             intentBar.addView(addBtn)
         }
 
-        root.addView(intentBar)
-        if (unusedIntents.isNotEmpty()) root.addView(addContextRow)
+        // intentBar/addContextRow mounted later, inside the "More options"
+        // collapsible section (see "Assemble sections").
 
         // ── Action area ───────────────────────────────────────────────────────
-        root.addView(actionContainer)
+        // actionContainer mounted later (see "Assemble sections") — stays
+        // directly on root, always visible when populated, since a real
+        // suggested action (add to calendar, etc.) is a primary CTA, not
+        // secondary clutter.
 
         fun showActionCTA(action: JSONObject) {
             val actionType  = action.optString("type")
@@ -1096,12 +1108,53 @@ class BubbleSuggestionActivity : Activity() {
             }
             addActionBar.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
             addActionBar.addView(addActionBtn)
-            root.addView(addActionBar)
-            root.addView(addActionRow)
+            addActionBarView = addActionBar
+            addActionRowView = addActionRow
         }
 
-        // ── Primary Send button ───────────────────────────────────────────────
-        root.addView(sendBtn)
+        // ── Assemble sections in final display order ───────────────────────────
+        // Tone tabs sit directly above the reply text they control. Strategy
+        // chips and intent-context chips are secondary — not needed for the
+        // common "accept the suggestion and send" path — so they collapse
+        // behind a "More options" toggle instead of pushing Send out of view.
+        // Send itself is no longer mounted here at all: it's a fixed footer
+        // outside the ScrollView (see setContentView below), always visible
+        // regardless of how much optional content above it is expanded.
+        toneSectionView?.let { root.addView(it) }
+        root.addView(replyEdit)
+        root.addView(skeletonContainer)
+
+        val moreOptionsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        strategySectionView?.let { moreOptionsContainer.addView(it) }
+        moreOptionsContainer.addView(intentBar)
+        if (unusedIntents.isNotEmpty()) moreOptionsContainer.addView(addContextRow)
+
+        if (strategySectionView != null || activeIntents.isNotEmpty() || unusedIntents.isNotEmpty()) {
+            val moreExpanded = booleanArrayOf(false)
+            val moreToggle = TextView(this).apply {
+                text = "More options ▾"
+                setTextColor(MUTED)
+                textSize = 12f
+                setPadding(0, dp(4), 0, dp(4))
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = dp(8)
+                layoutParams = lp
+                setOnClickListener {
+                    moreExpanded[0] = !moreExpanded[0]
+                    moreOptionsContainer.visibility = if (moreExpanded[0]) View.VISIBLE else View.GONE
+                    text = if (moreExpanded[0]) "Less options ▴" else "More options ▾"
+                }
+            }
+            root.addView(moreToggle)
+            root.addView(moreOptionsContainer)
+        }
+
+        root.addView(actionContainer)
+        addActionBarView?.let { root.addView(it) }
+        addActionRowView?.let { root.addView(it) }
 
         // ── Secondary row: No reply · [spacer] · Dismiss · ↺ ─────────────────
         regenBtn = TextView(this).apply {
@@ -1201,16 +1254,32 @@ class BubbleSuggestionActivity : Activity() {
 
         if (isStale) triggerRegen()
 
-        // Wrap in a ScrollView so the whole bubble UI scrolls in landscape where the
-        // available height is ~360dp — less than the full portrait content height.
-        setContentView(ScrollView(this).apply {
+        // Send lives in a fixed footer below the ScrollView, not inside it —
+        // always reachable without scrolling regardless of how much optional
+        // content above it is expanded. Only the ScrollView (weight 1) grows
+        // to fill remaining space; the footer is a fixed height.
+        val scrollView = ScrollView(this).apply {
             setBackgroundColor(BG)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             addView(root.also {
                 it.layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
             })
+        }
+        val sendFooter = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(BG)
+            setPadding(dp(18), 0, dp(18), dp(14))
+            addView(sendBtn)
+        }
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(BG)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+            addView(scrollView)
+            addView(sendFooter)
         })
     }
 
