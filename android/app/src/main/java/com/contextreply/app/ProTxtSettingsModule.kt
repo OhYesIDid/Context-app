@@ -152,6 +152,10 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             manufacturer.contains("samsung") -> "Notifications → Pop-up view"
             manufacturer.contains("xiaomi") || manufacturer.contains("redmi") -> "Notifications → Floating notifications"
             manufacturer.contains("huawei") || manufacturer.contains("honor") -> "Notifications → Floating window"
+            // ColorOS (OPPO/OnePlus/Realme) doesn't surface AOSP's "Bubbles" label at
+            // all — confirmed on a real OPPO CPH2791 device that the equivalent
+            // toggle is under "Floating windows" instead (see project-bubble-debug memory).
+            manufacturer.contains("oppo") || manufacturer.contains("oneplus") || manufacturer.contains("realme") -> "Notifications → Floating windows"
             else -> "Notifications → Bubbles"
         }
         promise.resolve(label)
