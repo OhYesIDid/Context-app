@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BookingType, CalendarEvent, BookingItem } from '../types';
 import { getUpcomingCalendarEvents } from './googleCalendar';
 import { getBookingsContext } from './googleBookings';
@@ -184,20 +185,30 @@ export { formatTripDateRange };
 // network call, no data usage, no latency.
 const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 
+// Bump this whenever getBookingsContext's query or classifyBooking's rules
+// change. Without it, a fix can ship but never actually run for up to
+// BOOKINGS_SYNC_INTERVAL_MS on a device that already synced recently under
+// the old (buggy) logic — exactly what happened going from v51 to v52,
+// where v51's forced-debug sync had just reset the timer.
+const BOOKINGS_SYNC_LOGIC_VERSION = '2';
+const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
+
 async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem[]; error?: string }> {
   if (!googleAuthed) return { items: [] };
 
   const cached = await getCachedBookings();
   const lastSyncAt = await getLastBookingsSyncAt();
-  const isDue = !lastSyncAt || Date.now() - lastSyncAt.getTime() > BOOKINGS_SYNC_INTERVAL_MS;
+  const syncedLogicVersion = await AsyncStorage.getItem(BOOKINGS_SYNC_LOGIC_VERSION_KEY);
+  const isDue = !lastSyncAt
+    || Date.now() - lastSyncAt.getTime() > BOOKINGS_SYNC_INTERVAL_MS
+    || syncedLogicVersion !== BOOKINGS_SYNC_LOGIC_VERSION;
   if (!isDue) return { items: cached };
 
   try {
-    // First-ever sync scans the full lookback window; every sync after that
-    // only needs to cover the gap since the last one — the "since" date is
-    // omitted rather than always 30 days, which is what let the crowding-out
-    // problem happen in the first place.
-    const isFullSync = !lastSyncAt;
+    // A logic-version mismatch needs a full rescan (old cached rows may
+    // have been classified/dated under the old rules), same as a
+    // never-synced device — not just a gap-covering incremental one.
+    const isFullSync = !lastSyncAt || syncedLogicVersion !== BOOKINGS_SYNC_LOGIC_VERSION;
     const context = isFullSync
       ? await getBookingsContext(30)
       : await getBookingsContext(30, lastSyncAt, 30);
@@ -206,6 +217,7 @@ async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem
     // narrow recent window, so older cached rows outside it would look
     // "missing" and get wrongly deleted.
     if (isFullSync) await pruneBookingsNotIn(context.items.map((b) => b.id));
+    await AsyncStorage.setItem(BOOKINGS_SYNC_LOGIC_VERSION_KEY, BOOKINGS_SYNC_LOGIC_VERSION);
     return { items: await getCachedBookings() };
   } catch (err) {
     // Network/auth failure — degrade to whatever's cached rather than
