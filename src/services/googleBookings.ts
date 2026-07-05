@@ -75,7 +75,13 @@ const DATE_PATTERNS = [
   /\b(\d{4})-(\d{2})-(\d{2})\b/g,
 ];
 
-const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|check[- ]?in|arriv(?:al|ing)|outbound|boarding|travel date|flight date|date of travel|estimated delivery/gi;
+// "return"/"inbound" cover round-trip labels like "Departure: ... / Return:
+// ..." — without them, a round-trip email that happens to resolve its
+// outbound date via keyword-adjacency never falls back to the blind
+// whole-text scan (since that fallback only triggers when ZERO
+// keyword-adjacent candidates are found), silently dropping the return date
+// even though it's sitting right next to a "Return:" label.
+const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|check[- ]?in|arriv(?:al|ing)|outbound|inbound|return(?:ing)?|boarding|travel date|flight date|date of travel|estimated delivery/gi;
 
 // Airline confirmation emails routinely mention when the *online check-in
 // window* opens ("Online Check-in Available Time: 18:00 Aug 5 - 15:00 Aug
