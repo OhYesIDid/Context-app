@@ -2,6 +2,8 @@ import { randomUUID } from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import { decryptField, encryptField, hashIdentifier } from './dbCrypto';
 import type {
+  BookingItem,
+  BookingType,
   Contact,
   Memory,
   PlatformIdentity,
@@ -732,4 +734,78 @@ export async function markSynced(table: 'saved_places' | 'style_edits', ids: str
     `UPDATE ${table} SET synced_at = ? WHERE id IN (${placeholders})`,
     [now, ...ids]
   );
+}
+
+// ── Bookings cache (Phase 2 — local sync instead of a live Gmail fetch on every load) ──
+
+interface BookingRow {
+  id: string;
+  type: string;
+  subject: string;
+  snippet: string;
+  from_address: string;
+  email_date: string;
+  raw_fields: string | null;
+}
+
+export async function upsertBookings(items: BookingItem[]): Promise<void> {
+  if (items.length === 0) return;
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  for (const item of items) {
+    // travelDate/travelDateEnd/destination live in raw_fields, not the
+    // relevance_from/relevance_until columns — those are reserved for a
+    // separate, not-yet-built feature (surfacing a booking only during its
+    // active window), a different concept from the resolved travel dates.
+    const rawFields = JSON.stringify({
+      travelDate: item.travelDate,
+      travelDateEnd: item.travelDateEnd,
+      destination: item.destination,
+    });
+    await db.runAsync(
+      `INSERT INTO bookings (id, type, subject, snippet, from_address, email_date, raw_fields, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         type=excluded.type, subject=excluded.subject, snippet=excluded.snippet,
+         from_address=excluded.from_address, email_date=excluded.email_date,
+         raw_fields=excluded.raw_fields, synced_at=excluded.synced_at`,
+      [
+        item.id,
+        item.type,
+        await encryptField(item.subject),
+        await encryptField(item.snippet),
+        await encryptField(item.from),
+        item.date,
+        rawFields,
+        now,
+      ]
+    );
+  }
+}
+
+export async function getCachedBookings(): Promise<BookingItem[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<BookingRow>('SELECT * FROM bookings WHERE deleted_at IS NULL');
+  return Promise.all(rows.map(async (r) => {
+    const raw = r.raw_fields ? JSON.parse(r.raw_fields) as { travelDate?: string; travelDateEnd?: string; destination?: string } : {};
+    return {
+      id: r.id,
+      type: r.type as BookingType,
+      subject: (await decryptField(r.subject)) ?? r.subject,
+      snippet: (await decryptField(r.snippet)) ?? r.snippet,
+      from: (await decryptField(r.from_address)) ?? r.from_address,
+      date: r.email_date,
+      travelDate: raw.travelDate,
+      travelDateEnd: raw.travelDateEnd,
+      destination: raw.destination,
+    };
+  }));
+}
+
+export async function getLastBookingsSyncAt(): Promise<Date | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ max_synced: string | null }>(
+    'SELECT MAX(synced_at) as max_synced FROM bookings'
+  );
+  return row?.max_synced ? new Date(row.max_synced) : null;
 }

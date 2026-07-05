@@ -1,6 +1,7 @@
 import type { BookingType, CalendarEvent, BookingItem } from '../types';
 import { getUpcomingCalendarEvents } from './googleCalendar';
 import { getBookingsContext } from './googleBookings';
+import { getCachedBookings, getLastBookingsSyncAt, upsertBookings } from './database';
 
 export const BOOKING_ICONS: Record<BookingType, string> = {
   flight:      '✈️',
@@ -176,21 +177,51 @@ function formatTripDateRange(start: Date, end: Date): string {
 
 export { formatTripDateRange };
 
+// Re-hitting Gmail on every tab open / app-foreground was the root cause of
+// bookings getting crowded out by inbox volume in the first place (see
+// googleBookings.ts) — this caps how often a real fetch happens at all.
+// Between syncs, bookings are served straight from the local cache: no
+// network call, no data usage, no latency.
+const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
+
+async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem[]; error?: string }> {
+  if (!googleAuthed) return { items: [] };
+
+  const cached = await getCachedBookings();
+  const lastSyncAt = await getLastBookingsSyncAt();
+  const isDue = !lastSyncAt || Date.now() - lastSyncAt.getTime() > BOOKINGS_SYNC_INTERVAL_MS;
+  if (!isDue) return { items: cached };
+
+  try {
+    // First-ever sync scans the full lookback window; every sync after that
+    // only needs to cover the gap since the last one — the "since" date is
+    // omitted rather than always 30 days, which is what let the crowding-out
+    // problem happen in the first place.
+    const context = lastSyncAt
+      ? await getBookingsContext(30, lastSyncAt, 30)
+      : await getBookingsContext(30);
+    await upsertBookings(context.items);
+    return { items: await getCachedBookings() };
+  } catch (err) {
+    // Network/auth failure — degrade to whatever's cached rather than
+    // losing everything, but still surface the error.
+    return { items: cached, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function loadUpcomingEvents(googleAuthed: boolean): Promise<UpcomingData> {
   const [calResult, bookResult] = await Promise.allSettled([
     googleAuthed
       ? getUpcomingCalendarEvents(30)
       : Promise.resolve([] as CalendarEvent[]),
-    googleAuthed
-      ? getBookingsContext(30)
-      : Promise.resolve({ items: [] as BookingItem[], windowStart: '', windowEnd: '' }),
+    syncBookings(googleAuthed),
   ]);
 
   const events = calResult.status === 'fulfilled' ? calResult.value : [];
   const bookings = bookResult.status === 'fulfilled' ? bookResult.value.items : [];
-  const bookingsError = bookResult.status === 'rejected'
-    ? (bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason))
-    : undefined;
+  const bookingsError = bookResult.status === 'fulfilled'
+    ? bookResult.value.error
+    : (bookResult.reason instanceof Error ? bookResult.reason.message : String(bookResult.reason));
   const now = new Date();
   const todayMs = dayStart(now);
 

@@ -1,10 +1,11 @@
 import type { BookingContext, BookingItem, BookingType } from '../types';
 import { getAccessToken, invalidateToken } from './googleAuth';
 
-// 25s (was 15s): the full-body fallback fetch adds a second, larger sequential
-// round-trip for any message where subject/snippet don't confidently resolve a
-// date — the whole getBookingsContext call shares this one timeout budget.
-const REQUEST_TIMEOUT_MS = 25_000;
+// 35s (was 25s): paginating through up to MAX_MESSAGES results (see below)
+// adds a handful of sequential list-page round-trips on top of the
+// full-body fallback fetches — the whole getBookingsContext call shares
+// this one timeout budget.
+const REQUEST_TIMEOUT_MS = 35_000;
 
 function classifyBooking(subject: string, from: string): BookingType {
   // A reply/forward carries quoted history from the original thread, which
@@ -271,12 +272,26 @@ function extractBodyText(payload: GmailPart | undefined): string {
   return '';
 }
 
-export async function getBookingsContext(lookbackDays = 30): Promise<BookingContext> {
+function formatGmailDate(d: Date): string {
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * @param lookbackDays Used for a full scan (sinceDate omitted) — ignored otherwise.
+ * @param sinceDate When given, does an incremental scan instead ("after:" the day
+ *   before this date, overlapping by a day since Gmail's after: is date-only and
+ *   duplicates are harmless — upserts are keyed by message id).
+ * @param maxMessages Safety cap on how many candidate messages to page through
+ *   and classify. A full scan needs headroom against a busy inbox's daily purchase
+ *   volume; an incremental scan only ever needs to cover a day or two, so it can
+ *   stay small.
+ */
+export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, maxMessages = 150): Promise<BookingContext> {
   const accessToken = await getAccessToken();
 
   const windowEnd = new Date();
-  const windowStart = new Date();
-  windowStart.setDate(windowStart.getDate() - lookbackDays);
+  const windowStart = sinceDate ?? new Date();
+  if (!sinceDate) windowStart.setDate(windowStart.getDate() - lookbackDays);
 
   // category:purchases is back — real booking confirmations (Trip.com,
   // airline receipts) often land there rather than category:travel, which
@@ -285,14 +300,17 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
   // the bare keyword search tried previously ("ticket", "event", "concert")
   // matched any promotional email mentioning those words, which is exactly
   // the spam this excludes; the type allowlist below does the rest.
-  const query = `(category:travel OR category:purchases) -category:promotions newer_than:${lookbackDays}d`;
+  const dateFilter = sinceDate
+    ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
+    : `newer_than:${lookbackDays}d`;
+  const query = `(category:travel OR category:purchases) -category:promotions ${dateFilter}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=30`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`,
       { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
@@ -308,8 +326,33 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
       throw new Error(`Gmail API error ${listRes.status}`);
     }
 
-    const listData = await listRes.json() as { messages?: { id: string }[] };
-    const messages = listData.messages ?? [];
+    const listData = await listRes.json() as { messages?: { id: string }[]; nextPageToken?: string };
+    const messageIds = (listData.messages ?? []).map((m) => m.id);
+
+    // A single page of "recent purchases/travel" isn't enough for a busy
+    // inbox — dozens of unrelated receipts (deliveries, subscriptions, food
+    // orders) routinely outnumber genuine bookings from just a few days
+    // ago, pushing them past any single-page cutoff. Page through further
+    // results (bounded by maxMessages) instead of raising that cutoff
+    // indefinitely. Subsequent-page failures are swallowed — better to work
+    // with whatever was already fetched than fail the whole lookup over a
+    // pagination hiccup.
+    let pageToken = listData.nextPageToken;
+    while (pageToken && messageIds.length < maxMessages) {
+      try {
+        const pageRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50&pageToken=${pageToken}`,
+          { signal: controller.signal, headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!pageRes.ok) break;
+        const pageData = await pageRes.json() as { messages?: { id: string }[]; nextPageToken?: string };
+        messageIds.push(...(pageData.messages ?? []).map((m) => m.id));
+        pageToken = pageData.nextPageToken;
+      } catch {
+        break;
+      }
+    }
+
     const now = new Date();
 
     // Only travel/event bookings belong in the Upcoming tab — a delivery or
@@ -323,11 +366,10 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
     // Irrelevant messages (Airbnb host notifications, other purchases still
     // matched by the query above) only cost a cheap metadata fetch each —
     // the RELEVANT_TYPES filter below runs before any full-body fetch, so
-    // processing more of them doesn't add much latency. It matters because
-    // a real booking's confirmation emails can otherwise get crowded out of
-    // a small top-N window by irrelevant messages that arrived more recently.
+    // processing more of them doesn't add much latency, since they all run
+    // concurrently via Promise.all.
     const items: (BookingItem | null)[] = await Promise.all(
-      messages.slice(0, 25).map(async ({ id }) => {
+      messageIds.slice(0, maxMessages).map(async (id) => {
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
           `&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
