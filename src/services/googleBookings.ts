@@ -7,8 +7,25 @@ import { getAccessToken, invalidateToken } from './googleAuth';
 const REQUEST_TIMEOUT_MS = 25_000;
 
 function classifyBooking(subject: string, from: string): BookingType {
+  // A reply/forward carries quoted history from the original thread, which
+  // confuses date extraction, and isn't itself a fresh confirmation.
+  if (/^\s*(re|fwd?)\s*:/i.test(subject)) return 'other';
+
   const s = (subject + ' ' + from).toLowerCase();
+
+  // A cancelled booking isn't upcoming travel regardless of type.
+  if (/cancell?ed/.test(s)) return 'other';
+
   if (/flight|airline|airways|boarding pass|easyjet|ryanair|ba\.com|lufthansa|heathrow|gatwick/.test(s)) return 'flight';
+
+  // Airbnb host-side notifications (about someone else's stay at the user's
+  // own listed room) share every keyword a genuine hotel confirmation has
+  // ("airbnb", "reservation") — exclude the host-facing phrasing Airbnb
+  // actually sends before falling through to the generic hotel match, so a
+  // guest booking the user's spare room doesn't get treated as the user's
+  // own upcoming trip.
+  if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|new (?:reservation|booking) request|you have a new (?:reservation|booking)/.test(s)) return 'other';
+
   if (/hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation/.test(s)) return 'hotel';
   if (/train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern/.test(s)) return 'train';
   if (/delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd/.test(s)) return 'delivery';
@@ -48,7 +65,13 @@ const DATE_PATTERNS = [
   /\b(\d{4})-(\d{2})-(\d{2})\b/g,
 ];
 
-const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|check[- ]?in|arriv(?:al|ing)|outbound|boarding|travel date|flight date|date of travel|estimated delivery/gi;
+// Excludes "online check-in" / "check-in available" phrasing — airline
+// confirmation emails routinely mention when the *online check-in window*
+// opens (usually the day before departure), which is not the travel date
+// and was corrupting extraction whenever an email had both a real "check-in"
+// mention (hotel) or "Departing"/"Arrival" label AND this airline-specific
+// self-service phrasing.
+const TRAVEL_KEYWORDS = /depart(?:ure|ing)?|(?<!online )check[- ]?in(?!\s+available)|arriv(?:al|ing)|outbound|boarding|travel date|flight date|date of travel|estimated delivery/gi;
 
 function buildDate(year: number | undefined, month: number, day: number, reference: Date): Date | null {
   if (month < 0 || month > 11 || day < 1 || day > 31) return null;
