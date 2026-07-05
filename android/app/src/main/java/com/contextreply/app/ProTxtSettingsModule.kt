@@ -22,6 +22,36 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     override fun getName() = "ProTxtSettings"
 
+    // Plain Linking.openURL() on a mail.google.com link resolves to whatever
+    // browser is the device's default https handler, not Gmail — confirmed
+    // via `adb shell pm get-app-links com.google.android.gm`, which doesn't
+    // even list mail.google.com among Gmail's declared App Link domains, so
+    // there's no "open by default" setting to enable either. Explicitly
+    // targeting Gmail's package bypasses App Link verification entirely —
+    // Android only needs a matching intent-filter to exist for an
+    // explicitly-package-targeted intent to resolve, verified or not.
+    @ReactMethod
+    fun openUrlInGmail(url: String, promise: Promise) {
+        try {
+            val gmailIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            gmailIntent.setPackage("com.google.android.gm")
+            gmailIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            reactApplicationContext.startActivity(gmailIntent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            // Gmail not installed or no matching intent-filter — fall back
+            // to normal resolution (whatever the device's default handler is).
+            try {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                reactApplicationContext.startActivity(fallbackIntent)
+                promise.resolve(false)
+            } catch (e2: Exception) {
+                promise.reject("OPEN_URL_FAILED", e2)
+            }
+        }
+    }
+
     @ReactMethod
     fun refreshBubbleState() {
         ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()

@@ -12,7 +12,12 @@ function classifyBooking(subject: string, from: string): BookingType {
   // confuses date extraction, and isn't itself a fresh confirmation.
   if (/^\s*(re|fwd?)\s*:/i.test(subject)) return 'other';
 
-  const s = (subject + ' ' + from).toLowerCase();
+  // Underscores/hyphens are \w characters, so \b treats them as part of a
+  // word, not a boundary — "en_flight_noreply@trip.com" (a real sender
+  // address) is one unbroken "word" to \bflight\b and never matches.
+  // Normalizing them to spaces first lets \b work the way a human reading
+  // "en_flight_noreply" as three separate words would expect.
+  const s = (subject + ' ' + from).toLowerCase().replace(/[_-]/g, ' ');
 
   // A cancelled or still-pending (not yet confirmed) booking isn't upcoming
   // travel regardless of type — a pending request can still be rejected or

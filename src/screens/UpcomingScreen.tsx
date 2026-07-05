@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
 import { formatTripDateRange } from '../services/upcomingEvents';
 
@@ -36,7 +36,15 @@ function CalendarRow({ item }: { item: UpcomingCalendarItem }) {
 }
 
 function openInGmail(gmailId: string) {
-  Linking.openURL(`https://mail.google.com/mail/u/0/#all/${gmailId}`).catch(() => {});
+  const url = `https://mail.google.com/mail/u/0/#all/${gmailId}`;
+  // Plain Linking.openURL() resolves this to the device's default browser,
+  // not Gmail — mail.google.com isn't even in Gmail's declared App Link
+  // domains on Android, so there's no "open by default" setting to fix it
+  // either. openUrlInGmail explicitly targets Gmail's package, falling
+  // back to normal resolution if Gmail isn't installed.
+  const openInApp = NativeModules.ProTxtSettings?.openUrlInGmail as ((url: string) => Promise<boolean>) | undefined;
+  if (openInApp) openInApp(url).catch(() => {});
+  else Linking.openURL(url).catch(() => {});
 }
 
 function BookingRow({ item }: { item: UpcomingBookingItem }) {
