@@ -13,7 +13,10 @@ function classifyBooking(subject: string, from: string): BookingType {
   if (/train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern/.test(s)) return 'train';
   if (/delivery|dispatch|shipped|tracking|out for delivery|amazon|ups|fedex|evri|hermes|royal mail|dpd/.test(s)) return 'delivery';
   if (/restaurant|reservation|opentable|resy|sevenrooms/.test(s)) return 'restaurant';
-  if (/ticket|event|concert|theatre|theater|cinema|eventbrite/.test(s)) return 'event';
+  // Named ticketing vendors only — bare words like "ticket"/"event"/"concert"
+  // match any promotional email that mentions them (a venue's marketing
+  // blast, a "big event this weekend" newsletter), not just real bookings.
+  if (/eventbrite|ticketmaster|seetickets|see tickets|ticketek|dice\.fm|songkick|gigantic\.com|skiddle|wegottickets|fatsoma|axs\.com/.test(s)) return 'event';
   return 'other';
 }
 
@@ -219,10 +222,14 @@ export async function getBookingsContext(lookbackDays = 30): Promise<BookingCont
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - lookbackDays);
 
-  // Scoped to travel + event confirmations only — category:purchases pulled
-  // in every online order/bill regardless of relevance, which is not what
-  // the Upcoming tab's booking view is for.
-  const query = `(category:travel OR ticket OR tickets OR event OR concert OR theatre OR theater OR cinema OR eventbrite) newer_than:${lookbackDays}d`;
+  // category:purchases is back — real booking confirmations (Trip.com,
+  // airline receipts) often land there rather than category:travel, which
+  // is Gmail's own (imperfect) classification, not something we control.
+  // -category:promotions cuts marketing/spam off at the source instead —
+  // the bare keyword search tried previously ("ticket", "event", "concert")
+  // matched any promotional email mentioning those words, which is exactly
+  // the spam this excludes; the type allowlist below does the rest.
+  const query = `(category:travel OR category:purchases) -category:promotions newer_than:${lookbackDays}d`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
