@@ -156,7 +156,7 @@ class ProTxtBgService : NotificationListenerService() {
         )
 
         private val INSTAGRAM_NON_DM_TITLE_PATTERNS = listOf(
-            Regex("\\bInstagram\\b", RegexOption.IGNORE_CASE),
+            Regex("^Instagram$", RegexOption.IGNORE_CASE),
             Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
         )
 
@@ -505,8 +505,12 @@ class ProTxtBgService : NotificationListenerService() {
         if (NO_REPLY_TEXT_PATTERNS.any { it.containsMatchIn(text) || it.containsMatchIn(title) }) return
 
         // Gate 4: Instagram engagement vs DM
+        // Matched against the stripped title (drops any "Instagram: " prefix Instagram may
+        // prepend to DM titles, mirroring WhatsApp's "WhatsApp: ContactName" format) — matching
+        // on the raw title let a bare "\bInstagram\b" pattern swallow every real DM whose title
+        // contains the app name anywhere.
         if (sbn.packageName == "com.instagram.android") {
-            if (INSTAGRAM_NON_DM_TITLE_PATTERNS.any { it.containsMatchIn(title) }) return
+            if (INSTAGRAM_NON_DM_TITLE_PATTERNS.any { it.containsMatchIn(stripAppPrefix(title)) }) return
         }
 
         // Gate 5: group messages — configurable
