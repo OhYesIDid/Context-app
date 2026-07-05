@@ -101,7 +101,6 @@ export default function App() {
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
   const [locationGranted, setLocationGranted] = useState(false);
-  const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
   const [bubbleLabel, setBubbleLabel] = useState('Notifications → Bubbles');
   const [googleContactsCount, setGoogleContactsCount] = useState<number | null>(null);
   const [deviceContactsCount, setDeviceContactsCount] = useState<number | null>(null);
@@ -169,7 +168,6 @@ export default function App() {
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
-      ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
       ProTxtSettings.getRemindersEnabled?.().then((v: boolean) => setRemindersEnabledState(v)).catch(() => {});
@@ -215,7 +213,6 @@ export default function App() {
       if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
-      ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
         if (text) { setShareText(text); setShareReply(''); }
@@ -540,7 +537,7 @@ export default function App() {
             {!notifPermission && <Text style={styles.setupAction}>Open</Text>}
           </Pressable>
           <Pressable
-            style={styles.settingRow}
+            style={[styles.settingRow, { borderBottomWidth: 0 }]}
             onPress={async () => {
               const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
               setLocationGranted(result === PermissionsAndroid.RESULTS.GRANTED);
@@ -555,19 +552,6 @@ export default function App() {
             </View>
             {!locationGranted && <Text style={styles.setupAction}>Open</Text>}
           </Pressable>
-          <Pressable
-            style={[styles.settingRow, { borderBottomWidth: 0 }]}
-            onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
-              <View>
-                <Text style={styles.settingText}>Keyboard overlay <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
-                <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
-              </View>
-            </View>
-            {!accessibilityEnabled && <Text style={styles.setupAction}>Enable</Text>}
-          </Pressable>
         </View>
 
         {/* REPLY SURFACES */}
@@ -579,7 +563,7 @@ export default function App() {
           >
             <View style={styles.settingLeft}>
               <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.settingText}>Suggestion bubbles</Text>
                 <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
               </View>
@@ -660,8 +644,8 @@ export default function App() {
           </View>
           <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => { if (!isPro) openPaywall(); }} disabled={isPro}>
             <View style={{ flex: 1, marginRight: 16 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.settingText}>Suggest replies for all messages</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={[styles.settingText, { flexShrink: 1 }]}>Suggest replies for all messages</Text>
                 {!isPro && (
                   <View style={styles.proBadge}>
                     <Text style={styles.proBadgeText}>PRO</Text>
@@ -1239,7 +1223,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14, paddingHorizontal: 16,
     borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 12 },
   settingText: { fontSize: 16, color: TEXT },
   setupStatus: { fontSize: 12, color: MUTED, marginTop: 1 },
   setupAction: { fontSize: 13, color: PURPLE, fontWeight: '600' },
