@@ -193,7 +193,7 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // BOOKINGS_SYNC_INTERVAL_MS on a device that already synced recently under
 // the old (buggy) logic — exactly what happened going from v51 to v52,
 // where v51's forced-debug sync had just reset the timer.
-const BOOKINGS_SYNC_LOGIC_VERSION = '5';
+const BOOKINGS_SYNC_LOGIC_VERSION = '6';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function isBookingsSyncDue(): Promise<boolean> {
@@ -220,14 +220,41 @@ async function syncBookings(googleAuthed: boolean): Promise<{ items: BookingItem
     // have been classified/dated under the old rules), same as a
     // never-synced device — not just a gap-covering incremental one.
     const isFullSync = !lastSyncAt || syncedLogicVersion !== BOOKINGS_SYNC_LOGIC_VERSION;
+    // Full sync looks back further than the confirmation-email-received
+    // window would suggest is needed: a flight booked 6+ weeks ahead of
+    // travel has a confirmation older than 30 days well before the trip
+    // itself happens. 90 days covers most advance bookings; this only runs
+    // on a full resync (first install or a logic-version bump), not on
+    // every load, so the wider window is a one-time cost, not a per-load one.
     const context = isFullSync
-      ? await getBookingsContext(30)
+      ? await getBookingsContext(90)
       : await getBookingsContext(30, lastSyncAt, 30);
     await upsertBookings(context.items);
     // Only a full sync can safely prune — an incremental sync only covers a
     // narrow recent window, so older cached rows outside it would look
     // "missing" and get wrongly deleted.
-    if (isFullSync) await pruneBookingsNotIn(context.items.map((b) => b.id));
+    //
+    // Even a full sync's own rescan window (newer_than:30d) is a "how far
+    // back to look for new candidates" control, not a "how long is this
+    // booking still valid" one — a flight booked 6 weeks before departure
+    // has a confirmation email older than 30 days well before the trip
+    // itself is over. Without this, any booking made far enough ahead of
+    // travel would silently vanish from the cache the next time a full
+    // resync runs (which happens on every logic-version bump, not just
+    // first install), even though the trip is still upcoming. Preserve any
+    // cached row whose resolved travel window hasn't ended yet, regardless
+    // of whether this scan's date window happened to re-find its email.
+    if (isFullSync) {
+      const now = Date.now();
+      const stillUpcomingIds = cached
+        .filter((b) => {
+          const end = b.travelDateEnd ?? b.travelDate;
+          return end != null && new Date(end).getTime() >= now;
+        })
+        .map((b) => b.id);
+      const keepIds = [...new Set([...context.items.map((b) => b.id), ...stillUpcomingIds])];
+      await pruneBookingsNotIn(keepIds);
+    }
     await AsyncStorage.setItem(BOOKINGS_SYNC_LOGIC_VERSION_KEY, BOOKINGS_SYNC_LOGIC_VERSION);
     return { items: await getCachedBookings() };
   } catch (err) {
