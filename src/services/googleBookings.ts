@@ -23,8 +23,15 @@ function classifyBooking(subject: string, from: string): BookingType {
   // ("airbnb", "reservation") — exclude the host-facing phrasing Airbnb
   // actually sends before falling through to the generic hotel match, so a
   // guest booking the user's spare room doesn't get treated as the user's
-  // own upcoming trip.
+  // own upcoming trip. Some of these ("Reservation confirmed - Marcel
+  // Krämer arrives 11 Aug") use the exact same "reservation/booking
+  // confirmed" wording a genuine guest-side confirmation would — no single
+  // phrase distinguishes them, so the "<name> arrives <date>" structure is
+  // checked too, gated behind the sender actually being Airbnb to avoid
+  // ever misreading an unrelated email that happens to mention someone
+  // else's arrival time.
   if (/reservation reminder|guests? (?:are|is) waiting|we sent a payout|write a review for|has written you a review|refer a host|enquiry for|new (?:reservation|booking) request|you have a new (?:reservation|booking)/.test(s)) return 'other';
+  if (/airbnb/.test(from.toLowerCase()) && /\barrives?\s+\d{1,2}\b|\bis\s+arriving\b|\bchecks?\s?in(?:s|g)?\s+\d{1,2}\b/i.test(subject)) return 'other';
 
   if (/hotel|inn|resort|airbnb|booking\.com|hotels\.com|marriott|hilton|check.?in|accommodation/.test(s)) return 'hotel';
   if (/train|rail|eurostar|tfl|gwr|avanti|lner|crosscountry|c2c|southeastern/.test(s)) return 'train';
