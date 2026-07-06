@@ -144,18 +144,28 @@ export default function App() {
     if (contactsVisible) {
       getAllContacts().then(setContacts).catch(() => {});
       // One bulk query grouped client-side, rather than one platform-identities
-      // lookup per row — the list can show dozens of contacts at once.
-      getConfirmedPlatformIdentities()
-        .then((ids) => {
-          const grouped: Record<string, string[]> = {};
-          for (const id of ids) {
-            if (id.identifierType === 'display_name') continue;
-            const list = grouped[id.contactId] ?? (grouped[id.contactId] = []);
-            if (!list.includes(id.platform)) list.push(id.platform);
-          }
-          setContactPlatforms(grouped);
-        })
-        .catch(() => {});
+      // lookup per row — the list can show dozens of contacts at once. Merges
+      // in native confirmed_identities links too — the much more common
+      // automatic "Is this X?" banner path has only ever written there, never
+      // to the platform_identities table, so most real links wouldn't show
+      // up here without this (see ContactDetailModal's backfillConfirmedLinks
+      // for the same gap, and why it's fixed on read rather than migrated).
+      Promise.all([
+        getConfirmedPlatformIdentities(),
+        ProTxtSettings?.getAllConfirmedLinks?.().then((json: string) => JSON.parse(json)).catch(() => [] as { contactId: string; platform: string }[]),
+      ]).then(([ids, links]) => {
+        const grouped: Record<string, string[]> = {};
+        for (const id of ids) {
+          if (id.identifierType === 'display_name') continue;
+          const list = grouped[id.contactId] ?? (grouped[id.contactId] = []);
+          if (!list.includes(id.platform)) list.push(id.platform);
+        }
+        for (const link of links as { contactId: string; platform: string }[]) {
+          const list = grouped[link.contactId] ?? (grouped[link.contactId] = []);
+          if (!list.includes(link.platform)) list.push(link.platform);
+        }
+        setContactPlatforms(grouped);
+      }).catch(() => {});
     }
   }, [contactsVisible]);
 

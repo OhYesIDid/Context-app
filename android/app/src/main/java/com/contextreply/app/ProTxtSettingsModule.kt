@@ -115,6 +115,45 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // Every confirmed_identities entry pointing at a REAL contact (not an "auto:*" or
+    // "sep:*" placeholder) — i.e. every cross-app link the automatic "Is this X?"
+    // banner has ever confirmed, going back to before the JS-side platform_identities
+    // table (used for the "ON" chip display) existed. That table has only ever been
+    // written by contact import and the new manual "+ Link another app" picker — the
+    // much more common automatic banner path never wrote to it — so most real,
+    // long-standing links have nothing to show in the UI without this. The JS side
+    // uses this to backfill platform_identities the first time a contact's profile
+    // (or the contacts list) is viewed, rather than needing this on every load.
+    @ReactMethod
+    fun getAllConfirmedLinks(promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            val result = JSONArray()
+            val keys = confirmed.keys()
+            while (keys.hasNext()) {
+                val convKey = keys.next()
+                val contactId = confirmed.optString(convKey)
+                if (contactId.startsWith("auto:") || contactId.startsWith("sep:")) continue
+                val packageName = convKey.substringBefore(":", "")
+                val senderName = ProTxtBgService.stripAppPrefix(convKey.substringAfter(":"))
+                if (packageName.isEmpty() || senderName.isEmpty()) continue
+                val platform = ProTxtBgService.packageToPlatform(packageName) ?: continue
+                result.put(JSONObject().apply {
+                    put("convKey", convKey)
+                    put("contactId", contactId)
+                    put("displayName", senderName)
+                    put("platform", platform)
+                })
+            }
+            promise.resolve(result.toString())
+        } catch (e: Exception) {
+            promise.reject("GET_CONFIRMED_LINKS_FAILED", e)
+        }
+    }
+
     // Re-points a convKey's confirmed_identities entry at a real contact — the same
     // write the bubble's "Yes, link" banner already does, just reached by the user
     // manually browsing unmatched senders in Settings instead of a system-suggested

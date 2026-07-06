@@ -73,6 +73,39 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
       .catch(() => {});
   };
 
+  // The much more common automatic "Is this X?" banner path has only ever
+  // written to a native confirmed_identities map, never to the platform_identities
+  // table the "ON" chips read from — so most real, long-standing links have
+  // nothing to show without this. Backfill any native-confirmed link for this
+  // contact that isn't already represented (matched by platform, since the
+  // native side only knows a display name, not a specific phone/username).
+  const backfillConfirmedLinks = async (id: string, currentIdentities: PlatformIdentity[]) => {
+    try {
+      const json: string = await ProTxtSettings?.getAllConfirmedLinks?.();
+      if (!json) return;
+      const links = JSON.parse(json) as { convKey: string; contactId: string; displayName: string; platform: string }[];
+      const known = new Set(currentIdentities.map(i => i.platform));
+      const missing = links.filter(l => l.contactId === id && VALID_PLATFORMS.includes(l.platform as Platform) && !known.has(l.platform as Platform));
+      if (missing.length === 0) return;
+      const seen = new Set<string>();
+      for (const link of missing) {
+        if (seen.has(link.platform)) continue;
+        seen.add(link.platform);
+        await upsertPlatformIdentity({
+          contactId: id,
+          platform: link.platform as Platform,
+          identifier: link.displayName,
+          identifierType: 'username',
+          confidence: 1,
+          userConfirmed: true,
+        });
+      }
+      reloadIdentities(id);
+    } catch {
+      // Best-effort — the "ON" section just stays as-is if this fails.
+    }
+  };
+
   useEffect(() => {
     if (!contactId) { setLoading(false); return; }
     setLoading(true);
@@ -82,8 +115,10 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
       getSemanticMemoriesByContact(contactId, 15),
     ]).then(([c, ids, mems]) => {
       setContact(c);
-      setIdentities(ids.filter(i => i.identifierType !== 'display_name'));
+      const filtered = ids.filter(i => i.identifierType !== 'display_name');
+      setIdentities(filtered);
       setMemories(mems);
+      backfillConfirmedLinks(contactId, filtered);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [contactId]);
 
