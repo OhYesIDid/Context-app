@@ -28,7 +28,7 @@ import ContactDetailModal from './src/screens/ContactDetailModal';
 import UpcomingScreen from './src/screens/UpcomingScreen';
 import HomeLocationConfirmModal from './src/screens/HomeLocationConfirmModal';
 import type { HomeCandidate } from './src/screens/HomeLocationConfirmModal';
-import { loadUpcomingEvents, UPCOMING_EMPTY } from './src/services/upcomingEvents';
+import { loadUpcomingEvents, PLATFORM_ICONS, UPCOMING_EMPTY } from './src/services/upcomingEvents';
 import type { UpcomingData } from './src/services/upcomingEvents';
 import { loadFollowUps, addFollowUp } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
@@ -42,7 +42,7 @@ const { ProTxtSettings } = NativeModules;
 import { suggestReply } from './src/services/claude';
 import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchOfferings, presentCustomerCenter, purchasePkg, restorePurchases } from './src/services/purchases';
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
-import { getAllContacts, updateContactPreferences, upsertContact } from './src/services/database';
+import { getAllContacts, getConfirmedPlatformIdentities, updateContactPreferences, upsertContact } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
 import { getCalendarData } from './src/services/googleCalendar';
@@ -111,6 +111,7 @@ export default function App() {
   const [remindersEnabled, setRemindersEnabledState] = useState(true);
   const [suggestAllMessages, setSuggestAllMessagesState] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactPlatforms, setContactPlatforms] = useState<Record<string, string[]>>({});
   const [contactsVisible, setContactsVisible] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [newContactVisible, setNewContactVisible] = useState(false);
@@ -142,6 +143,19 @@ export default function App() {
   useEffect(() => {
     if (contactsVisible) {
       getAllContacts().then(setContacts).catch(() => {});
+      // One bulk query grouped client-side, rather than one platform-identities
+      // lookup per row — the list can show dozens of contacts at once.
+      getConfirmedPlatformIdentities()
+        .then((ids) => {
+          const grouped: Record<string, string[]> = {};
+          for (const id of ids) {
+            if (id.identifierType === 'display_name') continue;
+            const list = grouped[id.contactId] ?? (grouped[id.contactId] = []);
+            if (!list.includes(id.platform)) list.push(id.platform);
+          }
+          setContactPlatforms(grouped);
+        })
+        .catch(() => {});
     }
   }, [contactsVisible]);
 
@@ -835,7 +849,16 @@ export default function App() {
                     {shown.map((c) => (
                       <View key={c.id} style={styles.contactCard}>
                         <Pressable onPress={() => setSelectedContactId(c.id)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <Text style={styles.contactName}>{c.displayName}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 }}>
+                            <Text style={styles.contactName} numberOfLines={1}>{c.displayName}</Text>
+                            {(contactPlatforms[c.id]?.length ?? 0) > 0 && (
+                              <View style={{ flexDirection: 'row', marginLeft: 8, gap: 3 }}>
+                                {contactPlatforms[c.id].map((p) => (
+                                  <Text key={p} style={{ fontSize: 12 }}>{PLATFORM_ICONS[p] ?? '📱'}</Text>
+                                ))}
+                              </View>
+                            )}
+                          </View>
                           <Text style={{ fontSize: 12, color: '#6366f1' }}>View profile</Text>
                         </Pressable>
                         <Text style={styles.chipLabel}>Relationship</Text>

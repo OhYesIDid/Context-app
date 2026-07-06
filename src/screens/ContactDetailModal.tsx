@@ -164,7 +164,16 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
                   </Text>
                 </View>
                 <View style={styles.headerInfo}>
-                  <Text style={styles.name}>{contact.displayName}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.name}>{contact.displayName}</Text>
+                    {Array.from(new Set(identities.map(i => i.platform))).length > 0 && (
+                      <View style={{ flexDirection: 'row', marginLeft: 8, gap: 3 }}>
+                        {Array.from(new Set(identities.map(i => i.platform))).map(p => (
+                          <Text key={p} style={{ fontSize: 15 }}>{PLATFORM_ICONS[p] ?? '📱'}</Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.meta}>
                     {[
                       contact.interactionCount ? `${contact.interactionCount} interactions` : null,
