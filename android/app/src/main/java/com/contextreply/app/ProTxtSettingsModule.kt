@@ -79,6 +79,62 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()
     }
 
+    // "confirmed_identities" maps convKey -> contactId. Every sender ends up with an
+    // entry almost immediately: a real contactId (banner-confirmed or auto-applied
+    // high-confidence match), a "sep:*" placeholder (user explicitly chose "keep
+    // separate" for a cross-app suggestion), or an "auto:*" placeholder (no contact
+    // matched at all, auto-registered so the banner never re-asks). Only the "auto:*"
+    // ones are genuinely unmatched — "sep:*" was a deliberate user decision, not
+    // something to re-surface as needing a manual link.
+    @ReactMethod
+    fun getUnmatchedSenders(promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            val result = JSONArray()
+            val keys = confirmed.keys()
+            while (keys.hasNext()) {
+                val convKey = keys.next()
+                val assignedId = confirmed.optString(convKey)
+                if (!assignedId.startsWith("auto:")) continue
+                val packageName = convKey.substringBefore(":", "")
+                val senderName = ProTxtBgService.stripAppPrefix(convKey.substringAfter(":"))
+                if (packageName.isEmpty() || senderName.isEmpty()) continue
+                result.put(JSONObject().apply {
+                    put("convKey", convKey)
+                    put("displayName", senderName)
+                    put("platformLabel", ProTxtBgService.appLabel(packageName))
+                    put("platform", ProTxtBgService.packageToPlatform(packageName) ?: "other")
+                })
+            }
+            promise.resolve(result.toString())
+        } catch (e: Exception) {
+            promise.reject("GET_UNMATCHED_FAILED", e)
+        }
+    }
+
+    // Re-points a convKey's confirmed_identities entry at a real contact — the same
+    // write the bubble's "Yes, link" banner already does, just reached by the user
+    // manually browsing unmatched senders in Settings instead of a system-suggested
+    // banner. Future messages from this convKey immediately pick up the linked
+    // contact's tone/relationship data (see confirmedTone() in ProTxtBgService).
+    @ReactMethod
+    fun linkSenderToContact(convKey: String, contactId: String, promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            confirmed.put(convKey, contactId)
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("LINK_SENDER_FAILED", e)
+        }
+    }
+
     @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
         Prefs.main(reactApplicationContext)
