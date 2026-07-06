@@ -12,16 +12,17 @@ import type {
 } from '../types';
 
 let _db: SQLite.SQLiteDatabase | null = null;
+let _openingPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let _encryptDone = false;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (_db) {
     // A cached native connection can go stale (observed live: "NativeDatabase
-    // .prepareAsync has been rejected" on every call after the app spent time
-    // backgrounded) while this JS-side reference survives — every caller's
-    // query then fails silently forever, since nothing ever re-opens it. A
-    // cheap liveness check here catches that and transparently reopens,
-    // instead of every downstream caller having to guard against it.
+    // .prepareAsync"/".execAsync has been rejected" on every call after the
+    // app spent time backgrounded) while this JS-side reference survives —
+    // every caller's query then fails silently forever, since nothing ever
+    // re-opens it. A cheap liveness check here catches that and transparently
+    // reopens, instead of every downstream caller having to guard against it.
     try {
       await _db.getFirstAsync('SELECT 1');
       return _db;
@@ -29,14 +30,30 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       _db = null;
     }
   }
-  _db = await SQLite.openDatabaseAsync('contextreply.db');
-  await _migrate(_db);
-  if (!_encryptDone) {
-    try { await _encryptExistingRows(_db); } catch { /* non-fatal */ }
-    try { await _migrateIdentifierIndex(_db); } catch { /* non-fatal */ }
-    _encryptDone = true;
+  // Callers routinely call getDatabase() concurrently (e.g. loadUpcomingEvents
+  // fires getCachedBookings() and isBookingsSyncDue() together via
+  // Promise.all). If _db is null/stale for both at once, without this guard
+  // each would independently call openDatabaseAsync + _migrate against the
+  // same underlying file at the same time — observed live as one of the two
+  // concurrent _migrate() calls' execAsync getting rejected. Route every
+  // concurrent caller through the same in-flight open instead of racing.
+  if (_openingPromise) return _openingPromise;
+  _openingPromise = (async () => {
+    const db = await SQLite.openDatabaseAsync('contextreply.db');
+    await _migrate(db);
+    if (!_encryptDone) {
+      try { await _encryptExistingRows(db); } catch { /* non-fatal */ }
+      try { await _migrateIdentifierIndex(db); } catch { /* non-fatal */ }
+      _encryptDone = true;
+    }
+    _db = db;
+    return db;
+  })();
+  try {
+    return await _openingPromise;
+  } finally {
+    _openingPromise = null;
   }
-  return _db;
 }
 
 async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
