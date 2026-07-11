@@ -45,6 +45,8 @@ Features already live in the codebase — kept here for context.
 - **Error state + retry on failed reply generation** — a failed/timed-out worker call now shows a "Couldn't generate a reply" bubble with Retry/Dismiss actions instead of silently disappearing. Retry re-runs the same worker call via the cached `PendingBubble` (`ACTION_RETRY`, `ProTxtBgService.kt` `postErrorNotification`/`retry`/`runWorkerJob`).
 - **Regenerate on the bubble** — circular arrow button in `BubbleSuggestionActivity` lets the user re-run the worker call on any suggestion, not just failed ones.
 - **Live-apply group message toggle** — toggling skip_group_messages on immediately calls `dismissAllGroupBubbles()` on the service, cancelling all active/pending group bubbles. Group convKeys tracked in `groupConvKeys` set since groups often use the group name (not a "group:" prefix) as the convKey.
+- **Proactive follow-up** — manual, user-managed follow-ups list (add/mark-done/delete), not an automatic reminder notification. `src/services/followUps.ts` (AsyncStorage CRUD, urgency/due-label helpers), `FollowUpsScreen.tsx`, surfaced on the redesigned Home screen.
+- **Cross-app contact linking** — manually link a contact across messaging platforms from Manage Contacts; linked-platform icons shown on profile card and contacts list.
 
 ---
 
@@ -71,9 +73,6 @@ Stats surfaced in the contact detail / settings view: average reply time (time b
 
 ### Quick-reply templates
 One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.
-
-### Proactive follow-up
-If a message arrived and the user hasn't replied in X hours, surface a reminder notification with a pre-generated reply ready to send. Opt-in per contact. High value for people who read and forget.
 
 ### Calendar event — include contact as attendee
 When the user taps the "Add to Calendar" action button, pre-populate the sender as an attendee and add them to the event description. Implementation: pass `EXTRA_PERSON_NAME` / `EXTRA_PERSON_EMAIL` from `BubbleSuggestionActivity.postActionFollowUp` (resolved from `contactMatchJson` or `DeviceContactsResolver`); in `ActionReceiver.ACTION_CALENDAR_ADD`, set `CalendarContract.Attendees.ATTENDEE_EMAIL` on the INSERT intent if an email is available, otherwise append "with [Name]" to `CalendarContract.Events.DESCRIPTION`. No new permissions needed — the insert intent already opens the calendar app for confirmation.
