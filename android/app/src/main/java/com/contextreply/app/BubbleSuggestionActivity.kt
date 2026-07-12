@@ -1122,6 +1122,29 @@ class BubbleSuggestionActivity : Activity() {
         // regardless of how much optional content above it is expanded.
         toneSectionView?.let { root.addView(it) }
         root.addView(replyEdit)
+
+        // ── Style-match attribution ─────────────────────────────────────────────
+        // Only shown once there's a real signal behind it (StyleProfileBuilder's own
+        // ≥3-edit / ≥2-per-contact thresholds) — no fake "learning..." state pre-signal.
+        if (!showSkeleton) {
+            val signal = StyleProfileBuilder.signalFor(this, contact)
+            val attributionText = when {
+                signal.contactSpecific -> "Matches your tone with ${contact.take(28)}"
+                signal.hasProfile      -> "Matches your tone"
+                else                   -> null
+            }
+            if (attributionText != null) {
+                root.addView(TextView(this).apply {
+                    text = attributionText
+                    setTextColor(PURPLE)
+                    textSize = 11.5f
+                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp.bottomMargin = dp(10)
+                    layoutParams = lp
+                })
+            }
+        }
+
         root.addView(skeletonContainer)
 
         val moreOptionsContainer = LinearLayout(this).apply {

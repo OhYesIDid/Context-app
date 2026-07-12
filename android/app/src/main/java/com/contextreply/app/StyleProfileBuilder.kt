@@ -33,6 +33,21 @@ object StyleProfileBuilder {
         Prefs.main(context).edit().putString("style_profile", profile).apply()
     }
 
+    /**
+     * Cheap read-only signal for UI attribution ("Matches your tone with X") — does not
+     * touch the cached profile string, just re-derives counts from the same queue rebuild()
+     * reads. contactSpecific mirrors buildProfile()'s own per-contact threshold (≥2 edits)
+     * so the UI claim always matches what the profile actually contains.
+     */
+    data class ProfileSignal(val hasProfile: Boolean, val contactSpecific: Boolean)
+
+    fun signalFor(context: Context, contact: String): ProfileSignal {
+        val edits = extractMeaningful(loadQueue(context))
+        val hasProfile = edits.size >= MIN_EDITS
+        val contactSpecific = edits.count { it.contact.equals(contact, ignoreCase = true) } >= 2
+        return ProfileSignal(hasProfile, contactSpecific)
+    }
+
     // ── Data types ────────────────────────────────────────────────────────────
 
     private data class Edit(
