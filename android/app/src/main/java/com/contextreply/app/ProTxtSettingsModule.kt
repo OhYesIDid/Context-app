@@ -185,6 +185,16 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getStyleStats(promise: Promise) {
+        val stats = StyleProfileBuilder.statsSnapshot(reactApplicationContext)
+        promise.resolve(JSONObject().apply {
+            put("editCount", stats.editCount)
+            put("contactsMatched", stats.contactsMatched)
+            put("hasProfile", stats.hasProfile)
+        }.toString())
+    }
+
+    @ReactMethod
     fun getSkipGroupMessages(promise: Promise) {
         val skip = Prefs.main(reactApplicationContext)
             .getBoolean("skip_group_messages", true)

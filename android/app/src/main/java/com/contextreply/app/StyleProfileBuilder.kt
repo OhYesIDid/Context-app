@@ -48,6 +48,21 @@ object StyleProfileBuilder {
         return ProfileSignal(hasProfile, contactSpecific)
     }
 
+    /**
+     * Home-screen "Your Style" stat card — same underlying data as signalFor()/buildProfile(),
+     * just aggregated instead of per-contact. contactsMatched mirrors buildProfile()'s own
+     * per-contact notes threshold (>=2 edits) so the number shown always matches what the
+     * style profile actually contains, never a bigger claim than the profile backs up.
+     */
+    data class StyleStats(val editCount: Int, val contactsMatched: Int, val hasProfile: Boolean)
+
+    fun statsSnapshot(context: Context): StyleStats {
+        val edits = extractMeaningful(loadQueue(context))
+        val contactsMatched = edits.groupBy { it.contact.lowercase() }
+            .count { (_, group) -> group.size >= 2 }
+        return StyleStats(edits.size, contactsMatched, edits.size >= MIN_EDITS)
+    }
+
     // ── Data types ────────────────────────────────────────────────────────────
 
     private data class Edit(

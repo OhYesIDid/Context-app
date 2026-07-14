@@ -41,11 +41,18 @@ const URGENCY_TIME: Record<string, string> = {
   none:    MUTED,
 };
 
+interface StyleStats {
+  editCount: number;
+  contactsMatched: number;
+  hasProfile: boolean;
+}
+
 interface Props {
   followUps: FollowUp[];
   pendingCalendarActions: PendingCalendarAction[];
   pendingFollowUps: PendingFollowUp[];
   upcomingData: UpcomingData;
+  styleStats: StyleStats | null;
   onCalendarActionDismiss: (id: string) => void;
   onFollowUpAdd: (item: PendingFollowUp) => void;
   onFollowUpDismiss: (id: string) => void;
@@ -55,7 +62,7 @@ interface Props {
   isPro: boolean;
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, styleStats, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
@@ -331,6 +338,32 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         ))}
       </View>
 
+      {/* Your Style card — only once there's a real profile behind it (>=3 edits),
+          same threshold as the in-bubble attribution tag, never a fake "learning..." claim */}
+      {styleStats?.hasProfile && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+                <Text style={styles.cardIconText}>✨</Text>
+              </View>
+              <Text style={styles.cardTitle}>Your Style</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <View style={{ padding: 14, paddingTop: 12 }}>
+            <Text style={styles.styleStatsLine}>
+              Learned from {styleStats.editCount} of your replies
+            </Text>
+            {styleStats.contactsMatched > 0 && (
+              <Text style={[styles.styleStatsLine, { marginTop: 4 }]}>
+                Matched your tone with {styleStats.contactsMatched} {styleStats.contactsMatched === 1 ? 'contact' : 'contacts'}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
     </ScrollView>
   );
 }
@@ -351,6 +384,7 @@ const styles = StyleSheet.create({
   cardIconText: { fontSize: 16 },
   cardTitle:   { fontSize: 15, fontWeight: '600', color: TEXT },
   cardLink:    { fontSize: 13, color: PURPLE, fontWeight: '600' },
+  styleStatsLine: { fontSize: 13.5, color: TEXT },
   divider:     { height: 1, backgroundColor: BORDER, marginHorizontal: 14 },
 
   badge:     { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },

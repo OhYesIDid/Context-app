@@ -103,6 +103,7 @@ export default function App() {
   const [locationGranted, setLocationGranted] = useState(false);
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
   const [bubbleLabel, setBubbleLabel] = useState('Notifications → Bubbles');
+  const [styleStats, setStyleStats] = useState<{ editCount: number; contactsMatched: number; hasProfile: boolean } | null>(null);
   const [googleContactsCount, setGoogleContactsCount] = useState<number | null>(null);
   const [deviceContactsCount, setDeviceContactsCount] = useState<number | null>(null);
   const [whatsappMessages, setWhatsappMessages] = useState<number | null>(null);
@@ -199,6 +200,7 @@ export default function App() {
       ProTxtSettings.getRemindersEnabled?.().then((v: boolean) => setRemindersEnabledState(v)).catch(() => {});
       ProTxtSettings.getSuggestAllMessages().then((all: boolean) => setSuggestAllMessagesState(all)).catch(() => {});
       ProTxtSettings.getBubbleSettingsLabel().then((label: string) => setBubbleLabel(label)).catch(() => {});
+      ProTxtSettings.getStyleStats?.().then((json: string) => setStyleStats(JSON.parse(json))).catch(() => {});
       Promise.all(
         Object.entries(ENRICHMENT_PREFERENCES).map(async ([enrichment, fields]) => {
           const entries = await Promise.all(
@@ -443,6 +445,7 @@ export default function App() {
           pendingCalendarActions={pendingCalendarActions}
           pendingFollowUps={pendingFollowUps}
           upcomingData={upcomingData}
+          styleStats={styleStats}
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
           onFollowUpAdd={(item) => {
             setPendingFollowUps(prev => prev.filter(f => f.id !== item.id));
