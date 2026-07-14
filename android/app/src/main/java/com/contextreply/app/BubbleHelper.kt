@@ -48,6 +48,7 @@ object BubbleHelper {
         actionJson: String? = null,
         contactMatchJson: String? = null,
         suggestionTs: Long = 0L,
+        urgent: Boolean = false,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
 
@@ -98,6 +99,7 @@ object BubbleHelper {
             if (actionJson != null) putExtra(ProTxtBgService.EXTRA_ACTION_JSON, actionJson)
             if (contactMatchJson != null) putExtra(ProTxtBgService.EXTRA_CONTACT_MATCH_JSON, contactMatchJson)
             if (suggestionTs > 0L) putExtra(ProTxtBgService.EXTRA_SUGGESTION_TS, suggestionTs)
+            if (urgent) putExtra(ProTxtBgService.EXTRA_URGENT, true)
         }
         val bubblePi = PendingIntent.getActivity(
             context, notifId + 2, bubbleIntent,

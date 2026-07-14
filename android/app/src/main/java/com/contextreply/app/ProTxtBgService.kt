@@ -67,6 +67,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val EXTRA_ACTION_JSON = "action_json"
         const val EXTRA_CONTACT_MATCH_JSON = "contact_match_json"
         const val EXTRA_SUGGESTION_TS = "suggestion_ts"
+        const val EXTRA_URGENT = "urgent"
         const val EXTRA_NO_REPLY = "no_reply"
         const val EXTRA_SKIP_CANCEL = "skip_cancel"
         const val EXTRA_ORIGINAL_SUGGESTION = "original_suggestion"
@@ -97,8 +98,33 @@ class ProTxtBgService : NotificationListenerService() {
         )
         val pendingBubbles = ConcurrentHashMap<String, PendingBubble>()
 
-        // Collapses rapid-fire messages from the same thread into one API call
+        // Collapses rapid-fire messages from the same thread into one API call.
+        // Adaptive around this default: a message that reads as finished fires sooner,
+        // one that reads as a continuation waits longer for the rest to arrive.
         private const val DEBOUNCE_MS = 2_500L
+        private const val DEBOUNCE_FAST_MS = 1_200L
+        private const val DEBOUNCE_SLOW_MS = 4_000L
+
+        // Trailing words that read as "more is coming" rather than a finished thought —
+        // e.g. "wait" or "so" at the end of a message almost always precedes a follow-up.
+        private val CONTINUATION_TRAILERS = setOf(
+            "wait", "so", "and", "but", "also", "actually", "well", "um", "umm", "hmm",
+            "like", "because", "cause", "coz", "plus", "though", "anyway", "anyways",
+        )
+
+        // Punctuation/word heuristic on the single message that just arrived (not the
+        // whole burst) — cheapest signal available, no new tracking needed. Ends in
+        // ./!/? reads as a complete thought; ends on a known continuation word or a
+        // trailing comma reads as mid-sentence. Anything else keeps the default wait.
+        private fun computeDebounceMs(text: String): Long {
+            val trimmed = text.trim()
+            if (trimmed.isEmpty()) return DEBOUNCE_MS
+            if (trimmed.last() in charArrayOf('.', '!', '?')) return DEBOUNCE_FAST_MS
+            if (trimmed.last() == ',') return DEBOUNCE_SLOW_MS
+            val lastWord = trimmed.substringAfterLast(' ').lowercase().trim(',', '.', '!', '?', ':', ';', '-')
+            if (lastWord in CONTINUATION_TRAILERS) return DEBOUNCE_SLOW_MS
+            return DEBOUNCE_MS
+        }
 
         // Safety net for the worker job: enrichment calls (e.g. GoogleAuthUtil.getToken())
         // have no caller-side timeout and can block the pool thread indefinitely, and
@@ -719,19 +745,19 @@ class ProTxtBgService : NotificationListenerService() {
                     android.util.Log.e("ProTxt", "postLoadingNotification threw: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
+            val urgencyScore = computeUrgencyScore(latestMessage, effectiveIntentsStr, convKey)
             runWorkerJob(
                 convKey, notifId, latestMessage, effectiveIntentsStr,
                 replyPendingIntent, remoteInputKey, openChatIntent,
                 markAsReadPendingIntent, packageName, userInApp,
-                selfName = selfName,
+                selfName = selfName, urgent = urgencyScore >= 2,
             )
             val remindersEnabled = try { Prefs.main(this).getBoolean("reminders_enabled", true) } catch (_: Exception) { true }
             if (remindersEnabled) {
-                val urgencyScore = computeUrgencyScore(latestMessage, effectiveIntentsStr, convKey)
                 store.recordPendingReminder(convKey, urgencyScore)
                 ReminderWorker.schedule(this, convKey, urgencyScore)
             }
-        }, DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+        }, computeDebounceMs(text), TimeUnit.MILLISECONDS)
     }
 
     // Submits the worker call for a conversation and arms the timeout watchdog. Shared by
@@ -749,6 +775,7 @@ class ProTxtBgService : NotificationListenerService() {
         packageName: String,
         userInApp: Boolean,
         selfName: String? = null,
+        urgent: Boolean = false,
     ) {
         val fullThread = store.getThread(convKey)
         val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
@@ -783,6 +810,7 @@ class ProTxtBgService : NotificationListenerService() {
                     contactContext = contactContext,
                     contactName = senderName,
                     mentionHint = mentionHint,
+                    urgent = urgent,
                 ) ?: run {
                     android.util.Log.e("ProTxt", "WorkerClient.call returned null")
                     if (activeBubbles.contains(convKey)) {
@@ -840,7 +868,7 @@ class ProTxtBgService : NotificationListenerService() {
                     replyPendingIntent, remoteInputKey, notifId, convKey, result.intent,
                     openChatIntent, latestMessage, detectedIntentsStr,
                     suggestedAction = finalAction, markAsReadPendingIntent = markAsReadPendingIntent,
-                    repost = userInApp && nowInApp,
+                    repost = userInApp && nowInApp, urgent = urgent,
                 )
                 if (nowInApp) {
                     // Also cache for the overlay when user is currently in the app
@@ -887,10 +915,12 @@ class ProTxtBgService : NotificationListenerService() {
             cached.notifId, convKey, cached.replyPendingIntent, cached.remoteInputKey,
             cached.openChatIntent, cached.message, cached.detectedIntents, cached.markAsReadPendingIntent,
         )
+        val urgencyScore = computeUrgencyScore(cached.message, cached.detectedIntents, convKey)
         runWorkerJob(
             convKey, cached.notifId, cached.message, cached.detectedIntents,
             cached.replyPendingIntent, cached.remoteInputKey, cached.openChatIntent,
             cached.markAsReadPendingIntent, packageName, userInApp = false,
+            urgent = urgencyScore >= 2,
         )
     }
 
@@ -1882,6 +1912,7 @@ class ProTxtBgService : NotificationListenerService() {
         suggestedAction: org.json.JSONObject? = null,
         markAsReadPendingIntent: PendingIntent? = null,
         repost: Boolean = false,
+        urgent: Boolean = false,
     ) {
         val preferredTone = preferredToneForContact(convKey)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -2019,7 +2050,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
         }
 
-        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString(), contactMatchJson = contactMatchJson(convKey), suggestionTs = System.currentTimeMillis())
+        BubbleHelper.attach(this, builder, replyText, formalText, briefText, remoteInputKey, notifId, convKey, intent, openChatIntent, message, detectedIntents, preferredTone, suggestedAction?.toString(), contactMatchJson = contactMatchJson(convKey), suggestionTs = System.currentTimeMillis(), urgent = urgent)
 
         if (!isDeviceLocked()) nm.notify(notifId, builder.build())
 

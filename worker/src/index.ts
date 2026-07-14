@@ -261,6 +261,10 @@ interface SuggestRequest {
   // for the user, since debounced group batches can otherwise contain
   // several unrelated messages from different people at once.
   mentionHint?: string;
+  // Set client-side by computeUrgencyScore (ASAP/urgent language, repeated "??"/"!!",
+  // a burst of 2+ messages in one debounce window, or an eta/availability intent) —
+  // score >= 2 out of a possible 3. Biases the reply toward short and direct.
+  urgent?: boolean;
 }
 
 const STRATEGY_INSTRUCTIONS: Record<string, string> = {
@@ -516,6 +520,13 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
       'If the message already mentions a specific location in words (a place name, street, or landmark), ' +
       'respond naturally to that — do NOT ask for a pin. ' +
       'Only suggest sharing a location (drop a pin or Google Maps link) if the message contains absolutely no location context.'
+    );
+  }
+
+  if (body.urgent) {
+    contextParts.push(
+      'This message reads as urgent or time-sensitive (repeated pings, urgent language, or emphatic punctuation). ' +
+      'Keep the reply short and direct — answer immediately, skip pleasantries and hedging.'
     );
   }
 

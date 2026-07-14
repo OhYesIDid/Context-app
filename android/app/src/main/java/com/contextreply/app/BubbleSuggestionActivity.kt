@@ -90,6 +90,7 @@ class BubbleSuggestionActivity : Activity() {
         val contact         = convKey?.substringAfter(":")?.let { ProTxtBgService.stripAppPrefix(it) } ?: "Reply"
         val packageName     = convKey?.substringBefore(":") ?: ""
         val actionJson      = intent.getStringExtra(ProTxtBgService.EXTRA_ACTION_JSON)
+        val isUrgent        = intent.getBooleanExtra(ProTxtBgService.EXTRA_URGENT, false)
         val contactMatchJson = intent.getStringExtra(ProTxtBgService.EXTRA_CONTACT_MATCH_JSON)
         val contactMatch = if (contactMatchJson != null) {
             try { JSONObject(contactMatchJson) } catch (_: Exception) { null }
@@ -435,6 +436,25 @@ class BubbleSuggestionActivity : Activity() {
                     })
                 }
             })
+
+            // Urgency badge — computeUrgencyScore() >= 2 (ASAP language, repeated "??"/"!!",
+            // a message burst, or an eta/availability intent). Purely informational, no action.
+            if (isUrgent) {
+                addView(TextView(this@BubbleSuggestionActivity).apply {
+                    text = "Urgent"
+                    setTextColor(Color.parseColor("#f97316"))
+                    textSize = 11f
+                    setTypeface(null, Typeface.BOLD)
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#f9731622"))
+                        cornerRadius = dp(8).toFloat()
+                    }
+                    setPadding(dp(8), dp(3), dp(8), dp(3))
+                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp.marginEnd = dp(8)
+                    layoutParams = lp
+                })
+            }
 
             // Open-chat arrow
             if (openChatIntent != null) {
