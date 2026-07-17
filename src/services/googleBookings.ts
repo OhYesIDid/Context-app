@@ -35,6 +35,12 @@ interface ClassifyCandidate {
   subject: string;
   from: string;
   text: string;
+  /** ISO date the email was received — the only anchor Claude has for
+   *  resolving a year-less date mentioned in the email body (see worker's
+   *  CLASSIFY_SYSTEM_PROMPT). Without it, a booking confirmation that just
+   *  says e.g. "Friday 17 July" with no year has no grounding and can
+   *  resolve to a year that makes an already-past event look upcoming. */
+  date: string;
 }
 
 interface ClassifiedBooking {
@@ -258,7 +264,7 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
     // Tier 1: one batched call with cheap subject+snippet text for every
     // candidate. Most resolve here — no full-body Gmail fetch needed.
     const tier1 = await classifyBookingsBatch(
-      metas.map((m) => ({ id: m.id, subject: m.subject, from: m.from, text: m.snippet }))
+      metas.map((m) => ({ id: m.id, subject: m.subject, from: m.from, text: m.snippet, date: parseEmailDate(m.date) }))
     );
     const tier1ById = new Map(tier1.map((r) => [r.id, r]));
 
@@ -280,9 +286,9 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
               { headers: { Authorization: `Bearer ${accessToken}` } }
             );
             const full = await fullRes.json() as { payload?: GmailPart };
-            return { id: m.id, subject: m.subject, from: m.from, text: extractBodyText(full.payload) };
+            return { id: m.id, subject: m.subject, from: m.from, text: extractBodyText(full.payload), date: parseEmailDate(m.date) };
           } catch {
-            return { id: m.id, subject: m.subject, from: m.from, text: '' };
+            return { id: m.id, subject: m.subject, from: m.from, text: '', date: parseEmailDate(m.date) };
           }
         })
       );

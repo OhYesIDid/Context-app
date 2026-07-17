@@ -95,6 +95,9 @@ interface ClassifyCandidate {
   // confident date from that alone, the caller re-sends this same shape with
   // the full decoded email body instead.
   text: string;
+  // ISO date the email was received — the only anchor the model has for
+  // resolving a year-less date in the body (see CLASSIFY_SYSTEM_PROMPT).
+  date: string;
 }
 
 interface ClassifyBookingsRequest {
@@ -112,7 +115,7 @@ interface ClassifiedBooking {
   destination?: string;
 }
 
-const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and extract key details. You will be given a batch of emails (id, subject, sender, and either a short snippet or the full body text). For EACH one:
+const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and extract key details. You will be given today's date and a batch of emails (id, subject, sender, the date each email was received, and either a short snippet or the full body text). For EACH one:
 
 1. Decide if it is a genuine booking CONFIRMATION for the recipient's own upcoming travel or event: flight, hotel, train, bus/coach, or ticketed event.
    - type = null (and skip the rest) if it is: a bill or receipt for something unrelated to travel, a delivery/shipping notice, a promotional/marketing email, a booking that is still PENDING/requested (not yet confirmed), a CANCELLED booking, a reply/forward of a thread (subject starts with "Re:" or "Fwd:"), or a notification about someone ELSE's booking (e.g. an Airbnb host being told a guest is arriving at their own listed property — that is not the recipient's own travel).
@@ -124,6 +127,7 @@ const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for
 3. Round-trip and multi-leg emails use inconsistent label pairs for outbound vs inbound legs across different vendors — e.g. "Departure:"/"Return:", "Departing:"/"Arrival:", "Outbound:"/"Inbound:". Read whichever pair is actually used; do not expect one specific pair.
 4. Airline "online check-in" window mentions (e.g. "online check-in opens 24 hours before departure", "check-in available from...") describe when self-service check-in opens, NOT the travel date — ignore any date attached specifically to that phrase.
 5. If the subject/sender clearly indicates a real booking type but there is not enough text here to confidently resolve a date (this will usually be true when given only a short snippet, not the full body), set confident: false and omit the date fields — the caller will retry with the full email body.
+6. Many bookings mention a date without an explicit year (e.g. "Friday 17 July"). Resolve the year using today's date and the email's own received date as anchors: prefer the interpretation nearest to, and normally on or after, the email's received date — a booking confirmation is essentially never sent more than a few months before the event, and never after it. Never pick a year just because it's "the current year" if that would place the event before the email was received, or so far in the future that it makes no sense next to the received date.
 
 Respond ONLY with valid JSON, no markdown, no explanation:
 {"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"event"|null,"confident":true|false,"travelDate":"...","travelDateEnd":"...","destination":"..."}]}`;
@@ -183,8 +187,9 @@ async function handleClassifyBookings(rawBody: string, env: Env): Promise<Respon
   }
 
   const candidateIds = body.candidates.map((c) => c.id);
-  const userPrompt = JSON.stringify(body.candidates.map((c) => ({
-    id: c.id, subject: c.subject, from: c.from, text: c.text.slice(0, 8000),
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const userPrompt = `Today's date is ${todayStr}.\n\n` + JSON.stringify(body.candidates.map((c) => ({
+    id: c.id, subject: c.subject, from: c.from, date: c.date, text: c.text.slice(0, 8000),
   })));
 
   const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
