@@ -9,7 +9,7 @@ export default function Terms() {
 
       <article className="max-w-2xl mx-auto px-6 py-16 prose prose-zinc">
         <h1 className="text-3xl font-medium tracking-tight mb-2">Terms of Service</h1>
-        <p className="text-sm text-zinc-400 mb-10">Last updated: June 2026</p>
+        <p className="text-sm text-zinc-400 mb-10">Last updated: July 2026</p>
 
         <section className="mb-8">
           <h2 className="text-lg font-medium mb-3">Acceptance</h2>

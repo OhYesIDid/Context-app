@@ -1,5 +1,6 @@
 import WaitlistForm from "./components/WaitlistForm";
 import ParticleBackground from "./components/ParticleBackground";
+import AndroidBubbleDemo from "./components/AndroidBubbleDemo";
 
 const steps = [
   {
@@ -24,6 +25,34 @@ const steps = [
   },
 ];
 
+const signals = [
+  {
+    icon: "📅",
+    title: "Calendar",
+    body: "Checks your Google Calendar free/busy before answering scheduling questions — never reads event details, just yes or no.",
+  },
+  {
+    icon: "📍",
+    title: "Live location",
+    body: "Estimates ETA via Google Maps the moment a message asks where you are. Used once, then gone.",
+  },
+  {
+    icon: "✈️",
+    title: "Trip & booking awareness",
+    body: "Finds flight, hotel, and reservation confirmations in Gmail so travel questions get the right dates.",
+  },
+  {
+    icon: "💬",
+    title: "Conversation history",
+    body: "Reads back through the recent thread so a reply doesn't ignore context you already gave.",
+  },
+  {
+    icon: "🧠",
+    title: "Style learning",
+    body: "Learns from the edits you make to suggestions over time — replies drift closer to how you actually text, per contact.",
+  },
+];
+
 const features = [
   {
     icon: "📅",
@@ -34,6 +63,16 @@ const features = [
     icon: "📍",
     title: "Location-smart",
     body: "Estimates your ETA automatically using your real-time location.",
+  },
+  {
+    icon: "✈️",
+    title: "Trip-aware",
+    body: "Finds your flight, hotel, and reservation confirmations to answer travel questions with the right dates.",
+  },
+  {
+    icon: "🧠",
+    title: "Learns your style",
+    body: "Picks up on the edits you make and gets closer to how you actually text.",
   },
   {
     icon: "🎚️",
@@ -57,6 +96,32 @@ const features = [
   },
 ];
 
+const plans = [
+  {
+    name: "Free",
+    tagline: "Everything you need for the moments that matter",
+    items: [
+      "Reply suggestions for ETA, availability, and plans",
+      "Calendar, location, and trip-aware replies",
+      "Brief, casual, and formal tone options",
+      "Works across WhatsApp, iMessage, Telegram, and more",
+    ],
+    cta: "Get early access",
+    highlight: false,
+  },
+  {
+    name: "Pro",
+    tagline: "Reply smarter, to every message",
+    items: [
+      "Suggestions for every incoming message — not just ETA, availability, or plans",
+      "Deeper style learning across all your contacts",
+      "First access to new Pro features",
+    ],
+    cta: "Join the waitlist",
+    highlight: true,
+  },
+];
+
 export default function Home() {
   return (
     <div className="min-h-screen">
@@ -75,6 +140,9 @@ export default function Home() {
             </a>
             <a href="#features" className="text-sm text-white/50 hover:text-white transition-colors hidden sm:block">
               Features
+            </a>
+            <a href="#pricing" className="text-sm text-white/50 hover:text-white transition-colors hidden sm:block">
+              Pricing
             </a>
             <a
               href="#waitlist"
@@ -115,38 +183,9 @@ export default function Home() {
         <p className="text-xs text-white/30">Android first · iOS coming soon</p>
       </section>
 
-      {/* Phone mockup */}
-      <div className="relative z-10 max-w-xs mx-auto mb-20 rounded-3xl border border-white/10 bg-white/5 overflow-hidden shadow-sm">
-        <div className="flex items-center gap-3 px-4 py-3 bg-white/10 border-b border-white/10">
-          <div className="w-8 h-8 rounded-full bg-[#534AB7]/40 flex items-center justify-center text-xs font-medium text-[#AFA9EC]">
-            JK
-          </div>
-          <div>
-            <p className="text-sm font-medium leading-none text-white">Jamie Kim</p>
-            <p className="text-xs text-white/40 mt-0.5">iMessage</p>
-          </div>
-        </div>
-        <div className="p-4 flex flex-col gap-3">
-          <div className="max-w-[80%] bg-white/10 border border-white/10 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed text-white/80">
-            Hey, when are you getting here? We&apos;re saving you a seat
-          </div>
-          <div className="bg-white/10 border border-[#AFA9EC]/40 rounded-2xl p-3">
-            <p className="text-xs font-medium text-[#AFA9EC] mb-2">⚡ ConTxt suggests</p>
-            <div className="flex flex-wrap gap-1.5">
-              {["On my way, 10 min!", "Running 5 min late", "Leaving now"].map((chip) => (
-                <span
-                  key={chip}
-                  className="text-xs px-3 py-1.5 rounded-full bg-[#534AB7]/40 text-[#CECBF6] cursor-pointer hover:bg-[#534AB7]/60 transition-colors"
-                >
-                  {chip}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="max-w-[80%] self-end bg-[#534AB7] text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
-            On my way, 10 min!
-          </div>
-        </div>
+      {/* Android bubble demo */}
+      <div className="relative z-10 max-w-xs mx-auto mb-20">
+        <AndroidBubbleDemo />
       </div>
       </div>{/* end particle background wrapper */}
 
@@ -176,14 +215,38 @@ export default function Home() {
 
       <hr className="border-zinc-100 max-w-5xl mx-auto" />
 
+      {/* How it thinks */}
+      <section id="how-it-thinks" className="px-6 py-16 max-w-2xl mx-auto">
+        <p className="text-xs font-medium text-[#534AB7] tracking-widest uppercase mb-3">How it thinks</p>
+        <h2 className="text-2xl font-medium tracking-tight mb-3">Context, not guesswork</h2>
+        <p className="text-zinc-500 leading-relaxed mb-10">
+          Every reply is backed by real signals ConTxt actually checks — not a generic AI guess dressed up to sound confident.
+        </p>
+        <div className="divide-y divide-zinc-100">
+          {signals.map((s) => (
+            <div key={s.title} className="flex gap-4 py-5">
+              <div className="w-9 h-9 rounded-lg bg-[#EEEDFE] flex items-center justify-center text-lg shrink-0">
+                {s.icon}
+              </div>
+              <div>
+                <h3 className="text-sm font-medium mb-1">{s.title}</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">{s.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <hr className="border-zinc-100 max-w-5xl mx-auto" />
+
       {/* Features */}
-      <section id="features" className="px-6 py-16 max-w-3xl mx-auto">
+      <section id="features" className="px-6 py-16 max-w-4xl mx-auto">
         <p className="text-xs font-medium text-[#534AB7] tracking-widest uppercase mb-3">Features</p>
         <h2 className="text-2xl font-medium tracking-tight mb-3">Built for how you actually text</h2>
         <p className="text-zinc-500 leading-relaxed mb-10">
-          ConTxt adapts to your tone, schedule, and location — not the other way around.
+          ConTxt adapts to your tone, schedule, location, and plans — not the other way around.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {features.map((f) => (
             <div key={f.title} className="border border-zinc-100 rounded-xl p-5">
               <div className="w-9 h-9 bg-[#EEEDFE] rounded-lg flex items-center justify-center text-lg mb-3">
@@ -191,6 +254,50 @@ export default function Home() {
               </div>
               <h3 className="text-sm font-medium mb-1">{f.title}</h3>
               <p className="text-sm text-zinc-500 leading-relaxed">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <hr className="border-zinc-100 max-w-5xl mx-auto" />
+
+      {/* Pricing */}
+      <section id="pricing" className="px-6 py-16 max-w-4xl mx-auto">
+        <p className="text-xs font-medium text-[#534AB7] tracking-widest uppercase mb-3">Pricing</p>
+        <h2 className="text-2xl font-medium tracking-tight mb-3">Free to start, upgrade when you want more</h2>
+        <p className="text-zinc-500 leading-relaxed mb-10">
+          The core experience is free. Pro unlocks suggestions on every message, not just the ones ConTxt recognizes as ETA, availability, or plans.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {plans.map((p) => (
+            <div
+              key={p.name}
+              className={`rounded-2xl p-6 border ${
+                p.highlight ? "bg-[#0f0d1f] border-[#0f0d1f]" : "border-zinc-100"
+              }`}
+            >
+              <h3 className={`text-lg font-medium mb-1 ${p.highlight ? "text-white" : "text-zinc-900"}`}>
+                {p.name}
+              </h3>
+              <p className={`text-sm mb-5 ${p.highlight ? "text-white/50" : "text-zinc-500"}`}>{p.tagline}</p>
+              <ul className="space-y-2.5 mb-6">
+                {p.items.map((item) => (
+                  <li key={item} className={`flex gap-2 text-sm leading-relaxed ${p.highlight ? "text-white/80" : "text-zinc-600"}`}>
+                    <span className={p.highlight ? "text-[#AFA9EC]" : "text-[#534AB7]"}>✓</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="#waitlist"
+                className={`block text-center text-sm font-medium px-4 py-2.5 rounded-lg transition-colors ${
+                  p.highlight
+                    ? "bg-[#534AB7] text-white hover:bg-[#3C3489]"
+                    : "border border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                }`}
+              >
+                {p.cta}
+              </a>
             </div>
           ))}
         </div>
