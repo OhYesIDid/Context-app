@@ -1110,6 +1110,11 @@ class ProTxtBgService : NotificationListenerService() {
 
     private data class EtaData(val duration: String, val distance: String, val routeSummary: String, val destinationLabel: String, val userLat: Double, val userLon: Double)
 
+    // destinationText is exactly what gets passed to fetchEtaToDestination() — either the raw
+    // extracted address/place text, or a "lat,lon" string — so it can be persisted and re-used
+    // later without needing to re-extract it from a thread that may since have been cleared.
+    private data class DestinationResolution(val destinationText: String, val label: String, val eta: EtaData)
+
     // ── Intent / enrichment registry ──────────────────────────────────────────
     // Classification patterns are the single source of truth at
     // <repo root>/assets/intent_patterns.json — copied into this app's assets by
@@ -1202,6 +1207,17 @@ class ProTxtBgService : NotificationListenerService() {
         return intents.flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
     }
 
+    private fun putMapsEnrichment(enrichments: JSONObject, eta: EtaData) {
+        enrichments.put("maps", JSONObject().apply {
+            put("duration", eta.duration)
+            put("distance", eta.distance)
+            put("routeSummary", eta.routeSummary)
+            put("destinationLabel", eta.destinationLabel)
+            put("userLat", eta.userLat)
+            put("userLon", eta.userLon)
+        })
+    }
+
     private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), convKey: String? = null, intentsStr: String? = null): JSONObject {
         val enrichments = JSONObject()
         for (key in requiredEnrichments(message, intentsStr)) {
@@ -1220,12 +1236,13 @@ class ProTxtBgService : NotificationListenerService() {
                         val searchText = listOf(message) + thread.map { it.second }
                         searchText.firstNotNullOfOrNull { extractMapsCoordinates(it) }
                     }
-                    val eta: EtaData? = if (incomingCoords != null) {
+                    val liveResolution: DestinationResolution? = if (incomingCoords != null) {
                         val label = enrichments.optJSONObject("incoming_location")
                             ?.optString("placeLabel")?.ifEmpty { null }
                             ?: reverseGeocode(incomingCoords.first, incomingCoords.second)
                             ?: "their location"
                         fetchEtaToCoords(incomingCoords.first, incomingCoords.second, label)
+                            ?.let { DestinationResolution("${incomingCoords.first},${incomingCoords.second}", label, it) }
                     } else {
                         // Search latest message first, then fall back to recent thread history
                         // (last 10 messages, within 48 h) so stale destinations from old
@@ -1237,23 +1254,50 @@ class ProTxtBgService : NotificationListenerService() {
                         fetchEtaData(message) ?: etaThread
                             .firstNotNullOfOrNull { (_, text) -> fetchEtaData(text) }
                     }
-                    if (eta != null) {
-                        enrichments.put("maps", JSONObject().apply {
-                            put("duration", eta.duration)
-                            put("distance", eta.distance)
-                            put("routeSummary", eta.routeSummary)
-                            put("destinationLabel", eta.destinationLabel)
-                            put("userLat", eta.userLat)
-                            put("userLon", eta.userLon)
-                        })
+                    if (liveResolution != null) {
+                        putMapsEnrichment(enrichments, liveResolution.eta)
+                        // Remember this destination for follow-ups later in the same conversation
+                        // — NotificationStore.markReplied() wipes the thread on every reply, which
+                        // otherwise loses a destination mentioned earlier the moment you reply once.
+                        if (convKey != null) {
+                            ContactMemory.recordDestination(this, convKey, liveResolution.label, liveResolution.destinationText)
+                        }
                     } else {
-                        // No extractable destination — pass current location name so Claude
-                        // can at least say where the user is rather than guessing.
-                        getCurrentLocation()?.let { loc ->
-                            reverseGeocode(loc.latitude, loc.longitude)?.let { area ->
-                                enrichments.put("maps", JSONObject().apply {
-                                    put("currentLocation", area)
+                        // No live destination in this message/thread — check whether one was
+                        // established earlier in this conversation (survives the reply-triggered
+                        // thread wipe). One candidate resolves directly; several ambiguous ones
+                        // are all handed to Claude (with real travel times) to pick from using
+                        // conversation context, rather than guessing which one via a heuristic.
+                        val candidates = convKey?.let { ContactMemory.getRecentDestinations(this, it) } ?: emptyList()
+                        val resolved = candidates.mapNotNull { c ->
+                            fetchEtaToDestination(c.destinationText, c.label)?.let { eta -> c to eta }
+                        }
+                        when {
+                            resolved.size == 1 -> putMapsEnrichment(enrichments, resolved[0].second)
+                            resolved.size > 1 -> {
+                                val nowMs = System.currentTimeMillis()
+                                enrichments.put("mapsCandidates", JSONArray().also { arr ->
+                                    resolved.forEach { (c, eta) ->
+                                        arr.put(JSONObject().apply {
+                                            put("label", c.label)
+                                            put("duration", eta.duration)
+                                            put("distance", eta.distance)
+                                            put("routeSummary", eta.routeSummary)
+                                            put("mentionedMinutesAgo", ((nowMs - c.mentionedAt) / 60_000L).toInt())
+                                        })
+                                    }
                                 })
+                            }
+                            else -> {
+                                // No extractable or remembered destination — pass current location
+                                // name so Claude can at least say where the user is rather than guessing.
+                                getCurrentLocation()?.let { loc ->
+                                    reverseGeocode(loc.latitude, loc.longitude)?.let { area ->
+                                        enrichments.put("maps", JSONObject().apply {
+                                            put("currentLocation", area)
+                                        })
+                                    }
+                                }
                             }
                         }
                     }
@@ -1576,16 +1620,16 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) { default }
     }
 
-    private fun fetchEtaData(message: String): EtaData? {
+    private fun fetchEtaData(message: String): DestinationResolution? {
         val raw = extractDestination(message) ?: return null
         if (raw.lowercase().trim() in HOME_KEYWORDS) {
             val prefs = Prefs.main(this)
             if (!prefs.contains("home_lat")) return null
             val lat = prefs.getFloat("home_lat", 0f).toDouble()
             val lon = prefs.getFloat("home_lon", 0f).toDouble()
-            return fetchEtaToCoords(lat, lon, "home")
+            return fetchEtaToCoords(lat, lon, "home")?.let { DestinationResolution("$lat,$lon", "home", it) }
         }
-        return fetchEtaToDestination(raw, raw)
+        return fetchEtaToDestination(raw, raw)?.let { DestinationResolution(raw, raw, it) }
     }
 
     private fun fetchEtaToCoords(lat: Double, lon: Double, label: String): EtaData? =
@@ -2196,10 +2240,14 @@ class ProTxtBgService : NotificationListenerService() {
             }
             // initBubble fires once per app version so the Bubbles toggle appears in settings
             // immediately after install OR after an update (version code changes → re-registers).
+            // Only persisted as "done" on success — a failure (e.g. notification permission not
+            // yet granted this early in onboarding) retries on the next service start instead of
+            // being marked done regardless and never trying again.
             val prefs = Prefs.main(this)
             if (prefs.getInt("bubble_init_version", -1) != BuildConfig.VERSION_CODE) {
-                prefs.edit().putInt("bubble_init_version", BuildConfig.VERSION_CODE).apply()
-                BubbleHelper.initBubble(this)
+                if (BubbleHelper.initBubble(this)) {
+                    prefs.edit().putInt("bubble_init_version", BuildConfig.VERSION_CODE).apply()
+                }
             }
             // Silent channel for reposts (unlock, leaving app etc.) — IMPORTANCE_LOW
             // guarantees no sound/vibration at the audio-policy level, which is the only

@@ -209,10 +209,18 @@ object BubbleHelper {
 
     // Posts a fully valid bubble notification immediately after the channel is first created so
     // Android registers this app as bubble-capable and shows the Bubbles toggle in system
-    // settings without the user needing to receive a real message first.
-    fun initBubble(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        try {
+    // settings without the user needing to receive a real message first. Returns whether it
+    // actually succeeded — the caller only persists "done for this version" on true, so a
+    // failure (e.g. POST_NOTIFICATIONS not yet granted this early in onboarding) gets retried
+    // on the next service start instead of silently never trying again.
+    fun initBubble(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return try {
             val icon = IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
             val shortcutId = "cr_init_bubble"
             val person = Person.Builder().setName("ConTxt").setIcon(icon).build()
@@ -253,7 +261,12 @@ object BubbleHelper {
             val nm = context.getSystemService(android.app.NotificationManager::class.java)
             nm.notify(0xBEEF, notification)
             Handler(Looper.getMainLooper()).postDelayed({ nm.cancel(0xBEEF) }, 1500)
-        } catch (_: Exception) {}
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("BubbleHelper", "initBubble failed: ${e.javaClass.simpleName}: ${e.message}")
+            FirebaseCrashlytics.getInstance().recordException(e)
+            false
+        }
     }
 
     // Per-contact coloured circle with initial — kept for reference; no longer used as main dot.

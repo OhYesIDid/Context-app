@@ -24,11 +24,24 @@ import java.util.Locale
  *
  * Also stores the last outgoing reply per convKey for continuity context.
  */
+
+// destinationText is exactly what fetchEtaToDestination() expects — either the raw extracted
+// address/place text, or a "lat,lon" string — so it can be re-fetched later without needing to
+// re-extract it from a thread that may since have been cleared by a reply.
+data class DestinationCandidate(val label: String, val destinationText: String, val mentionedAt: Long)
+
 object ContactMemory {
 
     private const val MAX_ENTRIES  = 30
     private const val MAX_AGE_DAYS = 90
     private const val MIN_KEEP     = 10
+
+    // Destinations are conversation-specific ("what place did this chat mention"), not a
+    // contact-wide fact, so they're keyed by convKey directly rather than going through
+    // resolveKey()'s contactId fallback. A "trip" is a same-day thing, not permanent — 6h
+    // covers a normal outing without stale destinations lingering into tomorrow.
+    private const val DESTINATION_MAX_AGE_HOURS = 6
+    private const val DESTINATION_MAX_COUNT     = 4
 
     // ── Public read API ───────────────────────────────────────────────────────
 
@@ -68,6 +81,24 @@ object ContactMemory {
     fun getLastSent(context: Context, convKey: String): String? =
         prefs(context).getString(sentKey(convKey), null)
 
+    /** Returns non-expired destinations mentioned recently in this conversation, newest first. */
+    fun getRecentDestinations(context: Context, convKey: String): List<DestinationCandidate> {
+        val cutoff = System.currentTimeMillis() - DESTINATION_MAX_AGE_HOURS * 3600_000L
+        return try {
+            val arr = JSONArray(prefs(context).getString(destKey(convKey), "[]") ?: "[]")
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val mentionedAt = o.optLong("mentionedAt")
+                if (mentionedAt < cutoff) return@mapNotNull null
+                DestinationCandidate(
+                    label = o.optString("label"),
+                    destinationText = o.optString("destination"),
+                    mentionedAt = mentionedAt,
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     /**
      * Migrates convKey-keyed memory + last-sent-reply from [oldConvKey] to [newConvKey].
      * Only relevant when the old conversation was never confirmed to a contactId (memory
@@ -84,6 +115,9 @@ object ContactMemory {
         val oldSentKey = sentKey(oldConvKey)
         p.getString(oldSentKey, null)?.let { editor.putString(sentKey(newConvKey), it) }
         editor.remove(oldSentKey)
+        val oldDestKey = destKey(oldConvKey)
+        p.getString(oldDestKey, null)?.let { editor.putString(destKey(newConvKey), it) }
+        editor.remove(oldDestKey)
         editor.apply()
     }
 
@@ -123,6 +157,30 @@ object ContactMemory {
 
     fun saveLastSent(context: Context, convKey: String, replyText: String) {
         prefs(context).edit().putString(sentKey(convKey), replyText).apply()
+    }
+
+    /**
+     * Records a resolved destination for this conversation. A re-mention of the same place
+     * (matched by normalized label) refreshes its timestamp and moves it to the front rather
+     * than creating a duplicate entry.
+     */
+    fun recordDestination(context: Context, convKey: String, label: String, destinationText: String) {
+        val now = System.currentTimeMillis()
+        val normalizedLabel = label.trim().lowercase()
+        val existing = getRecentDestinations(context, convKey)
+            .filter { it.label.trim().lowercase() != normalizedLabel }
+        val updated = (listOf(DestinationCandidate(label, destinationText, now)) + existing)
+            .take(DESTINATION_MAX_COUNT)
+
+        val arr = JSONArray()
+        updated.forEach { c ->
+            arr.put(JSONObject().apply {
+                put("label", c.label)
+                put("destination", c.destinationText)
+                put("mentionedAt", c.mentionedAt)
+            })
+        }
+        prefs(context).edit().putString(destKey(convKey), arr.toString()).apply()
     }
 
     fun clearLastSent(context: Context, convKey: String) {
@@ -166,4 +224,5 @@ object ContactMemory {
     private fun sanitize(key: String) = key.replace(Regex("[^a-zA-Z0-9_:.-]"), "_").take(200)
     private fun memKey(key: String)  = "mem_${sanitize(key)}"
     private fun sentKey(convKey: String) = "sent_${sanitize(convKey)}"
+    private fun destKey(convKey: String) = "dest_${sanitize(convKey)}"
 }
