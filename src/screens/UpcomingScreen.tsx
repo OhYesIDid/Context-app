@@ -2,15 +2,7 @@ import React, { useState } from 'react';
 import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
 import { formatTripDateRange } from '../services/upcomingEvents';
-
-const PURPLE  = '#6366f1';
-const AMBER   = '#f59e0b';
-const RED     = '#ef4444';
-const BG      = '#0c0c0e';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
+import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED } from '../theme';
 
 interface Props {
   upcomingData: UpcomingData;
@@ -21,14 +13,14 @@ interface Props {
 function CalendarRow({ item }: { item: UpcomingCalendarItem }) {
   return (
     <View style={styles.item}>
-      <View style={[styles.itemIcon, { backgroundColor: '#6366f115' }]}>
+      <View style={[styles.itemIcon, { backgroundColor: '#e2933c15' }]}>
         <Text style={styles.itemIconText}>{item.icon}</Text>
       </View>
       <View style={styles.itemBody}>
         <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.itemSub}>{item.subtitle}</Text>
       </View>
-      <View style={[styles.badge, { backgroundColor: '#6366f115' }]}>
+      <View style={[styles.badge, { backgroundColor: '#e2933c15' }]}>
         <Text style={[styles.badgeText, { color: PURPLE }]}>Cal</Text>
       </View>
     </View>
@@ -72,7 +64,7 @@ function TripCard({ trip }: { trip: Trip }) {
   return (
     <Pressable style={styles.tripCard} onPress={() => setExpanded(v => !v)}>
       <View style={styles.tripHeader}>
-        <View style={[styles.itemIcon, { backgroundColor: '#6366f115' }]}>
+        <View style={[styles.itemIcon, { backgroundColor: '#e2933c15' }]}>
           <Text style={styles.itemIconText}>🧳</Text>
         </View>
         <View style={styles.itemBody}>

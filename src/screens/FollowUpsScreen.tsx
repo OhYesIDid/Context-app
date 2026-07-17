@@ -9,16 +9,7 @@ import {
 } from 'react-native';
 import type { FollowUp } from '../services/followUps';
 import { deleteFollowUp, formatDueLabel, markDone, urgency } from '../services/followUps';
-
-const PURPLE = '#6366f1';
-const BG     = '#0c0c0e';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
-const GREEN   = '#22c55e';
-const AMBER   = '#f59e0b';
-const RED     = '#ef4444';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED } from '../theme';
 
 const URGENCY_COLOR: Record<string, string> = {
   overdue: RED, today: AMBER, soon: PURPLE, later: MUTED, none: BORDER,

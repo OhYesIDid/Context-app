@@ -121,15 +121,15 @@ class BubbleSuggestionActivity : Activity() {
         val d = resources.displayMetrics.density
         fun dp(n: Int) = (n * d).toInt()
 
-        val PURPLE    = Color.parseColor("#6366f1")
-        val PURPLE_BG = Color.parseColor("#6366f122")
-        val TEXT      = Color.parseColor("#f4f4f5")
-        val MUTED     = Color.parseColor("#71717a")
-        val BG        = Color.parseColor("#1e1e22")
-        val SURFACE2  = Color.parseColor("#27272a")
-        val BORDER    = Color.parseColor("#3f3f46")
-        val GREEN     = Color.parseColor("#22c55e")
-        val GREEN_BG  = Color.parseColor("#22c55e22")
+        val PURPLE    = Theme.SIGNAL
+        val PURPLE_BG = Theme.SIGNAL_BG
+        val TEXT      = Theme.TEXT
+        val MUTED     = Theme.MUTED
+        val BG        = Theme.SURFACE
+        val SURFACE2  = Theme.SURFACE2
+        val BORDER    = Theme.BORDER
+        val GREEN     = Theme.GREEN
+        val GREEN_BG  = Theme.GREEN_BG
 
         val AVATAR_PALETTE = listOf(0xFF6366f1L, 0xFF8b5cf6L, 0xFFec4899L, 0xFFf43f5eL,
                                     0xFFf59e0bL, 0xFF10b981L, 0xFF06b6d4L, 0xFF3b82f6L)
@@ -569,12 +569,12 @@ class BubbleSuggestionActivity : Activity() {
             val currentAppLabel = ProTxtBgService.appLabel(packageName)
 
             val isHighConf = matchConfidence >= 0.88
-            // Cross-app uses indigo; same-app uses amber scaled by confidence
-            val accentColor = if (isCrossApp) Color.parseColor("#6366f1")
+            // Cross-app uses the context accent (teal); same-app uses amber scaled by confidence
+            val accentColor = if (isCrossApp) Theme.CONTEXT
                               else Color.parseColor(if (isHighConf) "#f59e0b" else "#d97706")
-            val accentBg    = if (isCrossApp) Color.parseColor("#6366f118")
+            val accentBg    = if (isCrossApp) Color.parseColor("#2f8f8a18")
                               else Color.parseColor(if (isHighConf) "#f59e0b18" else "#d9770610")
-            val accentBorder = if (isCrossApp) Color.parseColor("#6366f144")
+            val accentBorder = if (isCrossApp) Color.parseColor("#2f8f8a44")
                                else Color.parseColor(if (isHighConf) "#f59e0b44" else "#d9770630")
 
             val bannerText = when {

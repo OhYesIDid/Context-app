@@ -22,6 +22,7 @@ import { importDeviceContacts } from '../services/deviceContacts';
 import { importGoogleContacts } from '../services/googlePeople';
 import { refreshContactListCache } from '../services/styleSync';
 import { pickAndParseWhatsAppExport } from '../services/whatsappParser';
+import { BG, SURFACE, BORDER, TEXT, MUTED, PURPLE, GREEN, RED } from '../theme';
 
 const { ProTxtSettings: ConTxtSettings } = NativeModules;
 
@@ -402,7 +403,7 @@ export default function SetupWizard({ onComplete }: Props) {
               </>
             ) : (
               <>
-                <ActivityIndicator color="#6366f1" style={{ marginVertical: 8 }} />
+                <ActivityIndicator color="#e2933c" style={{ marginVertical: 8 }} />
                 {(importProgress?.current ?? 0) > 0 && (
                   <Text style={s.progressCount}>{importProgress!.current} imported so far…</Text>
                 )}
@@ -477,15 +478,6 @@ function ImportRow({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const BG     = '#0c0c0e';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
-const PURPLE  = '#6366f1';
-const GREEN   = '#4ade80';
-const RED     = '#f87171';
-
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
 
@@ -507,10 +499,10 @@ const s = StyleSheet.create({
   progressCard: { backgroundColor: '#fff', borderRadius: 16, padding: 28, width: 280, alignItems: 'center' },
   progressLabel: { fontSize: 15, fontWeight: '600', color: '#1e1b4b', marginBottom: 16, textAlign: 'center' },
   progressTrack: { width: '100%', height: 6, backgroundColor: '#e0e7ff', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, backgroundColor: '#6366f1', borderRadius: 3 },
+  progressFill: { height: 6, backgroundColor: '#e2933c', borderRadius: 3 },
   progressCount: { fontSize: 13, color: '#6b7280', marginTop: 10 },
   bgBtn: { marginTop: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  bgBtnText: { fontSize: 13, color: '#6366f1', fontWeight: '500' },
+  bgBtnText: { fontSize: 13, color: '#e2933c', fontWeight: '500' },
 
   importRows: { width: '100%', marginTop: 28 },
   importRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },

@@ -61,7 +61,8 @@
         {
           "locationWhenInUsePermission": "Allow ConTxt to check your location for ETA replies."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

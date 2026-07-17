@@ -14,16 +14,7 @@ import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
 import type { UpcomingData } from '../services/upcomingEvents';
-
-const PURPLE = '#6366f1';
-const BG     = '#0c0c0e';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
-const GREEN   = '#22c55e';
-const AMBER   = '#f59e0b';
-const RED     = '#ef4444';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED } from '../theme';
 
 const URGENCY_DOT: Record<string, string> = {
   overdue: RED,
@@ -85,7 +76,7 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
     todayItems.push({ icon: '📋', iconBg: '#f59e0b20', title: `${todayCount} follow-up${todayCount > 1 ? 's' : ''} due today`, sub: sorted.filter(f => urgency(f) === 'today').map(f => f.contactName ?? f.text.slice(0, 20)).join(', '), action: 'View', onAction: onGoToFollowUps });
   }
   if (!isPro) {
-    todayItems.push({ icon: '⭐', iconBg: '#6366f120', title: 'Upgrade to ConTxt Pro', sub: 'Suggestions for every message, not just ETA & plans', action: 'Upgrade', onAction: onOpenPaywall });
+    todayItems.push({ icon: '⭐', iconBg: '#e2933c20', title: 'Upgrade to ConTxt Pro', sub: 'Suggestions for every message, not just ETA & plans', action: 'Upgrade', onAction: onOpenPaywall });
   }
   if (todayItems.length === 0) {
     todayItems.push({ icon: '✅', iconBg: '#22c55e20', title: 'You\'re all caught up', sub: 'No follow-ups due today' });
@@ -117,7 +108,7 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
-            <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+            <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
               <Text style={styles.cardIconText}>📋</Text>
             </View>
             <Text style={styles.cardTitle}>Follow-ups</Text>
@@ -167,11 +158,11 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+              <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
                 <Text style={styles.cardIconText}>📅</Text>
               </View>
               <Text style={styles.cardTitle}>Suggested Events</Text>
-              <View style={[styles.badge, { backgroundColor: '#6366f133', borderWidth: 1, borderColor: '#6366f155' }]}>
+              <View style={[styles.badge, { backgroundColor: '#e2933c33', borderWidth: 1, borderColor: '#e2933c55' }]}>
                 <Text style={[styles.badgeText, { color: PURPLE }]}>{pendingCalendarActions.length}</Text>
               </View>
             </View>
@@ -292,14 +283,14 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
 
             {shown.map(item => (
               <View key={item.id} style={styles.upcomingItem}>
-                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? '#6366f115' : '#f59e0b15' }]}>
+                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? '#e2933c15' : '#f59e0b15' }]}>
                   <Text style={styles.upcomingIconText}>{item.icon}</Text>
                 </View>
                 <View style={styles.upcomingBody}>
                   <Text style={styles.upcomingTitle} numberOfLines={1}>{item.title}</Text>
                   <Text style={styles.upcomingSub}>{item.subtitle}</Text>
                 </View>
-                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? '#6366f115' : '#f59e0b15' }]}>
+                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? '#e2933c15' : '#f59e0b15' }]}>
                   <Text style={[styles.upcomingBadgeText, { color: item.source === 'cal' ? PURPLE : AMBER }]}>
                     {item.source === 'cal' ? 'Cal' : 'Gmail'}
                   </Text>
@@ -357,7 +348,7 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIcon, { backgroundColor: '#6366f120' }]}>
+              <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
                 <Text style={styles.cardIconText}>✨</Text>
               </View>
               <Text style={styles.cardTitle}>Your Style</Text>
@@ -439,7 +430,7 @@ const styles = StyleSheet.create({
   calendarTitle:   { fontSize: 14, color: TEXT, fontWeight: '500' },
   calendarSub:     { fontSize: 12, color: MUTED, marginTop: 2 },
   calendarActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  calendarAddBtn:  { backgroundColor: '#6366f122', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#6366f144' },
+  calendarAddBtn:  { backgroundColor: '#e2933c22', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#e2933c44' },
   calendarAddText: { fontSize: 12, color: PURPLE, fontWeight: '600' },
   calendarDismiss: { fontSize: 14, color: MUTED, paddingHorizontal: 4 },
 

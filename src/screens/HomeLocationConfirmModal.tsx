@@ -1,11 +1,6 @@
 import React from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-
-const PURPLE  = '#6366f1';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
+import { PURPLE, SURFACE, BORDER, TEXT, MUTED } from '../theme';
 
 const MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -28,7 +23,7 @@ function staticMapUrl(lat: number, lon: number): string | null {
     zoom: '15',
     size: '600x280',
     scale: '2',
-    markers: `color:0x6366f1|${lat},${lon}`,
+    markers: `color:0xe2933c|${lat},${lon}`,
     key: MAPS_API_KEY,
   });
   return `https://maps.googleapis.com/maps/api/staticmap?${params}`;

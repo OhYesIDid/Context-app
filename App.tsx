@@ -55,6 +55,7 @@ import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, 
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
 import { logEvent } from './src/services/analytics';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED } from './src/theme';
 
 const TONE_LABEL: Record<Tone, string> = {
   formal: 'Formal',
@@ -63,7 +64,7 @@ const TONE_LABEL: Record<Tone, string> = {
 };
 
 const TONE_COLOR: Record<Tone, string> = {
-  formal: '#6366f1',
+  formal: '#e2933c',
   casual: '#10b981',
   brief: '#f59e0b',
 };
@@ -945,7 +946,7 @@ export default function App() {
                               </View>
                             )}
                           </View>
-                          <Text style={{ fontSize: 12, color: '#6366f1' }}>View profile</Text>
+                          <Text style={{ fontSize: 12, color: '#e2933c' }}>View profile</Text>
                         </Pressable>
                         <Text style={styles.chipLabel}>Relationship</Text>
                         <View style={styles.chipRow}>
@@ -1313,13 +1314,6 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
-
-const PURPLE = '#6366f1';
-const BG = '#0c0c0e';
-const SURFACE = '#18181b';
-const BORDER = '#27272a';
-const TEXT = '#f4f4f5';
-const MUTED = '#71717a';
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },

@@ -12,6 +12,7 @@ import {
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
+import { PURPLE, SURFACE, BORDER, TEXT, MUTED } from '../theme';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -23,12 +24,6 @@ interface UnmatchedSender {
   platformLabel: string;
   platform: string;
 }
-
-const PURPLE  = '#6366f1';
-const SURFACE = '#18181b';
-const BORDER  = '#27272a';
-const TEXT    = '#f4f4f5';
-const MUTED   = '#71717a';
 
 const RELATIONSHIP_EMOJI: Record<Relationship, string> = {
   friend:    '👋',
@@ -364,7 +359,7 @@ const styles = StyleSheet.create({
   loadingText:  { color: MUTED, fontSize: 15 },
 
   header:     { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
-  avatar:     { width: 52, height: 52, borderRadius: 26, backgroundColor: '#6366f130', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#6366f140' },
+  avatar:     { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e2933c30', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2933c40' },
   avatarText: { fontSize: 24 },
   headerInfo: { flex: 1 },
   name:       { fontSize: 20, fontWeight: '700', color: TEXT, letterSpacing: -0.3 },
@@ -375,7 +370,7 @@ const styles = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: SURFACE },
-  chipActive:   { borderColor: PURPLE, backgroundColor: '#6366f120' },
+  chipActive:   { borderColor: PURPLE, backgroundColor: '#e2933c20' },
   chipText:     { fontSize: 13, color: MUTED },
   chipTextActive: { color: PURPLE, fontWeight: '600' },
 
