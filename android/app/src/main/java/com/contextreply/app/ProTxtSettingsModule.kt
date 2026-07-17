@@ -14,6 +14,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -77,6 +78,19 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun refreshBubbleState() {
         ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()
+    }
+
+    @ReactMethod
+    fun logEvent(name: String, params: com.facebook.react.bridge.ReadableMap?) {
+        val map = mutableMapOf<String, String>()
+        params?.let { rm ->
+            val iterator = rm.keySetIterator()
+            while (iterator.hasNextKey()) {
+                val key = iterator.nextKey()
+                map[key] = rm.getString(key) ?: ""
+            }
+        }
+        Analytics.log(reactApplicationContext, name, map)
     }
 
     // "confirmed_identities" maps convKey -> contactId. Every sender ends up with an
@@ -253,12 +267,20 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun areBubblesEnabled(promise: Promise) {
         val nm = reactApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            @Suppress("DEPRECATION") nm.areBubblesEnabled()
-        } else {
-            true // Bubbles API doesn't exist pre-R — nothing to check
+        val enabled = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                @Suppress("DEPRECATION") nm.areBubblesEnabled()
+            } else {
+                true // Bubbles API doesn't exist pre-R — nothing to check
+            }
+        } catch (e: Throwable) {
+            // Same OEM-ROM NoSuchMethodError seen in ProTxtBgService.downgradeBubblesIfNeeded —
+            // some devices report SDK_INT >= R but strip areBubblesEnabled() from the framework.
+            // A linkage Error, not an Exception, so it must be caught this broadly.
+            FirebaseCrashlytics.getInstance().recordException(e)
+            true
         }
         promise.resolve(enabled)
     }
@@ -583,6 +605,10 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
             promise.resolve(String(cipher.doFinal(ct), Charsets.UTF_8))
         } catch (e: Exception) {
+            // Most likely cause: the Keystore-backed AES key no longer matches the
+            // one this row was encrypted under (e.g. a GCM auth-tag failure). Surface
+            // it so a recurring pattern is visible, rather than only failing silently.
+            FirebaseCrashlytics.getInstance().recordException(e)
             promise.reject("DEC_ERROR", e.message ?: "decrypt failed", e)
         }
     }

@@ -196,6 +196,11 @@ class ReplySendReceiver : BroadcastReceiver() {
 
         try {
             replyPendingIntent.send(context, 0, replyIntent)
+            Analytics.log(context, "suggestion_sent", mapOf(
+                "intent" to (intentType ?: "unknown"),
+                "tone" to (toneSelected ?: "unknown"),
+                "source" to "bubble",
+            ))
         } catch (_: PendingIntent.CanceledException) {
             // Original notification already dismissed — nothing to do
         }

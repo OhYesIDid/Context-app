@@ -193,7 +193,13 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // BOOKINGS_SYNC_INTERVAL_MS on a device that already synced recently under
 // the old (buggy) logic — exactly what happened going from v51 to v52,
 // where v51's forced-debug sync had just reset the timer.
-const BOOKINGS_SYNC_LOGIC_VERSION = '7';
+// v8 (2026-07-17): also the fix for rows displaying as "enc1:...." — a
+// device-side AES key mismatch left some cached subject/snippet/from_address
+// fields undecryptable. Forcing a full resync re-fetches from Gmail and
+// re-encrypts under the current key, self-healing without touching the DB
+// directly. See dbCrypto.ts's decryptField for the accompanying fix that
+// stops a future occurrence of this from leaking ciphertext into the UI.
+const BOOKINGS_SYNC_LOGIC_VERSION = '8';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function isBookingsSyncDue(): Promise<boolean> {

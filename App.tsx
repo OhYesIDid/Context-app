@@ -53,6 +53,7 @@ import { refreshContactListCache, syncStyleProfile } from './src/services/styleS
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, Tone } from './src/types';
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
+import { logEvent } from './src/services/analytics';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
 
 const TONE_LABEL: Record<Tone, string> = {
@@ -314,6 +315,7 @@ export default function App() {
         const input: SuggestReplyInput = { originalMessage: shareText, intents: detected as Intent[], enrichments };
         const r = await suggestReply(input);
         setShareReply(r.casual);
+        logEvent('suggestion_generated', { intent: detected.join(',') || 'general', source: 'app' });
       } catch {} finally {
         setShareLoading(false);
       }
@@ -1296,6 +1298,7 @@ export default function App() {
                   style={[styles.modalClose, { flex: 2 }]}
                   onPress={async () => {
                     await Clipboard.setStringAsync(shareReply);
+                    logEvent('suggestion_copied', { source: 'app' });
                     setShareText(null);
                   }}
                 >
