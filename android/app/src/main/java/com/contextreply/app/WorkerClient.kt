@@ -6,6 +6,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -135,6 +136,7 @@ object WorkerClient {
             if (code != 200) {
                 val errorBody = conn.errorStream?.use { it.bufferedReader().readText() } ?: ""
                 android.util.Log.e("WorkerClient", "HTTP $code: $errorBody")
+                FirebaseCrashlytics.getInstance().recordException(Exception("Worker HTTP $code: ${errorBody.take(200)}"))
                 return null
             }
             val response = conn.inputStream.bufferedReader().use { it.readText() }

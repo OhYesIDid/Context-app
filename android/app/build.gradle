@@ -2,6 +2,7 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
@@ -216,4 +217,10 @@ dependencies {
     implementation "com.google.android.gms:play-services-auth-base:18.0.10"
     implementation "com.google.android.material:material:1.12.0"
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
+
+    // Crash/error reporting — reuses the existing Firebase project (already present for
+    // Google Sign-In's google-services.json). BoM pins compatible versions across artifacts.
+    implementation platform("com.google.firebase:firebase-bom:34.5.0")
+    implementation "com.google.firebase:firebase-crashlytics"
+    implementation "com.google.firebase:firebase-analytics"
 }

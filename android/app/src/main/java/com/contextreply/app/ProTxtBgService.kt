@@ -24,6 +24,7 @@ import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -744,6 +745,7 @@ class ProTxtBgService : NotificationListenerService() {
                     postLoadingNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, effectiveIntentsStr, markAsReadPendingIntent)
                 } catch (e: Exception) {
                     android.util.Log.e("ProTxt", "postLoadingNotification threw: ${e.javaClass.simpleName}: ${e.message}")
+                    FirebaseCrashlytics.getInstance().recordException(e)
                 }
             }
             val urgencyScore = computeUrgencyScore(latestMessage, effectiveIntentsStr, convKey)
@@ -884,6 +886,7 @@ class ProTxtBgService : NotificationListenerService() {
                 enqueuePendingContact(convKey, senderName, packageName)
             } catch (e: Exception) {
                 android.util.Log.e("ProTxt", "worker exception: ${e.javaClass.simpleName}: ${e.message}")
+                FirebaseCrashlytics.getInstance().recordException(e)
                 if (activeBubbles.contains(convKey)) {
                     postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
                 }
@@ -1128,6 +1131,7 @@ class ProTxtBgService : NotificationListenerService() {
             }
         } catch (e: Exception) {
             android.util.Log.e("ProTxt", "Failed to load intent_patterns.json", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
             emptyMap()
         }
     }
@@ -1626,6 +1630,7 @@ class ProTxtBgService : NotificationListenerService() {
             EtaData(duration, distance, route, label, location.latitude, location.longitude)
         } catch (e: Exception) {
             android.util.Log.e("ProTxt", "ETA: exception for dest=\"$destination\": ${e.message}")
+            FirebaseCrashlytics.getInstance().recordException(e)
             null
         }
     }

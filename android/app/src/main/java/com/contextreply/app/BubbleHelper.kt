@@ -19,6 +19,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import java.io.File
 import java.io.FileOutputStream
 
@@ -158,6 +159,7 @@ object BubbleHelper {
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
         } catch (e: Exception) {
             android.util.Log.e("BubbleHelper", "appIcon failed: ${e.javaClass.simpleName}: ${e.message}")
+            FirebaseCrashlytics.getInstance().recordException(e)
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }
@@ -200,6 +202,7 @@ object BubbleHelper {
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
         } catch (e: Exception) {
             android.util.Log.e("BubbleHelper", "compositeIcon failed: ${e.javaClass.simpleName}: ${e.message}")
+            FirebaseCrashlytics.getInstance().recordException(e)
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }
@@ -287,6 +290,7 @@ object BubbleHelper {
             IconCompat.createWithAdaptiveBitmapContentUri(uri)
         } catch (e: Exception) {
             android.util.Log.e("BubbleHelper", "contactIcon failed: ${e.javaClass.simpleName}: ${e.message}")
+            FirebaseCrashlytics.getInstance().recordException(e)
             IconCompat.createWithResource(context, R.mipmap.ic_launcher_round)
         }
     }
