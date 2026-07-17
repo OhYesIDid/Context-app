@@ -15,10 +15,24 @@ export interface ReplyOptions {
 
 export interface EtaData {
   duration: string;
-  durationSeconds: number;
+  durationSeconds?: number; // populated by googleMaps.ts's Distance Matrix path only
   distance: string;
   routeSummary: string;
-  destinationLabel: string;
+  destinationLabel?: string;
+  currentLocation?: string; // fallback when no destination could be resolved — current-area name only
+  userLat?: number;
+  userLon?: number;
+}
+
+// One of several recently-mentioned destinations in the same conversation, presented
+// together when it's ambiguous which one a follow-up message ("how long will it take
+// you?") actually refers to — Claude picks using the conversation context it already has.
+export interface EtaCandidate {
+  label: string;
+  duration: string;
+  distance: string;
+  routeSummary: string;
+  mentionedMinutesAgo: number;
 }
 
 export interface CalendarEvent {
@@ -64,9 +78,13 @@ export interface IncomingLocationData {
 
 export interface EnrichmentData {
   maps?: EtaData;
+  // Present instead of `maps` when multiple recent destinations are ambiguous — see EtaCandidate.
+  mapsCandidates?: EtaCandidate[];
   calendar?: AvailabilityData;
   bookings?: BookingContext;
   incoming_location?: IncomingLocationData;
+  location_coords?: { lat: number; lon: number };
+  emotion?: { emotion: string; confidence: 'high' | 'low' };
 }
 
 export interface ConversationMessage {

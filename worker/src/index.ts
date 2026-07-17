@@ -1,4 +1,11 @@
 import intentPatternSource from '../../assets/intent_patterns.json';
+import { ENRICHMENT_FORMATTERS } from '../../src/utils/intentDetector';
+import type {
+  EnrichmentData,
+  CalendarEvent,
+  ConversationMessage,
+  BookingItem,
+} from '../../src/types';
 
 export interface Env {
   CLAUDE_API_KEY: string;
@@ -67,34 +74,6 @@ async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: b
   state.count++;
   await kv.put(key, JSON.stringify(state), { expirationTtl: 60 });
   return { allowed: true, retryAfter: 0 };
-}
-
-interface CalendarEvent {
-  summary: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-}
-
-interface ConversationMessage {
-  sender: string | null;
-  text: string;
-}
-
-interface BookingItem {
-  type: string;
-  subject: string;
-  snippet: string;
-  date: string;
-}
-
-interface EnrichmentData {
-  maps?: { duration: string; distance: string; routeSummary: string; destinationLabel?: string; currentLocation?: string; userLat?: number; userLon?: number };
-  calendar?: { events: CalendarEvent[]; windowStart: string; windowEnd: string };
-  bookings?: { items: BookingItem[]; windowStart: string; windowEnd: string };
-  location_coords?: { lat: number; lon: number };
-  incoming_location?: { lat?: number; lon?: number; placeLabel?: string; shortUrl?: string; nativePin?: boolean };
-  emotion?: { emotion: string; confidence: 'high' | 'low' };
 }
 
 // ── Booking classification ────────────────────────────────────────────────────
@@ -349,103 +328,9 @@ async function resolveShortMapsUrl(
   }
 }
 
-// ── Enrichment formatters ─────────────────────────────────────────────────────
-// One entry per enrichment key. Adding a new data source = add one entry here.
-
-function formatCalendar(events: CalendarEvent[]): string {
-  if (events.length === 0) return 'User has no calendar events in the next 7 days — completely free.';
-  const fmtDateTime = (iso: string) =>
-    new Date(iso).toLocaleString('en-GB', {
-      weekday: 'short', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
-  const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const lines = events.slice(0, 15).map((e) => {
-    if (e.allDay) {
-      return `  • ${fmtDate(e.start)} — ${e.summary} (all day)`;
-    }
-    const startDate = new Date(e.start).toDateString();
-    const endDate = new Date(e.end).toDateString();
-    // Show end datetime when the event crosses midnight into the next day
-    const endStr = startDate === endDate ? fmtTime(e.end) : fmtDateTime(e.end);
-    return `  • ${fmtDateTime(e.start)} → ${endStr} — ${e.summary}`;
-  }).join('\n');
-  return `User's calendar (next 7 days — use ONLY if the conversation is about the user's own schedule or availability; ignore if the conversation topic is unrelated):\n${lines}\nThe user is ONLY busy during the times listed above. Any day or time not listed is free.`;
-}
-
-const TYPE_LABEL: Record<string, string> = {
-  flight: 'Flight', hotel: 'Hotel', train: 'Train',
-  delivery: 'Delivery', restaurant: 'Restaurant', event: 'Event', other: 'Booking',
-};
-
-const ENRICHMENT_FORMATTERS: Record<keyof EnrichmentData, (data: unknown) => string> = {
-  location_coords: (data) => {
-    const d = data as EnrichmentData['location_coords']!;
-    return `User's current GPS coordinates: ${d.lat.toFixed(5)},${d.lon.toFixed(5)}. They can share a Google Maps link: https://maps.google.com/?q=${d.lat.toFixed(5)},${d.lon.toFixed(5)}`;
-  },
-  maps: (data) => {
-    const d = data as EnrichmentData['maps']!;
-    if (d.currentLocation) {
-      return `User is currently in: ${d.currentLocation}. No routable destination was extracted from the conversation — use this location in the reply (e.g. "I'm in ${d.currentLocation}") and give a natural response. Do NOT ask them to drop a pin.`;
-    }
-    const locationLink = (d.userLat != null && d.userLon != null)
-      ? ` End the reply with your current location on a new line: https://maps.google.com/?q=${d.userLat.toFixed(5)},${d.userLon.toFixed(5)}`
-      : '';
-    return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}. Always include this travel time in the reply.${locationLink}`;
-  },
-  calendar: (data) => {
-    const d = data as EnrichmentData['calendar']!;
-    return formatCalendar(d.events);
-  },
-  bookings: (data) => {
-    const d = data as EnrichmentData['bookings']!;
-    if (d.items.length === 0) return 'No recent travel or purchase emails found.';
-    const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    const lines = d.items.slice(0, 8).map((item) => {
-      const label = TYPE_LABEL[item.type] ?? 'Booking';
-      let dateStr: string;
-      if (item.travelDate) {
-        dateStr = item.travelDateEnd && item.travelDateEnd !== item.travelDate
-          ? `travel ${fmt(item.travelDate)} – ${fmt(item.travelDateEnd)}`
-          : `travel ${fmt(item.travelDate)}`;
-      } else {
-        dateStr = `confirmation received ${fmt(item.date)}, travel date unclear`;
-      }
-      return `  • [${label}] ${item.subject} (${dateStr}) — ${item.snippet.slice(0, 120)}`;
-    }).join('\n');
-    return `Recent bookings and reservations (${d.items.length} found). Use the "travel" date as the actual trip date — the "confirmation received" date is just when the booking email arrived and is NOT the travel date:\n${lines}`;
-  },
-  emotion: (data) => {
-    const d = data as EnrichmentData['emotion']!;
-    const guidance: Record<string, string> = {
-      anger:       'The sender appears angry or upset. Acknowledge their frustration genuinely before responding — avoid being defensive.',
-      urgency:     'The sender needs a quick response. Be direct and skip pleasantries.',
-      anxiety:     'The sender seems worried or stressed. Lead with reassurance before giving details.',
-      frustration: 'The sender seems frustrated. Acknowledge their concern before addressing the content.',
-      passive_agg: 'The sender may be expressing displeasure indirectly. Be warm and non-confrontational.',
-    };
-    const hint = guidance[d.emotion];
-    if (!hint) return '';
-    return d.confidence === 'high' ? hint : `Note (low confidence): ${hint}`;
-  },
-  incoming_location: (data) => {
-    const d = data as EnrichmentData['incoming_location']!;
-    if (d.lat != null && d.lon != null) {
-      const coord = `${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`;
-      const place = d.placeLabel ? `${d.placeLabel} (${coord})` : coord;
-      return `The other person has shared their location: ${place}. They may be waiting for you, sharing a meeting point, or providing directions. Respond naturally — acknowledge the pin and offer relevant context (your ETA, whether you're heading there, etc.).`;
-    }
-    if (d.nativePin) {
-      return `The other person has shared their location via a native pin. No coordinates are available in the notification. Acknowledge the share naturally — they may be waiting for you or sharing a meeting point.`;
-    }
-    return `The other person has shared a location link. Acknowledge the share and respond naturally.`;
-  },
-};
-
 // ── Prompt building ───────────────────────────────────────────────────────────
+// ENRICHMENT_FORMATTERS is imported from src/utils/intentDetector.ts — single
+// source of truth, shared with the TS app's own paste-message/share-sheet path.
 
 interface ActionSuggestion {
   type: 'calendar_add' | 'maps_open' | 'follow_up';
@@ -481,7 +366,10 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
   const enrichments = body.enrichments ?? {};
   const contextParts = (Object.entries(enrichments) as [keyof EnrichmentData, unknown][])
     .filter(([, v]) => v != null)
-    .map(([key, value]) => ENRICHMENT_FORMATTERS[key]?.(value) ?? '')
+    .map(([key, value]) => {
+      const fmt = ENRICHMENT_FORMATTERS[key] as ((d: unknown) => string) | undefined;
+      return fmt?.(value) ?? '';
+    })
     .filter(Boolean);
 
   // ETA with no routable destination — hint Claude only when there is genuinely no
