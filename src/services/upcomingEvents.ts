@@ -199,7 +199,13 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // re-encrypts under the current key, self-healing without touching the DB
 // directly. See dbCrypto.ts's decryptField for the accompanying fix that
 // stops a future occurrence of this from leaking ciphertext into the UI.
-const BOOKINGS_SYNC_LOGIC_VERSION = '8';
+// v9 (2026-07-17): classify-bookings now gets the email's received date and
+// today's date as anchors for resolving year-less dates in the email body
+// (see worker/src/index.ts's CLASSIFY_SYSTEM_PROMPT) — previously a date
+// like "Friday 17 July" had no grounding and could resolve to a year that
+// made an already-past event look upcoming. Forcing a resync re-classifies
+// every cached booking under the fixed prompt.
+const BOOKINGS_SYNC_LOGIC_VERSION = '9';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function isBookingsSyncDue(): Promise<boolean> {
