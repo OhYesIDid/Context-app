@@ -7,26 +7,24 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ## Open Questions
 
-- What should the app be called? Leading candidates: **Protxt**, **Veritxt**, **Witxt**, **Copy That**
-- Should the domain be `.app` or `.io`?
-- Free tier vs paid from day one?
-- Should the Cloudflare Worker proxy require auth (API key per user) or be open?
+- ~~Should the domain be `.app` or `.io`?~~ **get-context.app** ✓
+- ~~Free tier vs paid from day one?~~ **Freemium** — core suggestions free, Pro tier gates tone learning, strategy pills, default tone, suggest-all-messages ✓
+- ~~Should the Cloudflare Worker proxy require auth (API key per user) or be open?~~ **HMAC signing sufficient for launch** — blocks external callers; per-user server-side entitlement check deferred to post-launch if abuse becomes an issue ✓
 
 ---
 
-## Ideas to Explore
+## Known Issues
 
-- Tone memory: remember a user's preferred tone per contact (e.g. always "casual" with Mom)
-- Reply history: swipe back through past AI replies for a conversation
-- Siri Shortcut integration: "Hey Siri, suggest a reply"
-- iMessage app extension (appears in the app strip inside iMessage)
-- Apple Watch complication: tap to copy latest suggested reply
-- Android Wear OS companion
-- Web app version for desktop texting (iMessage on Mac, WhatsApp Web)
+- **Same-name contact collision in conversation key — wider blast radius than originally scoped.** `buildConversationKey()` (`ProTxtBgService.kt`) keys conversations by notification title (the display name shown by the messaging app). Originally framed as "two saved contacts with the same name" (rare); confirmed 2026-07-17 it's actually much easier to trigger: an **unsaved sender** on WhatsApp can set their own display name to anything, including a real saved contact's name (e.g. an unknown number displaying as "George" when a real contact "George" is saved) — WhatsApp shows the same title for both, so they collide on the identical `convKey` and share message buffers, `ContactMemory` (via `resolveKey()`), and follow-up/calendar-action attribution. This is the confirmed root cause of a follow-up task being attributed to the wrong "George" during testing. Tried fixing 2026-06-16 by keying on `sbn.id` instead, but that broke far worse — `sbn.id` was found to be reused across unrelated active conversations on the test device, causing frequent cross-conversation contamination. Reverted; title-based key stays until a verified-reliable per-conversation ID is found. **Separately fixed 2026-07-17:** `ContactMatcher`'s fuzzy name-only match (Tier 2, no phone anchor) no longer silently auto-confirms at high confidence — always shows the disambiguation banner now, since a display name alone isn't a verified identity. This closes a related but distinct risk (auto-linking within the same app via name coincidence); it does not fix the convKey collision itself, which happens further upstream.
+
+**Also fixed 2026-07-17 — the specific "saved contact mid-conversation" case:** when an unsaved number is saved as a real contact partway through testing, WhatsApp immediately updates the notification title to the saved name, producing a brand-new `convKey` and a duplicate bubble next to the old one (repro'd directly: "unknown number" bubble + separate "Tom Test" bubble for the same conversation). Added `migrateRenamedConversation()` in `ProTxtBgService.kt`: when a fresh convKey's title is a real contact name (not a raw number) and a still-active convKey in the same app has a phone-number title matching that contact's saved number(s) (via new `DeviceContactsResolver.displayNameToPhones()`/`normalizePhone()`), migrates thread (`NotificationStore.migrate()`) and memory (`ContactMemory.migrate()`) onto the new key and dismisses the stale bubble. Does not retroactively fix the general same-name-collision case (two different people who both display as "George" from the start) — that's still the open, previously-investigated limitation above. Only covers the number→saved-name transition, and only within one service-process lifetime (old convKey lookup uses the in-memory `sbnIdByConvKey`, not persisted).
+- **`sbn.id` fallback collision (narrower version of the above)** — in the same function, if a notification has no `conversationTitle` and no `title` (or a group with no `conversationTitle`), the key falls back to `"id:${sbn.id}"` / `"group:${sbn.id}"`. Same collision risk as above, just rarer since most WhatsApp/Telegram notifications carry a title. Pre-existing, not introduced by the 2026-06-16 revert.
+- **No certificate pinning on outbound API calls** — `src/services/claude.ts`, `googleMaps.ts`, `googleCalendar.ts` all use plain `fetch` with no pinning. A MITM with a trusted root CA on the device could intercept traffic. (Critical, ~4h fix — see security audit)
+- ~~**SQLite database unencrypted**~~ — All sensitive text fields encrypted with AES-256-GCM (Keystore-backed). lat/lng stored in encrypted TEXT columns. Identifiers HMAC-SHA256 hashed for lookup. DB excluded from Android backup via `backup_rules.xml` / `data_extraction_rules.xml`. ✓
 
 ---
 
-## Design Ideas
+## Design
 
 - Logo direction: **Thread Bars** and **Reply Arc** are the most distinctive — explore further
 - App icon should work at 60x60px — test all concepts at small size
@@ -34,7 +32,129 @@ Add anything here — the CLI will reference this file alongside CLAUDE.md.
 
 ---
 
-## Dual-User Mode (both parties have the app)
+## Shipped
+
+Features already live in the codebase — kept here for context.
+
+- **Style learning** — suggestion → what was actually sent recorded; recency decay (14-day half-life); per-intent and per-contact grouping; native sync without app-open
+- **Per-contact tone & relationship** — contacts table with preferred tone and relationship tag; pre-selects bubble tab
+- **Conversation history context** — notification thread tracked in `ProTxtBgService`; last N messages sent as context to worker
+- **Intent detection** — ETA, availability, booking, general; drives which enrichments are fetched
+- **ETA enrichment** — Google Maps live ETA injected into reply
+- **Calendar enrichment** — Google Calendar free/busy checked for availability replies
+- **Gmail bookings** — reservation lookup for travel/restaurant questions
+- **Show all buffered messages in the bubble** — `arrivalBuffer` collects every message that arrives during the debounce window; on fire, all buffered texts are deduped and joined with `\n` into both the worker context and the bubble's quote section (`ProTxtBgService.kt:357,407-411`). Capped at 3 visible lines before truncating.
+- **Error state + retry on failed reply generation** — a failed/timed-out worker call now shows a "Couldn't generate a reply" bubble with Retry/Dismiss actions instead of silently disappearing. Retry re-runs the same worker call via the cached `PendingBubble` (`ACTION_RETRY`, `ProTxtBgService.kt` `postErrorNotification`/`retry`/`runWorkerJob`).
+- **Regenerate on the bubble** — circular arrow button in `BubbleSuggestionActivity` lets the user re-run the worker call on any suggestion, not just failed ones.
+- **Live-apply group message toggle** — toggling skip_group_messages on immediately calls `dismissAllGroupBubbles()` on the service, cancelling all active/pending group bubbles. Group convKeys tracked in `groupConvKeys` set since groups often use the group name (not a "group:" prefix) as the convKey.
+- **Proactive follow-up** — manual, user-managed follow-ups list (add/mark-done/delete), not an automatic reminder notification. `src/services/followUps.ts` (AsyncStorage CRUD, urgency/due-label helpers), `FollowUpsScreen.tsx`, surfaced on the redesigned Home screen.
+- **Cross-app contact linking** — manually link a contact across messaging platforms from Manage Contacts; linked-platform icons shown on profile card and contacts list. (A fuller, auto-suggested version of this is scoped under [Cross-Platform Contact Linking](#cross-platform-contact-linking) in Someday.)
+- **Destination memory across replies** — 2026-07-17. `ContactMemory` remembers up to 4 recently-mentioned destinations per conversation (6h expiry), independent of `NotificationStore`'s thread (which gets wiped on every reply). A destination-less follow-up ("how long will it take you?") now checks this list: one candidate resolves directly, several ambiguous ones get real travel times fetched for each and are handed to Claude as `mapsCandidates` to pick from using conversation context — no extra Claude call. Also fixed as part of the same change: stale suggestions no longer auto-regenerate on bubble reopen (silently re-billing a Claude call) — the cached reply shows immediately, with the existing regenerate button flagged for the user to opt into a refresh instead.
+- **Firebase Crashlytics** — 2026-07-17. Reuses the existing Firebase project (already present for Google Sign-In). Automatic fatal-crash capture, plus the existing `Log.e` exception sites forwarded as non-fatal `recordException()` calls (worker job failures, ETA fetch errors, bubble icon rendering, non-2xx worker responses, `initBubble()` failures).
+
+---
+
+## Planned
+
+High confidence, clear implementation path.
+
+### Notification-shade suggestion
+Show the reply text inside the notification itself — not just the bubble. User reads and copies directly from the shade without tapping anything. Zero-friction path for people who don't want bubbles. Use `BigTextStyle` or a custom notification layout.
+
+### Adaptive debounce window
+`DEBOUNCE_MS` (`ProTxtBgService.kt`) is a fixed 2.5s wait for every message before the worker call fires — collapses rapid-fire bursts into one API call/suggestion instead of one per message, but the fixed window is a guess: too short to catch slower double-texters, too long for someone who only ever sends one message at a time. Possible signals to make it adaptive instead, cheapest first:
+- **Trailing punctuation/completeness of the latest buffered message** — ends in `.`/`?`/`!` reads as finished (fire sooner); ends mid-sentence or on a single word ("wait", "so") reads as a continuation (extend the wait). No new tracking needed, just a heuristic on text already in hand.
+- **App-side batching signal** — if a single `onNotificationPosted` update's `EXTRA_MESSAGES` count jumps by more than one at once, the messaging app already coalesced a burst for us; less reason to keep waiting.
+- **Per-contact learned double-texting rate** — track a rolling average inter-message gap per contact (similar to existing style-learning profiles) and size that contact's window to their own texting pattern. More powerful, more complexity, and a cold-start period with no data per contact.
+
+Recommended starting point: the punctuation heuristic — simplest, no new storage, covers the common "finished sentence vs. trailing off" case.
+
+### Urgency detection
+Detect how time-sensitive an incoming message is and surface that signal in the bubble and suggestion. Two layers: (1) **signal detection** — patterns like "ASAP", "urgent", "call me now", "??", "hello??", repeated messages in short succession, or a long gap since a prior unanswered message. (2) **downstream effects** — flag the bubble with a visual urgency indicator, bias the worker toward a shorter/more direct reply, shorten the debounce window so the suggestion arrives faster, and optionally push a higher-priority notification if the device is locked. Could also feed into proactive follow-up (lower the reminder threshold for contacts who tend to send urgent messages). Intent detection already runs in `ProTxtBgService.kt` — urgency is a natural addition alongside `eta`/`availability`/`location_share`.
+
+### Per-contact data insights
+Stats surfaced in the contact detail / settings view: average reply time (time between incoming message timestamp and user's outbound reply stamped in `ContactMemory`/`StyleEditQueue`), messages per month (count from `NotificationStore`/`StyleEditQueue` grouped by contact + month), most active hour, most common intent types. Could also flag contacts whose reply time is trending up ("you're taking longer to reply to Sarah"). Data is already partially captured — `StyleEditQueue` records suggestion→send pairs with timestamps, and `arrivalBuffer` sees every incoming message. Main new work: aggregate queries + a UI surface.
+
+### Quick-reply templates
+One-tap canned replies for universal scenarios — running late, driving, in a meeting, can't talk. Bypass AI entirely. Useful as a fallback when the service is slow or offline, and faster than waiting for a suggestion.
+
+### Calendar event — include contact as attendee
+When the user taps the "Add to Calendar" action button, pre-populate the sender as an attendee and add them to the event description. Implementation: pass `EXTRA_PERSON_NAME` / `EXTRA_PERSON_EMAIL` from `BubbleSuggestionActivity.postActionFollowUp` (resolved from `contactMatchJson` or `DeviceContactsResolver`); in `ActionReceiver.ACTION_CALENDAR_ADD`, set `CalendarContract.Attendees.ATTENDEE_EMAIL` on the INSERT intent if an email is available, otherwise append "with [Name]" to `CalendarContract.Events.DESCRIPTION`. No new permissions needed — the insert intent already opens the calendar app for confirmation.
+
+### Screenshot OCR
+Take a screenshot of any message → app reads it and suggests a reply. Eliminates copy-paste entirely for apps not covered by the notification listener. Biggest UX jump for platform coverage.
+
+---
+
+## Someday
+
+Worth building eventually; needs more thought or platform maturity.
+
+### Suppress original app notification
+When our bubble appears, optionally cancel the original WhatsApp/Messenger notification from the shade via `cancelNotification(sbn.key)` in the NLS. Keeps the shade clean — only our bubble shows. Needs a user-facing toggle since it means the original notification won't reappear if the bubble is dismissed without acting. "Mark as read" already handles the explicit read path.
+
+### ~~Android Auto~~ ✓
+~~Already on Android, already have ETA context. Suggest and send replies through the car dashboard. Natural fit with driving mode and ETA suggestions.~~
+Shipped: `MessagingStyle` notification + `RemoteInput.setChoices()` with all tone variants. Auto shows the incoming message as a conversation card; user taps a choice to send directly. `automotive_app_desc.xml` declares notification support.
+
+### IME keyboard extension
+A proper Android Input Method (keyboard replacement) that shows suggestions inline in the keyboard suggestion bar. More reliable than an accessibility overlay — works in every app without the overlay permission complexity. Significant engineering effort but eliminates the biggest setup friction.
+
+### Mac menu bar app
+Highlight any text anywhere → get a reply suggestion. Biggest desktop unlock. Covers iMessage on Mac, WhatsApp Web, any browser-based messaging.
+
+### Driving auto-mode
+Detect motion via accelerometer / Android Auto → automatically switch to short deferral replies. Fully passive, zero friction.
+
+### Boundary mode
+After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus mode integration.
+
+### Wellbeing
+- **Toxic message detection** — flag aggressive or manipulative messages, suggest whether to reply at all
+- **Reply check** — warn if the suggested reply might read as passive-aggressive
+- **Focus mode integration** — when Focus is on, only suggest short deferral replies
+
+### Platform expansion
+- Email plugin — Gmail / Outlook plugin for suggested email replies
+- Slack / Teams — reply suggestions in work chat
+- Instagram / LinkedIn DMs — via Share Extension
+- Web app for desktop texting
+- iMessage app extension (appears in the app strip inside iMessage)
+- Android Wear OS companion
+
+### UX shortcuts
+- Voice input — speak the incoming message instead of typing it
+- Lock screen widget (iOS 16+) — see and copy latest suggestion without unlocking
+- Dynamic Island — show reply status while processing
+- Home screen widget — paste a message, get a reply on the home screen
+- Apple Watch — tap to copy top suggestion to clipboard
+- Landscape orientation — make the bubble activity scrollable so long threads/replies aren't clipped when the device is rotated
+- Reply history — swipe back through past AI replies for a conversation
+- Siri Shortcut integration — "Hey Siri, suggest a reply"
+
+- ~~Landscape orientation~~ ✓ — bubble wrapped in `ScrollView`; the quote section already scrolls within its fixed height; entire UI now scrollable when rotated.
+- ~~Quoted message capped at 3 lines~~ ✓ — quote section is a `ScrollView` with fading edges; height auto-fits to content up to `68dp` then scrolls.
+
+### Personalisation
+- **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")
+- **Language matching + translation** — detect incoming message language, reply in the same one; optionally translate the incoming message into the user's language before showing the suggestion
+- **Emoji matching** — mirror the sender's emoji usage style
+
+### Business / Team
+- **Team style guides** — company sets a tone guide, all employee replies follow it
+- **Out-of-office handling** — auto-generate OOO replies with real context
+- **Enterprise API** — developers embed ProTxt's context engine into their own products
+
+### More context signals
+- **Weather** — *"It's raining, might be a few mins late"* auto-added to ETA replies
+- **Battery level** — *"Phone's dying, will call when I'm there"*
+- **Apple Health / activity** — detect if working out, sleeping, in focus mode
+- **Sentiment detection** — if incoming message is upset or urgent, tone adapts automatically
+- **Group chat mode** — message from multiple people, reply that addresses all of them
+
+---
+
+## Dual-User Mode
 
 When both users have the app installed, context becomes bidirectional — a major product differentiator.
 
@@ -71,62 +191,6 @@ Examples:
 
 **Marketing angle:**
 *"You decide who sees what. Your partner gets your live ETA. Your boss never sees your location."*
-
----
-
-## Product Improvements (beyond dual-user mode)
-
-### Context Sources
-- **Weather** — *"It's raining, might be a few mins late"* auto-added to ETA replies
-- **Battery level** — *"Phone's dying, will call when I'm there"*
-- **Driving mode** — auto-detect motion → auto-reply *"driving, back in 20"*
-- **Apple Health / activity** — detect if working out, sleeping, in focus mode
-- **Conversation history** — read last 10 messages for richer context, not just the latest message
-- **Email** — extend beyond SMS/messaging to Gmail, Outlook
-
-### Reply Intelligence
-- **Style cloning** — analyse past texts to match the user's actual writing voice (punctuation, emoji frequency, sentence length). Replies sound like *them*, not AI.
-- **Sentiment detection** — if incoming message is upset or urgent, tone adapts automatically
-- **Per-contact tone memory** — always reply casually to Tom, formally to the manager
-- **Feedback loop** — track which suggestions are used vs regenerated, improve over time
-- **Group chat mode** — message from multiple people, reply that addresses all of them
-
-### Platform Expansion
-- **Mac menu bar app** — highlight any text anywhere → get a reply suggestion (biggest desktop unlock)
-- **Email plugin** — Gmail / Outlook plugin for suggested email replies
-- **Slack / Teams** — reply suggestions in work chat
-- **Instagram / LinkedIn DMs** — via Share Extension
-- **Screenshot OCR** — take a screenshot of any message, app reads it and suggests a reply (eliminates copy-paste entirely — biggest UX jump)
-
-### UX Shortcuts
-- **Voice input** — speak the incoming message instead of typing it
-- **Lock screen widget** (iOS 16+) — see and copy the latest suggestion without unlocking
-- **Dynamic Island** — show reply status while processing
-- **Home screen widget** — paste a message, get a reply on the home screen
-- **Apple Watch** — tap to copy top suggestion to clipboard
-
-### Personalisation
-- **Custom tones** — beyond Brief/Casual/Professional, let users define their own (e.g. "warm but concise")
-- **Language matching** — detect incoming message language, reply in the same one
-- **Emoji matching** — mirror the sender's emoji usage style
-- **Boundary mode** — *"After 9pm, suggest polite defer replies only"*
-
-### Wellbeing / Safety
-- **Toxic message detection** — flag aggressive or manipulative messages, suggest whether to reply at all
-- **Reply check** — warn if the suggested reply might read badly (*"this might come across as passive-aggressive"*)
-- **Focus mode integration** — when iPhone Focus is on, only suggest short deferral replies
-
-### Business / Team
-- **Team style guides** — company sets a tone guide, all employee replies follow it
-- **Out-of-office handling** — auto-generate OOO replies with real context
-- **Enterprise API** — developers embed ProTxt's context engine into their own products
-
-### Priority ranking (by impact)
-1. Screenshot OCR — eliminates copy-paste, biggest UX jump
-2. Style cloning — makes replies feel personal not AI-generated
-3. Mac menu bar — expands to desktop where a lot of messaging happens
-4. Conversation history context — dramatically improves reply quality
-5. Driving auto-mode — fully passive, zero friction
 
 ---
 
@@ -185,7 +249,7 @@ Use **Grid Cells** for MVP (fast, private, explainable), upgrade to **TEE** for 
 
 ## Cross-Platform Contact Linking
 
-The same person messages across WhatsApp, Instagram, Telegram, iMessage etc. The app currently treats each platform identity as a separate person — so tone, permissions, and context don't carry across. Linking solves this.
+The same person messages across WhatsApp, Instagram, Telegram, iMessage etc. The app currently treats each platform identity as a separate person — so tone, permissions, and context don't carry across. Manual linking is already shipped (see Shipped above); this section scopes an **automatic, suggested** version on top of it.
 
 ### The Problem
 ```
@@ -257,4 +321,3 @@ App detects he has ProTxt
 ## Notes
 
 _(add freeform notes here)_
-

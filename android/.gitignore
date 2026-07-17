@@ -1,0 +1,23 @@
+# OSX
+#
+.DS_Store
+
+# Android/IntelliJ
+#
+build/
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+
+# Bundle artifacts
+*.jsbundle
+
+# Release signing — never commit keystore or credentials
+*.jks
+*.keystore
+!debug.keystore
+keystore.properties
+play-store-key.json

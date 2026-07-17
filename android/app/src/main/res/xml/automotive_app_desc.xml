@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares this app as a messaging app for Android Auto.
+     "notification" support = Auto reads MessagingStyle notifications from this app
+     and surfaces incoming messages + quick reply choices on the car dashboard. -->
+<automotiveApp>
+    <uses name="notification"/>
+</automotiveApp>

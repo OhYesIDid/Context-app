@@ -1,24 +1,51 @@
 {
   "name": "context-reply",
   "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "postinstall": "patch-package",
+    "deploy": "npx expo export -p web && wrangler deploy",
+    "preview": "npx expo export -p web && wrangler dev"
   },
   "dependencies": {
-    "expo": "~52.0.36",
-    "expo-clipboard": "~7.0.0",
-    "expo-status-bar": "~2.0.1",
-    "react": "18.3.2",
-    "react-native": "0.76.5"
+    "@expo/metro-config": "~54.0.14",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-google-signin/google-signin": "^16.1.2",
+    "expo": "^54.0.0",
+    "expo-android-notification-listener-service": "^1.1.0",
+    "expo-auth-session": "~7.0.11",
+    "expo-clipboard": "~8.0.8",
+    "expo-contacts": "~15.0.11",
+    "expo-crypto": "~15.0.9",
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.23",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
+    "expo-share-extension": "^5.0.6",
+    "expo-sqlite": "~16.0.10",
+    "expo-status-bar": "~3.0.9",
+    "expo-system-ui": "~6.0.9",
+    "expo-web-browser": "~15.0.11",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-purchases": "^10.4.0",
+    "react-native-purchases-ui": "^10.4.0",
+    "react-native-safe-area-context": "~5.6.0"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
-    "@types/react": "~18.3.12",
-    "typescript": "~5.3.3"
+    "@babel/plugin-transform-class-properties": "^7.29.7",
+    "@babel/plugin-transform-private-methods": "^7.29.7",
+    "@types/react": "~19.1.10",
+    "babel-preset-expo": "~54.0.10",
+    "googleapis": "^173.0.0",
+    "patch-package": "^8.0.1",
+    "typescript": "~5.9.2",
+    "wrangler": "^4.105.0"
   },
   "private": true
 }

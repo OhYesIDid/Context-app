@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+
+    <!-- Block all cleartext HTTP in every build -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+
+    <!-- In debuggable builds also trust user-installed CAs (Charles Proxy etc.) -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </debug-overrides>
+
+    <!--
+        Certificate pins for the Cloudflare Worker (primary AI path).
+        Pins: leaf cert + Google Trust Services WE1 intermediate as backup.
+        Expiration 2026-12-31: after this date Android falls back to normal
+        validation, so a missed rotation won't brick the app.
+        Re-derive before each release: scripts/update-pins.sh
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">contextreply-suggest.tommy-garnell.workers.dev</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">QycwAapN1GOkWdsTY0ftVZwQfDiEgzT7bzZKs5b++T0=</pin>
+            <pin digest="SHA-256">kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!--
+        Anthropic direct path (fallback when EXPO_PUBLIC_WORKER_URL is unset).
+        Same WE1 intermediate as the Worker.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.anthropic.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">LQfSFZEKft9yS7oIKOIO5Vu7Fj33L2H3SDN8/uADlWg=</pin>
+            <pin digest="SHA-256">kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!--
+        Google APIs — Maps Directions + Calendar OAuth token calls.
+        Leaf + GTS CA 1C3 intermediate as backup. Expiry 2026-12-31 ensures
+        Android falls back to normal validation rather than bricking on rotation.
+        Re-derive with scripts/update-pins.sh before each release.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">maps.googleapis.com</domain>
+        <domain includeSubdomains="true">www.googleapis.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">xqMIOq/TKCdAwLfr9h5XTauakQnjCKBQnRqcGiezy3A=</pin>
+            <pin digest="SHA-256">YPtHaftLw6/0vnc2BnNKGF54xiCA28WFcccjkA4ypCM=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!--
+        RevenueCat SDK calls for offerings / purchase verification.
+        Leaf + intermediate. Expiry 2026-12-31 as safety net.
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.revenuecat.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">cScruLir0xVY/lla8OssSntPTNLaMzAGSFIG4Z9myl4=</pin>
+            <pin digest="SHA-256">8dcSZIGOkkJAXV71MH2lsFJuG8T2GkkAq3oGwdC4sHo=</pin>
+        </pin-set>
+    </domain-config>
+
+</network-security-config>

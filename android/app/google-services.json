@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "790415280323",
+    "project_id": "contxt-71fbd",
+    "storage_bucket": "contxt-71fbd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:790415280323:android:61611b2bf940b33ed37a76",
+        "android_client_info": {
+          "package_name": "com.contxt.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "790415280323-1e8b6i4an9nu5pe2a8th9cp5l28teob1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.contxt.app",
+            "certificate_hash": "c3ce727d67190d65ce35bfd8676a9165b48a5fd1"
+          }
+        },
+        {
+          "client_id": "790415280323-n2r8vkcl16qvodepibg29khhv1mq1816.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8TggXheNW-i6Nrye4H-ucufnhZV34dF0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "790415280323-n2r8vkcl16qvodepibg29khhv1mq1816.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
