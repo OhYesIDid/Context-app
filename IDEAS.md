@@ -48,7 +48,7 @@ Features already live in the codebase — kept here for context.
 - **Regenerate on the bubble** — circular arrow button in `BubbleSuggestionActivity` lets the user re-run the worker call on any suggestion, not just failed ones.
 - **Live-apply group message toggle** — toggling skip_group_messages on immediately calls `dismissAllGroupBubbles()` on the service, cancelling all active/pending group bubbles. Group convKeys tracked in `groupConvKeys` set since groups often use the group name (not a "group:" prefix) as the convKey.
 - **Proactive follow-up** — manual, user-managed follow-ups list (add/mark-done/delete), not an automatic reminder notification. `src/services/followUps.ts` (AsyncStorage CRUD, urgency/due-label helpers), `FollowUpsScreen.tsx`, surfaced on the redesigned Home screen.
-- **Cross-app contact linking** — manually link a contact across messaging platforms from Manage Contacts; linked-platform icons shown on profile card and contacts list.
+- **Cross-app contact linking** — manually link a contact across messaging platforms from Manage Contacts; linked-platform icons shown on profile card and contacts list. (A fuller, auto-suggested version of this is scoped under [Cross-Platform Contact Linking](#cross-platform-contact-linking) in Someday.)
 - **Destination memory across replies** — 2026-07-17. `ContactMemory` remembers up to 4 recently-mentioned destinations per conversation (6h expiry), independent of `NotificationStore`'s thread (which gets wiped on every reply). A destination-less follow-up ("how long will it take you?") now checks this list: one candidate resolves directly, several ambiguous ones get real travel times fetched for each and are handed to Claude as `mapsCandidates` to pick from using conversation context — no extra Claude call. Also fixed as part of the same change: stale suggestions no longer auto-regenerate on bubble reopen (silently re-billing a Claude call) — the cached reply shows immediately, with the existing regenerate button flagged for the user to opt into a refresh instead.
 - **Firebase Crashlytics** — 2026-07-17. Reuses the existing Firebase project (already present for Google Sign-In). Automatic fatal-crash capture, plus the existing `Log.e` exception sites forwarded as non-fatal `recordException()` calls (worker job failures, ETA fetch errors, bubble icon rendering, non-2xx worker responses, `initBubble()` failures).
 
@@ -119,6 +119,8 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - Slack / Teams — reply suggestions in work chat
 - Instagram / LinkedIn DMs — via Share Extension
 - Web app for desktop texting
+- iMessage app extension (appears in the app strip inside iMessage)
+- Android Wear OS companion
 
 ### UX shortcuts
 - Voice input — speak the incoming message instead of typing it
@@ -127,6 +129,8 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - Home screen widget — paste a message, get a reply on the home screen
 - Apple Watch — tap to copy top suggestion to clipboard
 - Landscape orientation — make the bubble activity scrollable so long threads/replies aren't clipped when the device is rotated
+- Reply history — swipe back through past AI replies for a conversation
+- Siri Shortcut integration — "Hey Siri, suggest a reply"
 
 - ~~Landscape orientation~~ ✓ — bubble wrapped in `ScrollView`; the quote section already scrolls within its fixed height; entire UI now scrollable when rotated.
 - ~~Quoted message capped at 3 lines~~ ✓ — quote section is a `ScrollView` with fading edges; height auto-fits to content up to `68dp` then scrolls.
@@ -140,6 +144,13 @@ After 9pm (or custom hours), suggest polite defer replies only. Pairs with Focus
 - **Team style guides** — company sets a tone guide, all employee replies follow it
 - **Out-of-office handling** — auto-generate OOO replies with real context
 - **Enterprise API** — developers embed ProTxt's context engine into their own products
+
+### More context signals
+- **Weather** — *"It's raining, might be a few mins late"* auto-added to ETA replies
+- **Battery level** — *"Phone's dying, will call when I'm there"*
+- **Apple Health / activity** — detect if working out, sleeping, in focus mode
+- **Sentiment detection** — if incoming message is upset or urgent, tone adapts automatically
+- **Group chat mode** — message from multiple people, reply that addresses all of them
 
 ---
 
@@ -201,6 +212,12 @@ GPS: [secret]                                       GPS: [secret]
 ```
 Server sees only encrypted blobs. Computation is split across both devices using a garbled circuit protocol.
 
+### Real apps that already do this
+- **Apple FindMy** — encrypted location beacons, Apple can't read them
+- **COVID Exposure Apps** (Apple/Google GAEN) — anonymous token matching happens locally
+- **Signal** — private contact discovery without uploading address book
+- **iMessage** — checks if contacts have iMessage without Apple learning your contact list
+
 ### Practical options (simplest → most private)
 
 **Option 1 — Grid Cells (MVP, easiest)**
@@ -210,6 +227,7 @@ Divide world into 1km² squares. Share cell ID, not coordinates. App checks if c
 
 **Option 2 — Trusted Execution Environment**
 Both coordinates sent to a server running inside a hardware enclave (Intel SGX / Apple Secure Enclave). Even server operator can't read inputs. Returns only the result.
+- More practical than full MPC, similar guarantees
 
 **Option 3 — Commit-then-Reveal**
 1. Both users commit to their location (send a hash, not location)
@@ -226,6 +244,77 @@ Use **Grid Cells** for MVP (fast, private, explainable), upgrade to **TEE** for 
 
 ### User-facing claim
 *"ProTxt calculates distance without either user's exact location ever leaving their device."*
+
+---
+
+## Cross-Platform Contact Linking
+
+The same person messages across WhatsApp, Instagram, Telegram, iMessage etc. The app currently treats each platform identity as a separate person — so tone, permissions, and context don't carry across. Manual linking is already shipped (see Shipped above); this section scopes an **automatic, suggested** version on top of it.
+
+### The Problem
+```
+WhatsApp:   "Tom Work"         → tone: professional
+Instagram:  @tomsmith           → tone: unknown
+Telegram:   @tommyg             → tone: unknown
+iMessage:   +44 7911 123456    → tone: casual
+```
+Same person. Four separate profiles. Every setting has to be re-established per platform.
+
+### Suggestion UI
+When a message arrives from an unrecognised platform contact, show a non-intrusive chip:
+```
+┌─────────────────────────────────────────────┐
+│ 💬 New message from @tomsmith on Instagram  │
+│                                             │
+│ 💡 Is this Tom Smith from WhatsApp?         │
+│    [ Yes, link them ]  [ No ]  [ Not now ]  │
+└─────────────────────────────────────────────┘
+```
+- **Yes** → linked permanently, all settings carry across
+- **No** → never suggest this pair again
+- **Not now** → ask again after 3 more messages
+
+Everything runs on-device. No server involvement.
+
+### On-Device Matching Signals
+| Signal | How it helps |
+|---|---|
+| Display name similarity | "Tom Smith" ↔ "@tomsmith" ↔ "Tom" |
+| Profile picture hash | Same photo across platforms |
+| Message timing patterns | Same timezone, similar activity hours |
+| Username patterns | @tomsmith, @tom.smith, @tommyg |
+| Mutual confirmation | Both have the app → direct link request |
+
+Each signal produces a confidence score. Above threshold → suggest. Below → stay silent.
+
+### What Linking Unlocks
+- **Unified tone** — always casual with Tom regardless of platform
+- **Unified permissions** — Tom can see your location on any platform he messages from
+- **Cross-platform context** — *"Tom messaged you on WhatsApp 2 hours ago saying he's running late"* visible when he messages on Instagram
+- **Unified reply history** — one timeline across all platforms
+
+### Dual-User Flow (both have the app)
+Cleaner than guessing — send a direct link request through ProTxt's own channel:
+```
+You get a message from @tomsmith on Instagram
+App detects he has ProTxt
+→ Sends a link request
+→ Tom sees: "Tommy wants to link your Instagram to their
+   contacts so ProTxt can recognise you across platforms."
+→ Tom confirms → both apps link instantly, no ambiguity
+```
+
+### Privacy Rules
+- Matching is 100% on-device — no contact lists or message metadata leave the phone
+- User must confirm every link explicitly
+- Any link can be undone in settings at any time
+- Platform separation is respected — never assume Instagram = WhatsApp = same context
+
+### Open Questions
+- What if two different people have the same name and similar usernames?
+- Should there be a "keep separate" option (e.g. someone who uses LinkedIn professionally but Telegram personally)?
+- How do we handle shared/family devices?
+- Should unverified suggestions still influence tone slightly, or only after confirmation?
 
 ---
 
