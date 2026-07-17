@@ -80,6 +80,19 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         ProTxtBgService.getInstance()?.downgradeBubblesIfNeeded()
     }
 
+    @ReactMethod
+    fun logEvent(name: String, params: com.facebook.react.bridge.ReadableMap?) {
+        val map = mutableMapOf<String, String>()
+        params?.let { rm ->
+            val iterator = rm.keySetIterator()
+            while (iterator.hasNextKey()) {
+                val key = iterator.nextKey()
+                map[key] = rm.getString(key) ?: ""
+            }
+        }
+        Analytics.log(reactApplicationContext, name, map)
+    }
+
     // "confirmed_identities" maps convKey -> contactId. Every sender ends up with an
     // entry almost immediately: a real contactId (banner-confirmed or auto-applied
     // high-confidence match), a "sep:*" placeholder (user explicitly chose "keep

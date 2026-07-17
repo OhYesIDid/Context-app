@@ -885,6 +885,7 @@ class BubbleSuggestionActivity : Activity() {
                     replyEdit.setText(textMap[available[idx]])
                     replyEdit.setSelection(replyEdit.text.length)
                     refreshTabs(idx)
+                    Analytics.log(this@BubbleSuggestionActivity, "tone_selected", mapOf("tone" to tone, "source" to "bubble"))
                 }
                 tabViews[tone] = tab
                 tabRow.addView(tab)
@@ -1218,7 +1219,10 @@ class BubbleSuggestionActivity : Activity() {
             setTextColor(if (isStale) PURPLE else MUTED)
             textSize = 16f
             isEnabled = !showSkeleton
-            setOnClickListener { triggerRegen() }
+            setOnClickListener {
+                Analytics.log(this@BubbleSuggestionActivity, "suggestion_regenerated", mapOf("source" to "bubble"))
+                triggerRegen()
+            }
         }
 
         root.addView(LinearLayout(this).apply {

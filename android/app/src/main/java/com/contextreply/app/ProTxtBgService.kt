@@ -839,6 +839,7 @@ class ProTxtBgService : NotificationListenerService() {
                     postErrorNotification(notifId, convKey, replyPendingIntent, remoteInputKey, openChatIntent, latestMessage, detectedIntentsStr, markAsReadPendingIntent)
                     return@submit
                 }
+                Analytics.log(this, "suggestion_generated", mapOf("intent" to (result.intent ?: "unknown"), "source" to "bubble"))
                 // Enrich share_location action with coordinates + area name so the
                 // bubble/overlay can compose the full reply without geocoding at tap time.
                 val finalAction = result.action?.also { action ->
