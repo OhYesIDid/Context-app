@@ -25,7 +25,12 @@ export async function decryptField(value: string | null | undefined): Promise<st
   try {
     return await ProTxtSettings.decryptText(value);
   } catch {
-    return value;
+    // Genuine decrypt failure (e.g. the on-device AES key changed since this
+    // row was encrypted) — never return the raw ciphertext. Callers commonly
+    // do `(await decryptField(x)) ?? x`, which would fall back to the raw
+    // (still-encrypted) column value if this returned null; '' isn't nullish
+    // so that fallback doesn't kick in and the enc1:... blob never reaches the UI.
+    return '';
   }
 }
 

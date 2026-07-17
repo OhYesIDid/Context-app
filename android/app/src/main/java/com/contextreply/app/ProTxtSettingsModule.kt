@@ -14,6 +14,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -583,6 +584,10 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
             promise.resolve(String(cipher.doFinal(ct), Charsets.UTF_8))
         } catch (e: Exception) {
+            // Most likely cause: the Keystore-backed AES key no longer matches the
+            // one this row was encrypted under (e.g. a GCM auth-tag failure). Surface
+            // it so a recurring pattern is visible, rather than only failing silently.
+            FirebaseCrashlytics.getInstance().recordException(e)
             promise.reject("DEC_ERROR", e.message ?: "decrypt failed", e)
         }
     }
