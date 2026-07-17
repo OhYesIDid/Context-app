@@ -52,7 +52,7 @@ import { importGoogleContacts } from './src/services/googlePeople';
 import { refreshContactListCache, syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
 import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, Tone } from './src/types';
-import { ENRICHMENT_PREFERENCES, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
+import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
 
 const TONE_LABEL: Record<Tone, string> = {
@@ -137,6 +137,7 @@ export default function App() {
   const [shareText, setShareText] = useState<string | null>(null);
   const [shareReply, setShareReply] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
+  const [shareLoadingLabel, setShareLoadingLabel] = useState('Drafting reply…');
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [upcomingData, setUpcomingData] = useState<UpcomingData>(UPCOMING_EMPTY);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -289,8 +290,14 @@ export default function App() {
     (async () => {
       try {
         const detected = detectIntents(shareText);
+        const requiredKeys = requiredEnrichments(detected);
+        setShareLoadingLabel(
+          requiredKeys.length > 0
+            ? requiredKeys.map((k) => ENRICHMENT_STATUS[k]).join(' · ')
+            : 'Drafting reply…'
+        );
         const enrichments: EnrichmentData = {};
-        for (const key of requiredEnrichments(detected)) {
+        for (const key of requiredKeys) {
           try {
             if (key === 'maps') enrichments.maps = await getEtaData(enrichmentPrefs.maps?.transportMode ?? 'driving');
             if (key === 'calendar' && googleAuthed) enrichments.calendar = await getCalendarData(shareText);
@@ -1238,7 +1245,7 @@ export default function App() {
             {shareLoading ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                 <ActivityIndicator color={PURPLE} size="small" />
-                <Text style={{ color: MUTED, fontSize: 14 }}>Drafting reply…</Text>
+                <Text style={{ color: MUTED, fontSize: 14 }}>{shareLoadingLabel}</Text>
               </View>
             ) : shareReply ? (
               <>

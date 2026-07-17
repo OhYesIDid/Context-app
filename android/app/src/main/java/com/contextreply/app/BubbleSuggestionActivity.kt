@@ -259,6 +259,17 @@ class BubbleSuggestionActivity : Activity() {
             layoutParams = lp
             visibility = if (showSkeleton) View.VISIBLE else View.GONE
         }
+        // What's actually being fetched, instead of a content-free shimmer — same wording as
+        // ENRICHMENT_STATUS in intentDetector.ts. Kept in sync manually (plain display text,
+        // not branching logic, so the low-risk duplication isn't worth a shared-JSON asset).
+        skeletonContainer.addView(TextView(this).apply {
+            text = enrichmentLoadingLabel(detectedIntents)
+            setTextColor(MUTED)
+            textSize = 12f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(8)
+            }
+        })
         listOf(LinearLayout.LayoutParams.MATCH_PARENT, dp(140)).forEachIndexed { i, w ->
             val line = View(this).apply {
                 background = GradientDrawable().apply {
@@ -1408,6 +1419,17 @@ class BubbleSuggestionActivity : Activity() {
                 if (cursor.moveToFirst()) cursor.getString(0).ifEmpty { null } else null
             }
         } catch (_: Exception) { null }
+    }
+
+    // Mirrors ENRICHMENT_STATUS in src/utils/intentDetector.ts — what's being fetched for
+    // the detected intent(s), shown instead of a content-free loading shimmer.
+    private fun enrichmentLoadingLabel(intents: List<String>): String {
+        val parts = mutableListOf<String>()
+        if (intents.contains("eta")) parts.add("journey time")
+        if (intents.contains("availability") || intents.contains("general")) parts.add("your calendar")
+        if (intents.contains("booking")) parts.add("your bookings")
+        if (intents.contains("incoming_location")) parts.add("their location")
+        return if (parts.isEmpty()) "Thinking…" else "Checking ${parts.joinToString(" and ")}…"
     }
 
     private fun buildCalendarBody(title: String, datetimeStr: String?, durationMinutes: Int): String {
