@@ -1595,6 +1595,13 @@ class ProTxtBgService : NotificationListenerService() {
         "home", "my place", "my house", "my flat", "my apartment", "my home",
     )
 
+    // A leading time-of-day mention ("meeting at 9pm at McDonald's") gets swept up by the
+    // "at X" pattern below matching the EARLIER "at" (before the time) rather than the one
+    // right before the actual place, producing "9pm at McDonald's" — a string starting with
+    // a time expression that the Directions API won't resolve as an address at all, causing
+    // the whole ETA lookup to silently fail. Stripped back off rather than passed through.
+    private val DESTINATION_TIME_PREFIX = Regex("""^\d{1,2}(:\d{2})?\s?(am|pm)?\s+at\s+""", RegexOption.IGNORE_CASE)
+
     private fun extractDestination(message: String): String? {
         val patterns = listOf(
             Regex("""(?:how far|far) (?:are you |is it )?(?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
@@ -1602,7 +1609,8 @@ class ProTxtBgService : NotificationListenerService() {
             Regex("""distance (?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
         )
         return patterns.firstNotNullOfOrNull { re ->
-            val raw = re.find(message)?.groupValues?.getOrNull(1)?.trim() ?: return@firstNotNullOfOrNull null
+            val found = re.find(message)?.groupValues?.getOrNull(1)?.trim() ?: return@firstNotNullOfOrNull null
+            val raw = found.replace(DESTINATION_TIME_PREFIX, "").trim()
             // Reject noise words and overly long / short extractions
             if (raw.length < 2 || raw.length > 60) return@firstNotNullOfOrNull null
             if (DESTINATION_NOISE.any { raw.equals(it, ignoreCase = true) }) return@firstNotNullOfOrNull null

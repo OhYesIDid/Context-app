@@ -106,7 +106,7 @@ export const ENRICHMENT_FORMATTERS: {
     const locationLink = (d.userLat != null && d.userLon != null)
       ? ` End the reply with your current location on a new line: https://maps.google.com/?q=${d.userLat.toFixed(5)},${d.userLon.toFixed(5)}`
       : '';
-    return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}. Always include this travel time in the reply.${locationLink}`;
+    return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}. Always include this travel time in the reply. If the conversation states or implies a specific meeting/arrival time, work out whether ${d.duration} from now means arriving after that time — if so, say so honestly (e.g. "running about 10 min late") rather than assuming you'll be on time without checking.${locationLink}`;
   },
   mapsCandidates: (d) => {
     const lines = d.map((c) =>
