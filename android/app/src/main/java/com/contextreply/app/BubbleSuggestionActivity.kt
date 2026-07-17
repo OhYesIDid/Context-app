@@ -100,7 +100,9 @@ class BubbleSuggestionActivity : Activity() {
         val suggestionTs = intent.getLongExtra(ProTxtBgService.EXTRA_SUGGESTION_TS, 0L)
         val staleThresholdMs = if (detectedIntents.any { it == "eta" || it == "availability" }) 5 * 60_000L else 30 * 60_000L
         val isStale = !isLoading && suggestionTs > 0L && System.currentTimeMillis() - suggestionTs > staleThresholdMs
-        val showSkeleton = isLoading || isStale
+        // Staleness no longer auto-regenerates (see below) — the cached reply is still shown,
+        // only the actual loading state hides it.
+        val showSkeleton = isLoading
 
         val textMap = mutableMapOf(
             "casual" to (if (isLoading) null else casualText),
@@ -1199,8 +1201,10 @@ class BubbleSuggestionActivity : Activity() {
 
         // ── Secondary row: No reply · [spacer] · Dismiss · ↺ ─────────────────
         regenBtn = TextView(this).apply {
-            text = "↺"
-            setTextColor(MUTED)
+            // Stale suggestions still show as-is (may be outdated) — flag the button rather
+            // than silently re-billing a Claude call, and let the user opt in to a refresh.
+            text = if (isStale) "↺ Refresh" else "↺"
+            setTextColor(if (isStale) PURPLE else MUTED)
             textSize = 16f
             isEnabled = !showSkeleton
             setOnClickListener { triggerRegen() }
@@ -1293,7 +1297,9 @@ class BubbleSuggestionActivity : Activity() {
             }
         }
 
-        if (isStale) triggerRegen()
+        // Previously auto-called triggerRegen() here on staleness, silently re-billing a
+        // Claude call every time a stale bubble was opened. Now just flags the existing
+        // regenerate button (below) so the user decides whether a refresh is worth it.
 
         // Send lives in a fixed footer below the ScrollView, not inside it —
         // always reachable without scrolling regardless of how much optional
