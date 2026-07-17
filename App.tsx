@@ -100,6 +100,7 @@ export default function App() {
   const [defaultTone, setDefaultToneState] = useState<Tone>('casual');
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
+  const [notificationPermGranted, setNotificationPermGranted] = useState(true); // true until proven otherwise pre-Android 13
   const [locationGranted, setLocationGranted] = useState(false);
   const [backgroundLocationGranted, setBackgroundLocationGranted] = useState(false);
   const [bubblesEnabled, setBubblesEnabled] = useState(false);
@@ -203,6 +204,9 @@ export default function App() {
         setBackgroundLocationGranted(true); // permission doesn't exist pre-Android 10 — nothing to check
       }
       ProTxtSettings.areBubblesEnabled?.().then((ok: boolean) => setBubblesEnabled(ok)).catch(() => {});
+      if ((Platform.Version as number) >= 33) {
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).then(setNotificationPermGranted).catch(() => {});
+      }
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
@@ -256,6 +260,9 @@ export default function App() {
         setBackgroundLocationGranted(true); // permission doesn't exist pre-Android 10 — nothing to check
       }
       ProTxtSettings.areBubblesEnabled?.().then((ok: boolean) => setBubblesEnabled(ok)).catch(() => {});
+      if ((Platform.Version as number) >= 33) {
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).then(setNotificationPermGranted).catch(() => {});
+      }
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
@@ -479,6 +486,7 @@ export default function App() {
           onOpenPaywall={openPaywall}
           isPro={isPro}
           missingPermissions={[
+            !notificationPermGranted && 'Notifications',
             !notifPermission && 'Notification access',
             !bubblesEnabled && 'Suggestion bubbles',
             (Platform.Version as number) >= 29 && !backgroundLocationGranted && 'Background location',
@@ -579,6 +587,24 @@ export default function App() {
         {/* PERMISSIONS */}
         <Text style={styles.sectionLabel}>PERMISSIONS</Text>
         <View style={styles.sectionCard}>
+          {(Platform.Version as number) >= 33 && (
+            <Pressable
+              style={styles.settingRow}
+              onPress={async () => {
+                const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+                setNotificationPermGranted(result === PermissionsAndroid.RESULTS.GRANTED);
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: notificationPermGranted ? '#4ade80' : '#f87171' }]} />
+                <View>
+                  <Text style={styles.settingText}>Notifications</Text>
+                  <Text style={styles.setupStatus}>{notificationPermGranted ? 'Enabled' : 'Needed to show suggestions at all — tap to enable'}</Text>
+                </View>
+              </View>
+              {!notificationPermGranted && <Text style={styles.setupAction}>Open</Text>}
+            </Pressable>
+          )}
           <Pressable
             style={styles.settingRow}
             onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
