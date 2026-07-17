@@ -246,6 +246,11 @@ interface SuggestRequest {
   // a burst of 2+ messages in one debounce window, or an eta/availability intent) —
   // score >= 2 out of a possible 3. Biases the reply toward short and direct.
   urgent?: boolean;
+  // Client's own local wall-clock time, no zone suffix (e.g. "2026-07-17T21:32:58") —
+  // the Worker's own clock has no concept of the user's timezone, so without this,
+  // any "will I make it by X" reasoning has no way to know what time "now" actually is
+  // and can only guess from times mentioned in the conversation itself.
+  localDateTime?: string;
 }
 
 const STRATEGY_INSTRUCTIONS: Record<string, string> = {
@@ -362,6 +367,26 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - snippets: optional — array of 0–3 specific high-intent facts worth storing long-term (concrete plans, dates, places, commitments, preferences, personal details the user should remember). Max 12 words each. Be selective — only facts with lasting relevance. Omit the field entirely if nothing qualifies.
 - action: optional — include for four cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}; (4) message asks the user to DO something specific that requires follow-up action (send a file, make a call, check something, bring something, book something, complete a task — i.e. a concrete actionable request directed at the user): {"type":"follow_up","label":"Add to Follow-ups","task":"[what the user needs to do — action-first, max 12 words, e.g. 'Send the contract to John']","dueHint":"[relative deadline if mentioned, e.g. 'by tomorrow', 'this week', or null]"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
 
+// Formats "today" for the prompt, including the current time when the client supplied its
+// own local wall-clock time. Without a client-provided time, the Worker's own clock is UTC
+// with no notion of the user's timezone, so time-of-day is omitted entirely rather than
+// stating a wrong one — better for Claude to have no time than a confidently incorrect one.
+function formatNow(localDateTime?: string): string {
+  const dateOnly = () => new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  if (!localDateTime) return dateOnly();
+  const m = localDateTime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return dateOnly();
+  const [, y, mo, d, h, mi] = m;
+  // Built at UTC midnight purely so Intl can render the weekday/month name from the
+  // client's own y/mo/d digits — never reinterpreted through any timezone conversion,
+  // since those digits already are the correct local calendar date.
+  const dateLabel = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)))
+    .toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  return `${dateLabel}, and the current time is ${h}:${mi}`;
+}
+
 function buildPrompt(body: SuggestRequest, intents: string[]): string {
   const enrichments = body.enrichments ?? {};
   const contextParts = (Object.entries(enrichments) as [keyof EnrichmentData, unknown][])
@@ -420,10 +445,6 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
   if (body.lastSentReply) memoryParts.push(`Your last reply to them was: "${body.lastSentReply}"`);
   if (body.contactContext) memoryParts.push(body.contactContext);
 
-  const today = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
-
   const strategyInstruction = body.strategy ? STRATEGY_INSTRUCTIONS[body.strategy] : null;
 
   return [
@@ -432,7 +453,7 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
     contextParts.length > 0 && `\nContext:\n${contextParts.join('\n')}`,
     strategyInstruction && `\nReply strategy: ${strategyInstruction}`,
     body.styleContext && `\nWriting style reference (examples of how this user edits AI suggestions — for voice/tone matching only, not conversation context):\n${body.styleContext}`,
-    `\nToday is ${today}.`,
+    `\nToday is ${formatNow(body.localDateTime)}.`,
     '\nWrite the reply JSON for the user.',
   ].filter(Boolean).join('');
 }

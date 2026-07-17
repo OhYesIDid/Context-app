@@ -73,6 +73,10 @@ object WorkerClient {
             if (strategy != null) put("strategy", strategy)
             if (mentionHint != null) put("mentionHint", mentionHint)
             if (urgent) put("urgent", true)
+            // The Worker's own clock is UTC with no notion of this device's timezone — send
+            // local wall-clock time so "will I make it by X" reasoning knows what time "now"
+            // actually is, instead of guessing from times mentioned in the conversation.
+            put("localDateTime", java.time.LocalDateTime.now().toString())
         }.toString()
 
         var lastException: Exception? = null
