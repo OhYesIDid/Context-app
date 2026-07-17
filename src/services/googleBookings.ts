@@ -168,7 +168,11 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // fetch-cap or pagination fix. category:updates alone is enormous (tens
   // of thousands of messages: bank alerts, shipping notices, etc.), so it's
   // scoped to known travel-vendor keywords rather than included wholesale.
-  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster OR "national express" OR "bus station" OR megabus OR flixbus';
+  // Confirmed live 2026-07-17: a genuine TrainPal train ticket confirmation was tagged
+  // category:updates and silently excluded — same failure mode as the Trip.com case above,
+  // just a different vendor missing from this list. UK train vendors/operators added below;
+  // expect more of these to surface over time as new vendors get tested.
+  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster OR "national express" OR "bus station" OR megabus OR flixbus OR trainpal OR trainline OR "national rail" OR lner OR "avanti west coast" OR "great western railway" OR southeastern OR thameslink OR crosscountry OR "chiltern railways" OR "southern railway" OR "south western railway"';
   const dateFilter = sinceDate
     ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
     : `newer_than:${lookbackDays}d`;
