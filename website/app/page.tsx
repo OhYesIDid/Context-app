@@ -34,7 +34,7 @@ const signals = [
   {
     icon: "📍",
     title: "Live location",
-    body: "Estimates ETA via Google Maps the moment a message asks where you are. Used once, then gone.",
+    body: "Estimates ETA via Google Maps the moment a message asks where you are — and when the message doesn't name a destination, works out the most likely one from what you've already told them. Used once, then gone.",
   },
   {
     icon: "✈️",
@@ -45,6 +45,11 @@ const signals = [
     icon: "💬",
     title: "Conversation history",
     body: "Reads back through the recent thread so a reply doesn't ignore context you already gave.",
+  },
+  {
+    icon: "👤",
+    title: "Contact-aware",
+    body: "Matches senders to the right person in your contacts, so tone and history follow who you're talking to — not just a raw number or handle.",
   },
   {
     icon: "🧠",
@@ -78,6 +83,11 @@ const features = [
     icon: "🎚️",
     title: "Tone options",
     body: "Every reply comes in brief, casual, and formal — pick what fits.",
+  },
+  {
+    icon: "⚡",
+    title: "Urgency-aware",
+    body: "Picks up on urgent language and timing, and shifts to a faster, more direct reply when it matters.",
   },
   {
     icon: "💬",
@@ -180,7 +190,7 @@ export default function Home() {
             See how it works
           </a>
         </div>
-        <p className="text-xs text-white/30">Android first · iOS coming soon</p>
+        <p className="text-xs text-white/30">Android first · iOS on the roadmap</p>
       </section>
 
       {/* Android bubble demo */}
