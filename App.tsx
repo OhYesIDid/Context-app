@@ -101,6 +101,8 @@ export default function App() {
   const [googleAuthed, setGoogleAuthed] = useState(false);
   const [notifPermission, setNotifPermission] = useState(false);
   const [locationGranted, setLocationGranted] = useState(false);
+  const [backgroundLocationGranted, setBackgroundLocationGranted] = useState(false);
+  const [bubblesEnabled, setBubblesEnabled] = useState(false);
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
   const [bubbleLabel, setBubbleLabel] = useState('Notifications → Bubbles');
   const [styleStats, setStyleStats] = useState<{ editCount: number; contactsMatched: number; hasProfile: boolean } | null>(null);
@@ -194,6 +196,12 @@ export default function App() {
     if (Platform.OS === 'android' && ProTxtSettings) {
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
+      if ((Platform.Version as number) >= 29) {
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION).then(setBackgroundLocationGranted).catch(() => {});
+      } else {
+        setBackgroundLocationGranted(true); // permission doesn't exist pre-Android 10 — nothing to check
+      }
+      ProTxtSettings.areBubblesEnabled?.().then((ok: boolean) => setBubblesEnabled(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSkipGroupMessages().then((skip: boolean) => setSkipGroupMessages(skip)).catch(() => {});
@@ -241,6 +249,12 @@ export default function App() {
       if (state !== 'active' || Platform.OS !== 'android' || !ProTxtSettings) return;
       ProTxtSettings.isNlsConnected().then((ok: boolean) => setNotifPermission(ok)).catch(() => {});
       PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setLocationGranted).catch(() => {});
+      if ((Platform.Version as number) >= 29) {
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION).then(setBackgroundLocationGranted).catch(() => {});
+      } else {
+        setBackgroundLocationGranted(true); // permission doesn't exist pre-Android 10 — nothing to check
+      }
+      ProTxtSettings.areBubblesEnabled?.().then((ok: boolean) => setBubblesEnabled(ok)).catch(() => {});
       ProTxtSettings.isAccessibilityServiceEnabled().then((ok: boolean) => setAccessibilityEnabled(ok)).catch(() => {});
       ProTxtSettings.isConTxtKeyboardDefault().then((ok: boolean) => setKeyboardDefault(ok)).catch(() => {});
       ProTxtSettings.getSharedText().then((text: string | null) => {
@@ -457,6 +471,11 @@ export default function App() {
           onGoToSettings={() => setActiveTab('settings')}
           onOpenPaywall={openPaywall}
           isPro={isPro}
+          missingPermissions={[
+            !notifPermission && 'Notification access',
+            !bubblesEnabled && 'Suggestion bubbles',
+            (Platform.Version as number) >= 29 && !backgroundLocationGranted && 'Background location',
+          ].filter((v): v is string => typeof v === 'string')}
         />
       )}
       {activeTab === 'followups' && (
@@ -582,6 +601,23 @@ export default function App() {
             </View>
             {!locationGranted && <Text style={styles.setupAction}>Open</Text>}
           </Pressable>
+          {locationGranted && (Platform.Version as number) >= 29 && (
+            <Pressable
+              style={styles.settingRow}
+              onPress={() => ProTxtSettings?.openAppLocationSettings?.() ?? Linking.openSettings()}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.statusDot, { backgroundColor: backgroundLocationGranted ? '#4ade80' : '#f87171' }]} />
+                <View>
+                  <Text style={styles.settingText}>Background location</Text>
+                  <Text style={styles.setupStatus}>
+                    {backgroundLocationGranted ? 'Enabled — ETA works when the app is closed' : 'Needed for ETA replies while the app is closed — tap, then choose "Allow all the time"'}
+                  </Text>
+                </View>
+              </View>
+              {!backgroundLocationGranted && <Text style={styles.setupAction}>Open</Text>}
+            </Pressable>
+          )}
           <Pressable
             style={[styles.settingRow, { borderBottomWidth: 0 }]}
             onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
@@ -605,13 +641,15 @@ export default function App() {
             onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: MUTED }]} />
+              <View style={[styles.statusDot, { backgroundColor: bubblesEnabled ? '#4ade80' : '#f87171' }]} />
               <View>
                 <Text style={styles.settingText}>Suggestion bubbles</Text>
-                <Text style={styles.setupStatus}>Check {bubbleLabel} is enabled</Text>
+                <Text style={styles.setupStatus}>
+                  {bubblesEnabled ? 'Enabled' : `Off — enable under ${bubbleLabel}`}
+                </Text>
               </View>
             </View>
-            <Text style={styles.setupAction}>Open</Text>
+            {!bubblesEnabled && <Text style={styles.setupAction}>Open</Text>}
           </Pressable>
           <Pressable
             style={[styles.settingRow, { borderBottomWidth: 0 }]}

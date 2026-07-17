@@ -251,6 +251,19 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun areBubblesEnabled(promise: Promise) {
+        val nm = reactApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION") nm.areBubblesEnabled()
+        } else {
+            true // Bubbles API doesn't exist pre-R — nothing to check
+        }
+        promise.resolve(enabled)
+    }
+
+    @ReactMethod
     fun getBubbleSettingsLabel(promise: Promise) {
         val manufacturer = Build.MANUFACTURER.lowercase()
         val label = when {

@@ -60,9 +60,10 @@ interface Props {
   onGoToSettings: () => void;
   onOpenPaywall: () => void;
   isPro: boolean;
+  missingPermissions: string[];
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, styleStats, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro }: Props) {
+export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, styleStats, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro, missingPermissions }: Props) {
   const [upcomingExpanded, setUpcomingExpanded] = useState(false);
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
@@ -99,6 +100,18 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
           <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
       </View>
+
+      {/* Setup incomplete — only shown when something's missing, so it never nags a fully-configured user */}
+      {missingPermissions.length > 0 && (
+        <Pressable style={styles.setupBanner} onPress={onGoToSettings}>
+          <Text style={styles.setupBannerIcon}>⚠</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.setupBannerTitle}>Finish setup for the full experience</Text>
+            <Text style={styles.setupBannerSub}>{missingPermissions.join(' · ')}</Text>
+          </View>
+          <Text style={styles.setupBannerAction}>Fix</Text>
+        </Pressable>
+      )}
 
       {/* Follow-ups card */}
       <View style={styles.card}>
@@ -376,6 +389,12 @@ const styles = StyleSheet.create({
   title:  { fontSize: 28, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
   settingsBtn:  { width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   settingsIcon: { fontSize: 17, color: MUTED },
+
+  setupBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: AMBER + '15', borderRadius: 14, borderWidth: 1, borderColor: AMBER + '40', padding: 12, marginBottom: 12 },
+  setupBannerIcon: { fontSize: 16, color: AMBER },
+  setupBannerTitle: { fontSize: 13, fontWeight: '600', color: TEXT },
+  setupBannerSub: { fontSize: 11, color: MUTED, marginTop: 2 },
+  setupBannerAction: { fontSize: 13, fontWeight: '600', color: AMBER },
 
   card:       { backgroundColor: SURFACE, borderRadius: 18, borderWidth: 1, borderColor: BORDER, marginBottom: 12, overflow: 'hidden' },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
