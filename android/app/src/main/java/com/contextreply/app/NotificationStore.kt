@@ -76,6 +76,31 @@ class NotificationStore private constructor(context: Context) {
         prefs.edit().putInt(unreadKey(convKey), idx).apply()
     }
 
+    /**
+     * Migrates thread + unread + reminder state from [oldConvKey] to [newConvKey] — used
+     * when a sender's notification title changes (e.g. an unknown number gets saved as a
+     * contact), which otherwise silently starts a brand-new, empty conversation under the
+     * new key. No-op if there's nothing stored under [oldConvKey].
+     */
+    @Synchronized
+    fun migrate(oldConvKey: String, newConvKey: String) {
+        if (oldConvKey == newConvKey) return
+        val oldSk = storeKey(oldConvKey)
+        val newSk = storeKey(newConvKey)
+        val editor = prefs.edit()
+        prefs.getString(oldSk, null)?.let { editor.putString(newSk, it) }
+        val oldUnread = unreadKey(oldConvKey)
+        if (prefs.contains(oldUnread)) editor.putInt(unreadKey(newConvKey), prefs.getInt(oldUnread, 0))
+        val oldUrgencyKey = "reminder_urgency_$oldSk"
+        val oldFiredKey = "reminder_fired_$oldSk"
+        if (prefs.contains(oldUrgencyKey)) editor.putInt("reminder_urgency_$newSk", prefs.getInt(oldUrgencyKey, 0))
+        if (prefs.contains(oldFiredKey)) editor.putBoolean("reminder_fired_$newSk", prefs.getBoolean(oldFiredKey, false))
+        editor.remove(oldSk).remove(oldUnread).remove(oldUrgencyKey).remove(oldFiredKey).apply()
+        // Cancel the old key's scheduled reminder — the caller reschedules under the new
+        // key as part of the normal per-message flow, using the migrated urgency above.
+        ReminderWorker.cancel(appContext, oldConvKey)
+    }
+
     fun markReplied(convKey: String) {
         val sk = storeKey(convKey)
         prefs.edit()

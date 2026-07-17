@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.CalendarContract
-import java.time.LocalDateTime
 import java.time.ZoneId
 
 class ActionReceiver : BroadcastReceiver() {
@@ -31,14 +30,17 @@ class ActionReceiver : BroadcastReceiver() {
                     putExtra(CalendarContract.Events.TITLE, title)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     if (!datetimeStr.isNullOrEmpty()) {
-                        try {
-                            val startMillis = LocalDateTime.parse(datetimeStr)
-                                .atZone(ZoneId.systemDefault())
-                                .toInstant()
-                                .toEpochMilli()
+                        val startMillis = parseEventStartMillis(datetimeStr)
+                        if (startMillis != null) {
                             putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMillis)
                             putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMillis + durationMinutes * 60_000L)
-                        } catch (_: Exception) {}
+                        } else {
+                            // Previously failed silently here, leaving both extras unset — the
+                            // Calendar app then defaults the new event to "now", which looks to
+                            // the user like it picked up the message's arrival time instead of
+                            // the time actually mentioned (e.g. "dinner at 8pm").
+                            android.util.Log.w("ActionReceiver", "Failed to parse action datetime: $datetimeStr")
+                        }
                     }
                 }
                 try { context.startActivity(calIntent) } catch (_: Exception) {}
@@ -53,4 +55,7 @@ class ActionReceiver : BroadcastReceiver() {
             }
         }
     }
+
+    private fun parseEventStartMillis(datetimeStr: String): Long? =
+        ActionDateTime.parse(datetimeStr)?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
 }

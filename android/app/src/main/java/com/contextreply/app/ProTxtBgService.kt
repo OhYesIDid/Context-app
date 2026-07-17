@@ -545,6 +545,7 @@ class ProTxtBgService : NotificationListenerService() {
 
         val convKey = buildConversationKey(sbn, extras)
         val notifId = convKey.hashCode().and(0x7FFFFFFF)
+        if (!isGroup) migrateRenamedConversation(convKey, sbn.packageName)
         if (isGroup) {
             groupConvKeys.add(convKey)
             val prefs = Prefs.main(this)
@@ -1047,6 +1048,45 @@ class ProTxtBgService : NotificationListenerService() {
         return "$packageName:$key"
     }
 
+    // If this is a fresh 1:1 conversation (no thread history yet) whose title is a real
+    // saved-contact name — not a raw phone number — check whether it's actually the
+    // continuation of a still-active conversation with the same person under their OLD
+    // title. This happens when an unknown WhatsApp/Telegram number gets saved as a contact
+    // mid-conversation: the app immediately updates the notification title to the saved
+    // name, which otherwise silently starts a brand-new conversation (empty thread, no
+    // memory, and a duplicate bubble sitting next to the old one) since everything here is
+    // keyed by convKey. If a matching old (phone-number-titled) convKey is found for this
+    // contact's phone number, migrates its state onto the new key and dismisses its bubble.
+    // Limited to convKeys seen since this service instance last started (sbnIdByConvKey is
+    // in-memory only, not persisted) — sufficient for the realistic case of saving a
+    // contact shortly after they first message you, in the same app session.
+    private fun migrateRenamedConversation(newConvKey: String, packageName: String) {
+        if (!store.isEmpty(newConvKey)) return
+        val newTitle = stripAppPrefix(newConvKey.substringAfter(":"))
+        if (ContactMatcher.isPhoneNumber(newTitle)) return
+        val newPhones = DeviceContactsResolver.displayNameToPhones(this, newTitle)
+        if (newPhones.isEmpty()) return
+
+        val oldConvKey = sbnIdByConvKey.keys
+            .filter { it != newConvKey && it.substringBefore(":") == packageName }
+            .firstOrNull { key ->
+                val oldTitle = stripAppPrefix(key.substringAfter(":"))
+                ContactMatcher.isPhoneNumber(oldTitle) &&
+                    DeviceContactsResolver.normalizePhone(oldTitle) in newPhones
+            } ?: return
+
+        store.migrate(oldConvKey, newConvKey)
+        ContactMemory.migrate(this, oldConvKey, newConvKey)
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(oldConvKey.hashCode().and(0x7FFFFFFF))
+        activeBubbles.remove(oldConvKey)
+        arrivalBuffer.remove(oldConvKey)
+        pendingBubbles.remove(oldConvKey)
+        pendingJobs[oldConvKey]?.cancel(false)
+        pendingJobs.remove(oldConvKey)
+        if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "migrated renamed conversation onto new contact-name key")
+    }
+
 
 
     private fun shouldSkipGroupMessages(): Boolean =
@@ -1068,83 +1108,36 @@ class ProTxtBgService : NotificationListenerService() {
     private data class EtaData(val duration: String, val distance: String, val routeSummary: String, val destinationLabel: String, val userLat: Double, val userLon: Double)
 
     // ── Intent / enrichment registry ──────────────────────────────────────────
-    // Mirror of src/utils/intentDetector.ts — keep patterns in sync.
+    // Classification patterns are the single source of truth at
+    // <repo root>/assets/intent_patterns.json — copied into this app's assets by
+    // the copyIntentPatterns Gradle task and also consumed by
+    // src/utils/intentDetector.ts and worker/src/index.ts. Edit the JSON, not here.
     // To add a new data source: add an intent key, list its enrichment(s),
     // implement a fetch function, and handle the key in buildEnrichments().
 
-    private val ETA_PATTERNS = listOf(
-        Regex("""\beta\b""", RegexOption.IGNORE_CASE),
-        Regex("""when (will|are) you""", RegexOption.IGNORE_CASE),
-        Regex("""how (long|far)""", RegexOption.IGNORE_CASE),
-        Regex("""on (your|the) way""", RegexOption.IGNORE_CASE),
-        Regex("""(leaving|left) yet""", RegexOption.IGNORE_CASE),
-        Regex("""\b(arriving|arrive|arrival)\b""", RegexOption.IGNORE_CASE),
-        Regex("""where are you""", RegexOption.IGNORE_CASE),
-        Regex("""almost (here|there)""", RegexOption.IGNORE_CASE),
-        Regex("""how (close|soon)""", RegexOption.IGNORE_CASE),
-    )
+    // Loaded once, on first use, from assets/intent_patterns.json. Falls back to an
+    // empty map (all messages classify as "other") if the asset is missing rather
+    // than crashing the notification listener.
+    private val intentPatterns: Map<String, List<Regex>> by lazy {
+        try {
+            val json = assets.open("intent_patterns.json").bufferedReader().use { it.readText() }
+            val obj = JSONObject(json)
+            obj.keys().asSequence().associateWith { key ->
+                val arr = obj.getJSONArray(key)
+                (0 until arr.length()).map { Regex(arr.getString(it), RegexOption.IGNORE_CASE) }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ProTxt", "Failed to load intent_patterns.json", e)
+            emptyMap()
+        }
+    }
 
-    private val AVAILABILITY_PATTERNS = listOf(
-        Regex("""\b(free|available|availability)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(busy|schedule|calendar)\b""", RegexOption.IGNORE_CASE),
-        // "chat" and "call" alone are too broad (casual social use). Require scheduling context.
-        Regex("""\b(meeting|catch.?up)\b""", RegexOption.IGNORE_CASE),
-        // Day name alone is too noisy ("had a great Saturday"). Require scheduling context around it.
-        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|work[s]?)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(meet(?:\s+up)?|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bmeet[\s-]?up\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(this|next) (week|weekend|morning|afternoon|evening)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\btomorrow\b""", RegexOption.IGNORE_CASE),
-        Regex("""\btonight\b""", RegexOption.IGNORE_CASE),
-        Regex("""are you (around|up for|down for)""", RegexOption.IGNORE_CASE),
-        // event-lookup: "when are you free/available/back?" — not just any "when is/are"
-        Regex("""\bwhen (are you|do you|can you|will you)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bwhat (?:day|date|time) (?:is|are|works)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bwhat (?:is|are) the (?:date|day|time)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
-        // Social plans imply scheduling: "dinner on Tuesday?", "Tuesday lunch?", "coffee Saturday"
-        Regex("""\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\s+(?:on\s+|for\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b""", RegexOption.IGNORE_CASE),
-    )
-
-    private val LOCATION_SHARE_PATTERNS = listOf(
-        Regex("""(share|send|drop).{0,20}(your |a )?(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
-        Regex("""(your |a )(location|pin|coordinates)""", RegexOption.IGNORE_CASE),
-        Regex("""share where (you are|you're)""", RegexOption.IGNORE_CASE),
-        Regex("""where are you\b""", RegexOption.IGNORE_CASE),
-        Regex("""where r u\b""", RegexOption.IGNORE_CASE),
-        Regex("""where you at\b""", RegexOption.IGNORE_CASE),
-        Regex("""where are you right now""", RegexOption.IGNORE_CASE),
-        Regex("""what('?s| is) your location""", RegexOption.IGNORE_CASE),
-        Regex("""(location|pin) (please|pls)\b""", RegexOption.IGNORE_CASE),
-    )
-
-    // Patterns that fire when the OTHER person has shared their location — a Maps link,
-    // short URL, native WhatsApp/Telegram pin, Apple Maps link, or raw GPS coordinates.
-    private val INCOMING_LOCATION_PATTERNS = listOf(
-        Regex("""maps\.(google|apple)\.com""", RegexOption.IGNORE_CASE),
-        Regex("""maps\.app\.goo\.gl""", RegexOption.IGNORE_CASE),
-        Regex("""goo\.gl/maps""", RegexOption.IGNORE_CASE),
-        Regex("""📍"""),
-        // Raw GPS coordinates with enough decimals to look intentional (not prose numbers)
-        Regex("""(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})"""),
-    )
-
-    // Social-awareness questions that warrant a reply but don't need calendar enrichment.
-    // Birthday/anniversary questions are about the OTHER person's dates, not the user's schedule.
-    // Pulling the user's own calendar for these returns unrelated events and confuses the model.
-    private val GENERAL_PATTERNS = listOf(
-        Regex("""\b(birthday|bday|b-day)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\banniversary\b""", RegexOption.IGNORE_CASE),
-        Regex("""(coming up|any plans|what('?s| is) (on|happening)|anything (on|planned|scheduled))""", RegexOption.IGNORE_CASE),
-        Regex("""\b(event|events)\b.{0,20}\b(this|next|any|upcoming|soon)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(this|next|any|upcoming|soon)\b.{0,20}\b(event|events)\b""", RegexOption.IGNORE_CASE),
-    )
+    private fun patternsFor(intent: String): List<Regex> = intentPatterns[intent] ?: emptyList()
 
     private val INTENT_ENRICHMENTS = mapOf(
         "eta"               to listOf("maps"),
         "availability"      to listOf("calendar"),
+        "booking"           to listOf("bookings"), // label only — no native Gmail fetch wired up yet, unlike the TS/share-sheet path
         "location_share"    to listOf("location_coords"),
         "incoming_location" to listOf("incoming_location", "maps"),
         "general"           to listOf("calendar"),
@@ -1164,11 +1157,13 @@ class ProTxtBgService : NotificationListenerService() {
 
     private fun detectIntents(message: String): List<String> {
         val intents = mutableListOf<String>()
-        if (ETA_PATTERNS.any { it.containsMatchIn(message) }) intents.add("eta")
-        if (AVAILABILITY_PATTERNS.any { it.containsMatchIn(message) }) intents.add("availability")
-        if (LOCATION_SHARE_PATTERNS.any { it.containsMatchIn(message) }) intents.add("location_share")
-        if (INCOMING_LOCATION_PATTERNS.any { it.containsMatchIn(message) }) intents.add("incoming_location")
-        if (intents.isEmpty() && GENERAL_PATTERNS.any { it.containsMatchIn(message) }) intents.add("general")
+        if (patternsFor("eta").any { it.containsMatchIn(message) }) intents.add("eta")
+        if (patternsFor("availability").any { it.containsMatchIn(message) }) intents.add("availability")
+        if (patternsFor("booking").any { it.containsMatchIn(message) }) intents.add("booking")
+        if (patternsFor("location_share").any { it.containsMatchIn(message) }) intents.add("location_share")
+        if (patternsFor("incoming_location").any { it.containsMatchIn(message) }) intents.add("incoming_location")
+        // general is a fallback signal only — anything more specific above takes priority.
+        if (intents.isEmpty() && patternsFor("general").any { it.containsMatchIn(message) }) intents.add("general")
         return intents.ifEmpty { listOf("other") }
     }
 
@@ -1499,7 +1494,7 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private fun isEtaIntent(message: String): Boolean = ETA_PATTERNS.any { it.containsMatchIn(message) }
+    private fun isEtaIntent(message: String): Boolean = patternsFor("eta").any { it.containsMatchIn(message) }
 
     private fun reverseGeocode(lat: Double, lng: Double): String? = try {
         val geocoder = android.location.Geocoder(this, java.util.Locale.getDefault())
@@ -1852,26 +1847,13 @@ class ProTxtBgService : NotificationListenerService() {
             })
         }
 
-        // High-confidence name match — auto-confirm unless it crosses app boundaries.
-        if (primary.confidence >= ContactMatcher.AUTO_APPLY) {
-            val (crossApp, srcPkg) = crossAppLink(primary.contactId, convKey, confirmed)
-            if (!crossApp) {
-                confirmed.put(convKey, primary.contactId)
-                prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
-                return null
-            }
-            return JSONObject().apply {
-                put("contactId",   primary.contactId)
-                put("displayName", primary.displayName)
-                put("preferredTone", primary.preferredTone ?: "")
-                put("confidence",  primary.confidence)
-                put("crossApp", true)
-                put("crossAppSourceLabel", appLabel(srcPkg))
-                put("candidates",  candidatesJson())
-            }.toString()
-        }
-
-        // Medium confidence (0.70–0.88) — always show banner; add crossApp flag if applicable.
+        // Name-only fuzzy matches are never silently auto-confirmed, regardless of
+        // confidence — unlike the phone-anchor path above, a display name alone isn't a
+        // verified identity. An unsaved WhatsApp/Telegram sender can set their own display
+        // name to anything, including a real contact's name by coincidence (e.g. a common
+        // first name). Silently linking on name alone risks permanently misattributing a
+        // stranger's messages, memory, and follow-ups to the wrong real contact. Always
+        // show the confirmation banner; only a verified phone match above skips it.
         val (crossApp, srcPkg) = crossAppLink(primary.contactId, convKey, confirmed)
         return JSONObject().apply {
             put("contactId",   primary.contactId)

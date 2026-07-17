@@ -26,7 +26,6 @@ import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
@@ -1005,12 +1004,11 @@ class BubbleSuggestionActivity : Activity() {
                                 data = CalendarContract.Events.CONTENT_URI
                                 putExtra(CalendarContract.Events.TITLE, title)
                                 if (datetimeStr != null) {
-                                    try {
-                                        val startMs = LocalDateTime.parse(datetimeStr)
-                                            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                    ActionDateTime.parse(datetimeStr)?.let { dt ->
+                                        val startMs = dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                                         putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
                                         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMs + duration * 60_000L)
-                                    } catch (_: Exception) {}
+                                    }
                                 }
                             }
                             // Clear from homescreen pending list now that it's been acted on
@@ -1358,12 +1356,11 @@ class BubbleSuggestionActivity : Activity() {
                         putExtra(Intent.EXTRA_EMAIL, arrayOf(contactEmail))
                     }
                     if (datetimeStr != null) {
-                        try {
-                            val startMs = LocalDateTime.parse(datetimeStr)
-                                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        ActionDateTime.parse(datetimeStr)?.let { dt ->
+                            val startMs = dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                             putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
                             putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMs + duration * 60_000L)
-                        } catch (_: Exception) {}
+                        }
                     }
                 }
             }
@@ -1409,8 +1406,8 @@ class BubbleSuggestionActivity : Activity() {
 
     private fun buildCalendarBody(title: String, datetimeStr: String?, durationMinutes: Int): String {
         if (datetimeStr == null) return title
-        return try {
-            val dt = LocalDateTime.parse(datetimeStr)
+        val dt = ActionDateTime.parse(datetimeStr) ?: return title
+        return run {
             val datePart = dt.toLocalDate().let { d ->
                 val dow = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
                 val month = d.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
@@ -1429,8 +1426,6 @@ class BubbleSuggestionActivity : Activity() {
                 else -> "${durationMinutes / 60}h ${durationMinutes % 60}min"
             }
             "$title · $datePart · $timePart · $durationPart"
-        } catch (_: Exception) {
-            title
         }
     }
 

@@ -68,6 +68,25 @@ object ContactMemory {
     fun getLastSent(context: Context, convKey: String): String? =
         prefs(context).getString(sentKey(convKey), null)
 
+    /**
+     * Migrates convKey-keyed memory + last-sent-reply from [oldConvKey] to [newConvKey].
+     * Only relevant when the old conversation was never confirmed to a contactId (memory
+     * is already stored under the contactId, not the convKey, in that case — see
+     * [resolveKey]). No-op if nothing is stored under [oldConvKey].
+     */
+    fun migrate(context: Context, oldConvKey: String, newConvKey: String) {
+        if (oldConvKey == newConvKey) return
+        val p = prefs(context)
+        val editor = p.edit()
+        val oldMemKey = memKey(oldConvKey)
+        p.getString(oldMemKey, null)?.let { editor.putString(memKey(newConvKey), it) }
+        editor.remove(oldMemKey)
+        val oldSentKey = sentKey(oldConvKey)
+        p.getString(oldSentKey, null)?.let { editor.putString(sentKey(newConvKey), it) }
+        editor.remove(oldSentKey)
+        editor.apply()
+    }
+
     // ── Public write API ──────────────────────────────────────────────────────
 
     /**
