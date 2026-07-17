@@ -1,0 +1,71 @@
+{
+  "eta": [
+    "\\beta\\b",
+    "when (will|are) you",
+    "how (long|far)",
+    "on (your|the) way",
+    "(leaving|left) yet",
+    "\\b(arriving|arrive|arrival)\\b",
+    "where are you",
+    "almost (here|there)",
+    "how (close|soon)",
+    "time will you"
+  ],
+  "availability": [
+    "\\b(free|available|availability)\\b",
+    "\\b(busy|schedule|calendar)\\b",
+    "\\b(meeting|catch[- ]?up)\\b",
+    "\\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \\d|works?)\\b",
+    "(meet(?:\\s+up)?|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+    "\\bmeet[\\s-]?up\\b",
+    "\\b(this|next) (week|weekend|morning|afternoon|evening)\\b",
+    "\\btomorrow\\b",
+    "\\btonight\\b",
+    "are you (around|up for|down for)",
+    "\\bwhen (are you|do you|can you|will you)\\b",
+    "\\bwhat (?:day|date|time) (?:is|are|works)\\b",
+    "\\bwhat (?:is|are) the (?:date|day|time)\\b",
+    "\\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+    "\\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+    "\\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\\s+(?:on\\s+|for\\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+    "\\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\\b",
+    "\\b(move|push|shift|bump|reschedule|change)\\b.{0,30}\\b(to|until|till)\\b.{0,20}(\\d{1,2}(:\\d{2})?\\s?(am|pm)?|o'?clock|earlier|later)",
+    "\\bcan we (move|push|change|shift|do|make it)\\b"
+  ],
+  "booking": [
+    "\\b(flight|plane|airport|boarding|depart|land|airline)\\b",
+    "\\b(hotel|accommodation|check.?in|check.?out|staying)\\b",
+    "\\b(train|rail|eurostar|platform|departure)\\b",
+    "\\b(delivery|parcel|package|shipped|tracking|order)\\b",
+    "\\b(booking|reservation|confirmation|itinerary)\\b",
+    "where are you staying",
+    "what.*address",
+    "confirmation (number|code)",
+    "has (it|the (parcel|package|delivery)) (arrived|come)"
+  ],
+  "location_share": [
+    "(share|send|drop).{0,20}(your |a )?(location|pin|coordinates)",
+    "(your |a )(location|pin|coordinates)",
+    "share where (you are|you're)",
+    "where are you\\b",
+    "where r u\\b",
+    "where you at\\b",
+    "where are you right now",
+    "what('?s| is) your location",
+    "(location|pin) (please|pls)\\b"
+  ],
+  "incoming_location": [
+    "maps\\.(google|apple)\\.com",
+    "maps\\.app\\.goo\\.gl",
+    "goo\\.gl/maps",
+    "📍",
+    "(-?\\d{1,3}\\.\\d{5,})\\s*,\\s*(-?\\d{1,3}\\.\\d{5,})"
+  ],
+  "general": [
+    "\\b(birthday|bday|b-day)\\b",
+    "\\banniversary\\b",
+    "(coming up|any plans|what('?s| is) (on|happening)|anything (on|planned|scheduled))",
+    "\\b(event|events)\\b.{0,20}\\b(this|next|any|upcoming|soon)\\b",
+    "\\b(this|next|any|upcoming|soon)\\b.{0,20}\\b(event|events)\\b"
+  ]
+}

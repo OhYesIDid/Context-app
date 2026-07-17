@@ -173,6 +173,16 @@ android {
     }
 }
 
+// Single source of truth for intent-classification regex patterns lives at
+// <repo root>/assets/intent_patterns.json — shared with src/utils/intentDetector.ts
+// and worker/src/index.ts. Copy it into the Android assets dir on every build so
+// ProTxtBgService.kt reads the exact same file instead of a hand-duplicated copy.
+tasks.register('copyIntentPatterns', Copy) {
+    from "${projectRoot}/assets/intent_patterns.json"
+    into "${projectDir}/src/main/assets"
+}
+preBuild.dependsOn(copyIntentPatterns)
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")

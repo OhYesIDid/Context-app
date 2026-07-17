@@ -1,3 +1,5 @@
+import intentPatternSource from '../../assets/intent_patterns.json';
+
 export interface Env {
   CLAUDE_API_KEY: string;
   WORKER_SECRET: string; // HMAC-SHA256 key shared with the Android client
@@ -287,56 +289,29 @@ interface ReplyOptions {
 }
 
 // ── Intent detection ──────────────────────────────────────────────────────────
-// Mirrors src/utils/intentDetector.ts — used only when the client omits intents
-// (e.g. older Kotlin background path). Keep patterns in sync with the JS file.
+// Fallback only — used when the client omits intents. Patterns are loaded from
+// the single shared source (../../assets/intent_patterns.json), also consumed by
+// src/utils/intentDetector.ts and ProTxtBgService.kt. Edit the JSON, not here.
 
-const ETA_PATTERNS = [
-  /\beta\b/i,
-  /when (will|are) you/i,
-  /how (long|far)/i,
-  /on (your|the) way/i,
-  /(leaving|left) yet/i,
-  /\b(arriving|arrive|arrival)\b/i,
-  /where are you/i,
-  /almost (here|there)/i,
-  /how (close|soon)/i,
-  /time will you/i,
-];
+function compilePatterns(key: keyof typeof intentPatternSource): RegExp[] {
+  return intentPatternSource[key].map((p) => new RegExp(p, 'i'));
+}
 
-const AVAILABILITY_PATTERNS = [
-  /\b(free|available|availability)\b/i,
-  /\b(busy|schedule|calendar)\b/i,
-  /\b(meeting|catch[- ]?up)\b/i,
-  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday) (morning|afternoon|evening|night|at \d|works?)\b/i,
-  /(meet(?:\s+up)?|free|available|works?) (on |for )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  /\bmeet[\s-]?up\b/i,
-  /\b(this|next) (week|weekend|morning|afternoon|evening)\b/i,
-  /\btomorrow\b/i,
-  /\btonight\b/i,
-  /are you (around|up for|down for)/i,
-  /\bwhen (are you|do you|can you|will you)\b/i,
-  /\bwhat (day|date|time) (is|are|works)\b/i,
-  /\bwhat (is|are) the (date|day|time)\b/i,
-  /\bwhat about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  /\bhow about (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  // Social plans imply scheduling: "dinner on Tuesday?", "Tuesday lunch?", "coffee Saturday"
-  /\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\s+(?:on\s+|for\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\b/i,
-];
-
-const INCOMING_LOCATION_PATTERNS = [
-  /maps\.(google|apple)\.com/i,
-  /maps\.app\.goo\.gl/i,
-  /goo\.gl\/maps/i,
-  /📍/u,
-  /(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})/,
-];
+const ETA_PATTERNS = compilePatterns('eta');
+const AVAILABILITY_PATTERNS = compilePatterns('availability');
+const BOOKING_PATTERNS = compilePatterns('booking');
+const LOCATION_SHARE_PATTERNS = compilePatterns('location_share');
+const INCOMING_LOCATION_PATTERNS = compilePatterns('incoming_location');
+const GENERAL_PATTERNS = compilePatterns('general');
 
 function detectIntents(message: string): string[] {
   const intents: string[] = [];
   if (ETA_PATTERNS.some((re) => re.test(message))) intents.push('eta');
   if (AVAILABILITY_PATTERNS.some((re) => re.test(message))) intents.push('availability');
+  if (BOOKING_PATTERNS.some((re) => re.test(message))) intents.push('booking');
+  if (LOCATION_SHARE_PATTERNS.some((re) => re.test(message))) intents.push('location_share');
   if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
+  if (intents.length === 0 && GENERAL_PATTERNS.some((re) => re.test(message))) intents.push('general');
   return intents.length > 0 ? intents : ['other'];
 }
 
@@ -810,12 +785,26 @@ export default {
 
     const { contextUpdate, snippets, action, ...replyTones } = replies;
 
-    // Enrich calendar_add title with the contact name ("Dinner" → "Dinner with Maya")
-    // when a name is available and not already present in the title.
+    // Enrich calendar_add title with the contact name ("Dinner" → "Dinner with Maya") —
+    // but only when the action looks like a fresh proposal grounded in the current
+    // message, not when it's just surfacing an existing calendar entry (via the calendar
+    // enrichment) that may have nothing to do with this contact. Blindly stapling the
+    // current contact's name onto any "Dinner"-titled action previously produced
+    // incorrect attributions when the title actually matched an unrelated event already
+    // on the calendar. A close title match against an already-fetched event is a strong
+    // signal the action came from enrichment data rather than what this contact said.
     if (action?.type === 'calendar_add' && action.title && body.contactName) {
-      const name = body.contactName.split(' ')[0]; // first name only
-      if (!action.title.toLowerCase().includes(name.toLowerCase())) {
-        action.title = `${action.title} with ${name}`;
+      const existingEvents = body.enrichments?.calendar?.events ?? [];
+      const titleLower = action.title.toLowerCase();
+      const matchesExistingEvent = existingEvents.some((e) => {
+        const summaryLower = e.summary.toLowerCase();
+        return summaryLower.includes(titleLower) || titleLower.includes(summaryLower);
+      });
+      if (!matchesExistingEvent) {
+        const name = body.contactName.split(' ')[0]; // first name only
+        if (!titleLower.includes(name.toLowerCase())) {
+          action.title = `${action.title} with ${name}`;
+        }
       }
     }
 

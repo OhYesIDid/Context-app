@@ -1,4 +1,4 @@
-export type Intent = 'eta' | 'availability' | 'booking' | 'incoming_location' | 'other';
+export type Intent = 'eta' | 'availability' | 'booking' | 'location_share' | 'incoming_location' | 'general' | 'other';
 export type Enrichment = 'maps' | 'calendar' | 'bookings' | 'incoming_location';
 export type BookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'delivery' | 'restaurant' | 'event' | 'other';
 export type Tone = 'formal' | 'casual' | 'brief';

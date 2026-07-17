@@ -1,4 +1,14 @@
 import type { Enrichment, EnrichmentData, Intent } from '../types';
+import intentPatternSource from '../../assets/intent_patterns.json';
+
+// Single source of truth for intent-classification regexes — shared with
+// ProTxtBgService.kt (via the copyIntentPatterns Gradle task) and
+// worker/src/index.ts's fallback detectIntents. Edit assets/intent_patterns.json,
+// not the pattern lists below, and keep all three consumers' detectIntents logic
+// (match order, general-only-as-fallback) in sync.
+function compilePatterns(key: keyof typeof intentPatternSource): RegExp[] {
+  return intentPatternSource[key].map((p) => new RegExp(p, 'i'));
+}
 
 // ── Enrichment preference schema ──────────────────────────────────────────────
 
@@ -44,53 +54,12 @@ export const ENRICHMENT_PREFERENCES: Partial<Record<keyof EnrichmentData, Enrich
   ],
 };
 
-const ETA_PATTERNS = [
-  /\beta\b/i,
-  /when (will|are) you/i,
-  /how (long|far)/i,
-  /on (your|the) way/i,
-  /(leaving|left) yet/i,
-  /\b(arriving|arrive|arrival)\b/i,
-  /where are you/i,
-  /almost (here|there)/i,
-  /how (close|soon)/i,
-  /time will you/i,
-];
-
-const BOOKING_PATTERNS = [
-  /\b(flight|plane|airport|boarding|depart|land|airline)\b/i,
-  /\b(hotel|accommodation|check.?in|check.?out|staying)\b/i,
-  /\b(train|rail|eurostar|platform|departure)\b/i,
-  /\b(delivery|parcel|package|shipped|tracking|order)\b/i,
-  /\b(booking|reservation|confirmation|itinerary)\b/i,
-  /where are you staying/i,
-  /what.*address/i,
-  /confirmation (number|code)/i,
-  /has (it|the (parcel|package|delivery)) (arrived|come)/i,
-];
-
-const AVAILABILITY_PATTERNS = [
-  /\b(free|available|availability)\b/i,
-  /\b(busy|schedule|calendar)\b/i,
-  /\b(meeting|catch[- ]?up|call|chat)\b/i,
-  /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  /\b(this|next) (week|weekend|morning|afternoon|evening)\b/i,
-  /\btomorrow\b/i,
-  /\btonight\b/i,
-  /are you (around|up for|down for)/i,
-  // event-lookup: "when is X?", "what day/date/time is X?"
-  /\bwhen (?:is|are)\b/i,
-  /\bwhat (?:day|date|time) (?:is|are)\b/i,
-  /\bwhat (?:is|are) the (?:date|day|time)\b/i,
-];
-
-const INCOMING_LOCATION_PATTERNS = [
-  /maps\.(google|apple)\.com/i,
-  /maps\.app\.goo\.gl/i,
-  /goo\.gl\/maps/i,
-  /📍/u,
-  /(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})/,
-];
+const ETA_PATTERNS = compilePatterns('eta');
+const AVAILABILITY_PATTERNS = compilePatterns('availability');
+const BOOKING_PATTERNS = compilePatterns('booking');
+const LOCATION_SHARE_PATTERNS = compilePatterns('location_share');
+const INCOMING_LOCATION_PATTERNS = compilePatterns('incoming_location');
+const GENERAL_PATTERNS = compilePatterns('general');
 
 // Which enrichments each intent requires. Add new intents and their data
 // sources here — call sites loop over this instead of branching per-intent.
@@ -98,7 +67,11 @@ export const INTENT_ENRICHMENTS: Record<Intent, Enrichment[]> = {
   eta:               ['maps'],
   availability:      ['calendar'],
   booking:           ['bookings'],
+  // No live GPS plumbed into this (paste-message/share-sheet) path yet — the
+  // notification-listener path resolves this via native LocationManager instead.
+  location_share:    [],
   incoming_location: ['incoming_location'],
+  general:           ['calendar'],
   other:             [],
 };
 
@@ -166,7 +139,10 @@ export function detectIntents(message: string): Intent[] {
   if (ETA_PATTERNS.some((re) => re.test(message))) intents.push('eta');
   if (AVAILABILITY_PATTERNS.some((re) => re.test(message))) intents.push('availability');
   if (BOOKING_PATTERNS.some((re) => re.test(message))) intents.push('booking');
+  if (LOCATION_SHARE_PATTERNS.some((re) => re.test(message))) intents.push('location_share');
   if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
+  // general is a fallback signal only — anything more specific above takes priority.
+  if (intents.length === 0 && GENERAL_PATTERNS.some((re) => re.test(message))) intents.push('general');
   return intents.length > 0 ? intents : ['other'];
 }
 

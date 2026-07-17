@@ -23,3 +23,7 @@ android/google-services.json
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Generated at build time by the copyIntentPatterns Gradle task from
+# assets/intent_patterns.json (the single source of truth) — do not commit.
+android/app/src/main/assets/intent_patterns.json
