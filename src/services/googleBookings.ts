@@ -166,17 +166,27 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // Confirmed" pair was tagged category:updates by Gmail — neither travel
   // nor purchases — and so never got fetched at all, regardless of any
   // fetch-cap or pagination fix. category:updates alone is enormous (tens
-  // of thousands of messages: bank alerts, shipping notices, etc.), so it's
-  // scoped to known travel-vendor keywords rather than included wholesale.
-  // Confirmed live 2026-07-17: a genuine TrainPal train ticket confirmation was tagged
-  // category:updates and silently excluded — same failure mode as the Trip.com case above,
-  // just a different vendor missing from this list. UK train vendors/operators added below;
-  // expect more of these to surface over time as new vendors get tested.
-  const UPDATES_VENDOR_TERMS = '"trip.com" OR eurostar OR easyjet OR ryanair OR lufthansa OR marriott OR hilton OR "booking.com" OR hotels.com OR "e-ticket" OR eventbrite OR ticketmaster OR "national express" OR "bus station" OR megabus OR flixbus OR trainpal OR trainline OR "national rail" OR lner OR "avanti west coast" OR "great western railway" OR southeastern OR thameslink OR crosscountry OR "chiltern railways" OR "southern railway" OR "south western railway"';
+  // of thousands of messages: bank alerts, shipping notices, etc.), so it
+  // needs scoping down to just the relevant subset.
+  //
+  // Originally scoped by a vendor-NAME allowlist (specific airlines, hotel
+  // chains, train operators). That's fundamentally reactive — a genuine
+  // TrainPal confirmation was later missed the same way Trip.com originally
+  // was, just because TrainPal wasn't on the list yet, and the next missed
+  // vendor is only ever discovered via a bug report. Replaced with a
+  // CONFIRMATION-LANGUAGE allowlist instead: the phrases below are what
+  // genuine booking confirmations reliably say regardless of which of the
+  // thousands of possible airlines/hotels/train operators/ticketing sites
+  // sent it, so a brand-new vendor is picked up automatically with zero
+  // code changes. Slightly less precise than an exact vendor match (a few
+  // more irrelevant emails may get pulled into classification per sync),
+  // but the LLM classification step already filters those out reliably —
+  // the cost is a marginally larger classification batch, not wrong results.
+  const UPDATES_CONFIRMATION_TERMS = '"booking confirmation" OR "booking reference" OR "confirmation number" OR "e-ticket" OR "your itinerary" OR "your reservation" OR "reservation confirmed" OR "your booking" OR "trip confirmation" OR "flight confirmation" OR "hotel confirmation" OR "ticket confirmation"';
   const dateFilter = sinceDate
     ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
     : `newer_than:${lookbackDays}d`;
-  const query = `(category:travel OR category:purchases OR (category:updates (${UPDATES_VENDOR_TERMS}))) -category:promotions ${dateFilter}`;
+  const query = `(category:travel OR category:purchases OR (category:updates (${UPDATES_CONFIRMATION_TERMS}))) -category:promotions ${dateFilter}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
