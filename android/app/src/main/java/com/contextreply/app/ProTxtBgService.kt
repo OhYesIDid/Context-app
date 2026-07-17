@@ -362,10 +362,21 @@ class ProTxtBgService : NotificationListenerService() {
     internal fun downgradeBubblesIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val nm = getSystemService(NotificationManager::class.java)
-        val bubblesAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            nm.bubblePreference != NotificationManager.BUBBLE_PREFERENCE_NONE
-        } else {
-            @Suppress("DEPRECATION") nm.areBubblesEnabled()
+        val bubblesAllowed = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                nm.bubblePreference != NotificationManager.BUBBLE_PREFERENCE_NONE
+            } else {
+                @Suppress("DEPRECATION") nm.areBubblesEnabled()
+            }
+        } catch (e: Throwable) {
+            // Some OEM ROMs strip areBubblesEnabled() from NotificationManager despite
+            // reporting a matching SDK_INT — throws NoSuchMethodError, a linkage Error,
+            // not an Exception, so it must be caught this broadly or it crashes the app
+            // outright (confirmed live via Crashlytics: 22 crashes / 7 users on 1.0.80–1.0.86).
+            // Can't determine the real bubble state on this device; assume still allowed
+            // rather than needlessly downgrading every suggestion to a plain notification.
+            FirebaseCrashlytics.getInstance().recordException(e)
+            true
         }
         if (bubblesAllowed) return
         for (pb in pendingBubbles.values.toList()) {

@@ -267,12 +267,20 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun areBubblesEnabled(promise: Promise) {
         val nm = reactApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            @Suppress("DEPRECATION") nm.areBubblesEnabled()
-        } else {
-            true // Bubbles API doesn't exist pre-R — nothing to check
+        val enabled = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                nm.bubblePreference != android.app.NotificationManager.BUBBLE_PREFERENCE_NONE
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                @Suppress("DEPRECATION") nm.areBubblesEnabled()
+            } else {
+                true // Bubbles API doesn't exist pre-R — nothing to check
+            }
+        } catch (e: Throwable) {
+            // Same OEM-ROM NoSuchMethodError seen in ProTxtBgService.downgradeBubblesIfNeeded —
+            // some devices report SDK_INT >= R but strip areBubblesEnabled() from the framework.
+            // A linkage Error, not an Exception, so it must be caught this broadly.
+            FirebaseCrashlytics.getInstance().recordException(e)
+            true
         }
         promise.resolve(enabled)
     }
