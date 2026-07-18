@@ -121,6 +121,11 @@ export const ENRICHMENT_FORMATTERS: {
     }).join('\n');
     return `Multiple possible destinations are relevant here — either mentioned earlier in this conversation or from an upcoming booking — and the thread doesn't make it obvious which one this message is asking about. Use conversation context to judge which is most likely, and include that destination's real travel time in the reply:\n${lines}`;
   },
+  tripReturn: (d) => {
+    const label = (BOOKING_TYPE_LABEL[d.type] ?? 'Trip').toLowerCase();
+    const dateStr = new Date(d.returnDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+    return `Separately from any live travel-time data above: the user has a ${label} booking to ${d.destination} that returns/ends on ${dateStr}. If this message is asking when they'll be BACK or return from ${d.destination} — not how far away they currently are — answer using this return date instead of the live travel time.`;
+  },
   bookings: (d) => {
     if (d.items.length === 0) return 'No recent travel or purchase emails found.';
     const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });

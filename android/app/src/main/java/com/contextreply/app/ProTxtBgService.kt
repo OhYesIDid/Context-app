@@ -1272,6 +1272,11 @@ class ProTxtBgService : NotificationListenerService() {
                         fetchEtaData(message) ?: etaThread
                             .firstNotNullOfOrNull { (_, text) -> fetchEtaData(text) }
                     }
+                    // Tracks whichever destination text actually got used below, regardless of
+                    // which branch resolved it — used after the if/else to separately check for
+                    // a matching booking's return date (see the tripReturn note further down).
+                    var bestDestinationHint: String? = liveResolution?.label
+
                     if (liveResolution != null) {
                         putMapsEnrichment(enrichments, liveResolution.eta)
                         // Remember this destination for follow-ups later in the same conversation
@@ -1299,7 +1304,10 @@ class ProTxtBgService : NotificationListenerService() {
                             fetchEtaToDestination(c.destinationText, c.label)?.let { eta -> c to eta }
                         }
                         when {
-                            resolved.size == 1 -> putMapsEnrichment(enrichments, resolved[0].second)
+                            resolved.size == 1 -> {
+                                putMapsEnrichment(enrichments, resolved[0].second)
+                                bestDestinationHint = resolved[0].first.destinationText
+                            }
                             resolved.size > 1 -> {
                                 val nowMs = System.currentTimeMillis()
                                 enrichments.put("mapsCandidates", JSONArray().also { arr ->
@@ -1326,6 +1334,21 @@ class ProTxtBgService : NotificationListenerService() {
                                 }
                             }
                         }
+                    }
+
+                    // Separately from the live-ETA answer above (how far away is the destination
+                    // right now), check whether the resolved destination matches a real cached
+                    // booking and — if so — surface its return date as additional context. This
+                    // is what lets Claude distinguish "how far away are you?" from "when do you
+                    // get back?" for the same named destination (e.g. "when are you back from
+                    // Brighton" was answering with the live ETA instead of the trip's actual
+                    // return date before this existed).
+                    BookingDestinations.matchingTrip(this, bestDestinationHint)?.let { trip ->
+                        enrichments.put("tripReturn", JSONObject().apply {
+                            put("destination", trip.destination)
+                            put("type", trip.type)
+                            put("returnDate", java.time.Instant.ofEpochMilli(trip.travelDateEnd).toString())
+                        })
                     }
                 }
                 "calendar" -> fetchCalendarData(message, thread)?.let { cal ->

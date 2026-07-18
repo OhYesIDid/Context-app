@@ -76,10 +76,20 @@ export interface IncomingLocationData {
   nativePin?: boolean;
 }
 
+// Populated alongside `maps` (not instead of it) when the resolved destination also matches
+// a cached booking — lets the prompt distinguish "how far away right now" from "when do you
+// get back", which otherwise both read as the same live-ETA question. See BookingDestinations.kt.
+export interface TripReturnData {
+  destination: string;
+  type: string;
+  returnDate: string; // ISO
+}
+
 export interface EnrichmentData {
   maps?: EtaData;
   // Present instead of `maps` when multiple recent destinations are ambiguous — see EtaCandidate.
   mapsCandidates?: EtaCandidate[];
+  tripReturn?: TripReturnData;
   calendar?: AvailabilityData;
   bookings?: BookingContext;
   incoming_location?: IncomingLocationData;
