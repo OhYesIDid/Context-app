@@ -1154,10 +1154,22 @@ class BubbleSuggestionActivity : Activity() {
         // regardless of how much optional content above it is expanded.
         toneSectionView?.let { root.addView(it) }
         root.addView(replyEdit)
+        root.addView(skeletonContainer)
 
-        // ── Style-match attribution ─────────────────────────────────────────────
-        // Only shown once there's a real signal behind it (StyleProfileBuilder's own
-        // ≥3-edit / ≥2-per-contact thresholds) — no fake "learning..." state pre-signal.
+        // ── Tier 2 (behind "•••"): style-match attribution, strategy/intent
+        // chips, and mark-as-read/dismiss — none of this is needed for the
+        // common "accept the suggestion and send" path, so it collapses out
+        // of the way instead of pushing Send out of view. Regenerate stays
+        // visible below — used often enough to earn a permanent spot.
+        val moreOptionsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        val hiddenLabels = mutableListOf<String>()
+
+        // Style-match attribution — only shown once there's a real signal behind it
+        // (StyleProfileBuilder's own ≥3-edit / ≥2-per-contact thresholds), no fake
+        // "learning..." state pre-signal.
         if (!showSkeleton) {
             val signal = StyleProfileBuilder.signalFor(this, contact)
             val attributionText = when {
@@ -1166,7 +1178,7 @@ class BubbleSuggestionActivity : Activity() {
                 else                   -> null
             }
             if (attributionText != null) {
-                root.addView(TextView(this).apply {
+                moreOptionsContainer.addView(TextView(this).apply {
                     text = attributionText
                     setTextColor(PURPLE)
                     textSize = 11.5f
@@ -1174,60 +1186,23 @@ class BubbleSuggestionActivity : Activity() {
                     lp.bottomMargin = dp(10)
                     layoutParams = lp
                 })
+                hiddenLabels.add("tone match")
             }
         }
 
-        root.addView(skeletonContainer)
-
-        val moreOptionsContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-        }
         strategySectionView?.let { moreOptionsContainer.addView(it) }
         moreOptionsContainer.addView(intentBar)
         if (unusedIntents.isNotEmpty()) moreOptionsContainer.addView(addContextRow)
-
         if (strategySectionView != null || activeIntents.isNotEmpty() || unusedIntents.isNotEmpty()) {
-            val moreExpanded = booleanArrayOf(false)
-            val moreToggle = TextView(this).apply {
-                text = "More options ▾"
-                setTextColor(MUTED)
-                textSize = 12f
-                setPadding(0, dp(4), 0, dp(4))
-                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                lp.bottomMargin = dp(8)
-                layoutParams = lp
-                setOnClickListener {
-                    moreExpanded[0] = !moreExpanded[0]
-                    moreOptionsContainer.visibility = if (moreExpanded[0]) View.VISIBLE else View.GONE
-                    text = if (moreExpanded[0]) "Less options ▴" else "More options ▾"
-                }
-            }
-            root.addView(moreToggle)
-            root.addView(moreOptionsContainer)
+            hiddenLabels.add("context")
         }
 
-        root.addView(actionContainer)
-        addActionBarView?.let { root.addView(it) }
-        addActionRowView?.let { root.addView(it) }
-
-        // ── Secondary row: No reply · [spacer] · Dismiss · ↺ ─────────────────
-        regenBtn = TextView(this).apply {
-            // Stale suggestions still show as-is (may be outdated) — flag the button rather
-            // than silently re-billing a Claude call, and let the user opt in to a refresh.
-            text = if (isStale) "↺ Refresh" else "↺"
-            setTextColor(if (isStale) PURPLE else MUTED)
-            textSize = 16f
-            isEnabled = !showSkeleton
-            setOnClickListener {
-                Analytics.log(this@BubbleSuggestionActivity, "suggestion_regenerated", mapOf("source" to "bubble"))
-                triggerRegen()
-            }
-        }
-
-        root.addView(LinearLayout(this).apply {
+        moreOptionsContainer.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.topMargin = dp(2)
+            layoutParams = lp
 
             addView(TextView(this@BubbleSuggestionActivity).apply {
                 text = "Mark as read"
@@ -1252,14 +1227,54 @@ class BubbleSuggestionActivity : Activity() {
                 text = "Dismiss"
                 setTextColor(MUTED)
                 textSize = 13f
-                setPadding(0, 0, dp(20), 0)
                 setOnClickListener {
                     val dismissText = textMap["casual"]?.takeIf { it.isNotEmpty() } ?: ""
                     sendAction(ProTxtBgService.ACTION_DISMISS, dismissText, null, notifId, convKey, null)
                     finish()
                 }
             })
+        })
+        hiddenLabels.add("mark as read")
 
+        val collapsedLabel = "••• ${hiddenLabels.size} more — ${hiddenLabels.joinToString(", ")}"
+        val moreExpanded = booleanArrayOf(false)
+        val moreToggle = TextView(this).apply {
+            text = collapsedLabel
+            setTextColor(MUTED)
+            textSize = 11.5f
+            setPadding(0, dp(4), 0, dp(4))
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.bottomMargin = dp(8)
+            layoutParams = lp
+            setOnClickListener {
+                moreExpanded[0] = !moreExpanded[0]
+                moreOptionsContainer.visibility = if (moreExpanded[0]) View.VISIBLE else View.GONE
+                text = if (moreExpanded[0]) "▴ Less" else collapsedLabel
+            }
+        }
+        root.addView(moreToggle)
+        root.addView(moreOptionsContainer)
+
+        root.addView(actionContainer)
+        addActionBarView?.let { root.addView(it) }
+        addActionRowView?.let { root.addView(it) }
+
+        // ── Tier 1: regenerate — stays visible below the collapsible section ────
+        regenBtn = TextView(this).apply {
+            // Stale suggestions still show as-is (may be outdated) — flag the button rather
+            // than silently re-billing a Claude call, and let the user opt in to a refresh.
+            text = if (isStale) "↺ Refresh" else "↺"
+            setTextColor(if (isStale) PURPLE else MUTED)
+            textSize = 16f
+            isEnabled = !showSkeleton
+            setOnClickListener {
+                Analytics.log(this@BubbleSuggestionActivity, "suggestion_regenerated", mapOf("source" to "bubble"))
+                triggerRegen()
+            }
+        }
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
             addView(regenBtn)
         })
 
