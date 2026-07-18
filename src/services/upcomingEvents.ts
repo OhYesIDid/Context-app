@@ -1,8 +1,34 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
 import type { BookingType, CalendarEvent, BookingItem } from '../types';
 import { getUpcomingCalendarEvents } from './googleCalendar';
 import { getBookingsContext } from './googleBookings';
 import { getCachedBookings, getLastBookingsSyncAt, pruneBookingsNotIn, upsertBookings } from './database';
+
+// Feeds the native bubble flow (ProTxtBgService, Kotlin) a compact read-only cache of
+// imminent bookings, so an ETA question can be matched against "I have a train to
+// Brighton today" even though the notification-triggered reply never goes through JS.
+// Mirrors NativeStyleSync's pattern (native reads a small cache the JS side writes) —
+// the native service can't call back into JS to query the SQLite bookings table directly.
+const NATIVE_BOOKING_WINDOW_MS = 48 * 3600_000;
+
+function syncNativeBookingCache(bookings: BookingItem[]): void {
+  try {
+    const now = Date.now();
+    const imminent = bookings
+      .filter((b) => b.destination && b.travelDate)
+      .filter((b) => {
+        const start = new Date(b.travelDate!).getTime();
+        const end = b.travelDateEnd ? new Date(b.travelDateEnd).getTime() : start;
+        // Include anything starting within the window, or already-underway multi-day trips.
+        return (start >= now && start - now <= NATIVE_BOOKING_WINDOW_MS) || (start <= now && end >= now);
+      })
+      .map((b) => ({ destination: b.destination, type: b.type, travelDate: b.travelDate, travelDateEnd: b.travelDateEnd }));
+    NativeModules.ProTxtSettings?.syncUpcomingBookings?.(JSON.stringify(imminent));
+  } catch {
+    // best-effort — never let this block the Upcoming screen from rendering
+  }
+}
 
 export const BOOKING_ICONS: Record<BookingType, string> = {
   flight:      '✈️',
@@ -355,6 +381,7 @@ export async function loadUpcomingEvents(googleAuthed: boolean, onUpdate?: (data
 
   if (!syncDue) {
     const data = buildUpcomingData(events, cachedBookings, undefined, false);
+    syncNativeBookingCache(cachedBookings);
     onUpdate?.(data);
     return data;
   }
@@ -366,6 +393,7 @@ export async function loadUpcomingEvents(googleAuthed: boolean, onUpdate?: (data
 
   const bookResult = await syncBookings(googleAuthed);
   const finalData = buildUpcomingData(events, bookResult.items, bookResult.error, false);
+  syncNativeBookingCache(bookResult.items);
   onUpdate?.(finalData);
   return finalData;
 }

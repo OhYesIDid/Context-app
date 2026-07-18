@@ -109,10 +109,17 @@ export const ENRICHMENT_FORMATTERS: {
     return `Real-time travel data: currently ${d.duration} away from ${d.destinationLabel ?? 'destination'} (${d.distance}) via ${d.routeSummary}. Always include this travel time in the reply. If the conversation states or implies a specific meeting/arrival time, work out whether ${d.duration} from now means arriving after that time — if so, say so honestly (e.g. "running about 10 min late") rather than assuming you'll be on time without checking.${locationLink}`;
   },
   mapsCandidates: (d) => {
-    const lines = d.map((c) =>
-      `  • ${c.label}: ${c.duration} away (${c.distance}), mentioned ${c.mentionedMinutesAgo < 60 ? `${c.mentionedMinutesAgo} min` : `${Math.round(c.mentionedMinutesAgo / 60)}h`} ago`
-    ).join('\n');
-    return `Multiple possible destinations were mentioned earlier in this conversation — the thread doesn't make it obvious which one this message is asking about. Use conversation context to judge which is most likely, and include that destination's real travel time in the reply:\n${lines}`;
+    // mentionedMinutesAgo ~0 means this candidate came from an imminent booking, not something
+    // actually said in the thread (see BookingDestinations.kt) — the label itself already carries
+    // that context (e.g. "Brighton (train today)"), so skip the recency clause rather than claim
+    // a booking was "mentioned" moments ago.
+    const lines = d.map((c) => {
+      const recency = c.mentionedMinutesAgo < 2
+        ? ''
+        : `, mentioned ${c.mentionedMinutesAgo < 60 ? `${c.mentionedMinutesAgo} min` : `${Math.round(c.mentionedMinutesAgo / 60)}h`} ago`;
+      return `  • ${c.label}: ${c.duration} away (${c.distance})${recency}`;
+    }).join('\n');
+    return `Multiple possible destinations are relevant here — either mentioned earlier in this conversation or from an upcoming booking — and the thread doesn't make it obvious which one this message is asking about. Use conversation context to judge which is most likely, and include that destination's real travel time in the reply:\n${lines}`;
   },
   bookings: (d) => {
     if (d.items.length === 0) return 'No recent travel or purchase emails found.';

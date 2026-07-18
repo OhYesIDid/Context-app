@@ -1277,10 +1277,18 @@ class ProTxtBgService : NotificationListenerService() {
                     } else {
                         // No live destination in this message/thread — check whether one was
                         // established earlier in this conversation (survives the reply-triggered
-                        // thread wipe). One candidate resolves directly; several ambiguous ones
-                        // are all handed to Claude (with real travel times) to pick from using
-                        // conversation context, rather than guessing which one via a heuristic.
-                        val candidates = convKey?.let { ContactMemory.getRecentDestinations(this, it) } ?: emptyList()
+                        // thread wipe), or whether an imminent booking (today's train/flight/etc.)
+                        // makes a strong implicit candidate — "ETA?" right after "I'll check trains"
+                        // should be able to mean "to Brighton" when there's a same-day ticket, even
+                        // if nothing in the visible thread names the place. One candidate resolves
+                        // directly; several ambiguous ones are all handed to Claude (with real
+                        // travel times) to pick from using conversation context, rather than
+                        // guessing which one via a heuristic. Memory takes priority on a dedupe
+                        // collision — it's conversation-specific, a booking candidate is not.
+                        val memoryCandidates = convKey?.let { ContactMemory.getRecentDestinations(this, it) } ?: emptyList()
+                        val bookingCandidates = BookingDestinations.candidates(this)
+                        val candidates = (memoryCandidates + bookingCandidates)
+                            .distinctBy { it.destinationText.trim().lowercase() }
                         val resolved = candidates.mapNotNull { c ->
                             fetchEtaToDestination(c.destinationText, c.label)?.let { eta -> c to eta }
                         }

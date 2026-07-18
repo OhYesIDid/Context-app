@@ -93,6 +93,16 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         Analytics.log(reactApplicationContext, name, map)
     }
 
+    // Compact read-only cache of imminent bookings (JSON array of
+    // {destination, type, travelDate, travelDateEnd}), written by
+    // upcomingEvents.ts whenever it recomputes the Upcoming screen. Lets the
+    // native bubble flow (ProTxtBgService) treat "you have a train to Brighton
+    // today" as an ETA destination candidate — see BookingDestinations.kt.
+    @ReactMethod
+    fun syncUpcomingBookings(json: String) {
+        Prefs.main(reactApplicationContext).edit().putString("native_upcoming_bookings", json).apply()
+    }
+
     // "confirmed_identities" maps convKey -> contactId. Every sender ends up with an
     // entry almost immediately: a real contactId (banner-confirmed or auto-applied
     // high-confidence match), a "sep:*" placeholder (user explicitly chose "keep
