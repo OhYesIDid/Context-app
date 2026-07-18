@@ -43,6 +43,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : Worker(contex
             ctx,
             latestMessage,
             thread,
+            earlierContext = store.getEarlierContext(convKey),
             contactMemory  = ContactMemory.buildMemoryBlock(ctx, convKey),
             lastSentReply  = ContactMemory.getLastSent(ctx, convKey),
             contactContext = ContactSignals.getContactContext(ctx, convKey),

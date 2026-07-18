@@ -50,19 +50,41 @@ class NotificationStore private constructor(context: Context) {
         }
     }
 
-    /** Returns up to [maxCount] most-recent messages, newest-first, for ETA destination search. */
-    fun getEtaSearchThread(convKey: String, maxCount: Int = 10): List<Pair<String?, String>> {
-        val arr = load(storeKey(convKey))
-        val result = mutableListOf<Pair<String?, String>>()
-        for (i in arr.length() - 1 downTo 0) {
-            if (result.size >= maxCount) break
-            val obj = arr.optJSONObject(i) ?: continue
-            val text = obj.optString("t")
-            if (text.isEmpty()) continue
+    /**
+     * Messages from the exchange that led to the *previous* reply — archived by
+     * [markReplied] instead of discarded, so a reply doesn't erase everything the
+     * other person just said. Sent to the worker as background context, separate
+     * from [getThread]'s "still needs a reply" messages, and folded into the ETA
+     * destination search so a place mentioned right before a reply (e.g. "I'll
+     * check trains to Brighton") isn't lost the moment that reply goes out.
+     */
+    fun getEarlierContext(convKey: String): List<Pair<String?, String>> {
+        val arr = load(contextKey(convKey))
+        return (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
             val sender = if (obj.isNull("s")) null else obj.optString("s").ifEmpty { null }
-            result.add(Pair(sender, text))
+            val text = obj.optString("t").ifEmpty { return@mapNotNull null }
+            Pair(sender, text)
         }
-        return result  // newest-first — .firstNotNullOfOrNull hits most-recent destination first
+    }
+
+    /** Returns up to [maxCount] most-recent messages, newest-first, for ETA destination search — spans both the still-unanswered thread and the archived earlier-context tier. */
+    fun getEtaSearchThread(convKey: String, maxCount: Int = 10): List<Pair<String?, String>> {
+        fun readNewestFirst(key: String): List<Pair<String?, String>> {
+            val arr = load(key)
+            val result = mutableListOf<Pair<String?, String>>()
+            for (i in arr.length() - 1 downTo 0) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val text = obj.optString("t")
+                if (text.isEmpty()) continue
+                val sender = if (obj.isNull("s")) null else obj.optString("s").ifEmpty { null }
+                result.add(Pair(sender, text))
+            }
+            return result
+        }
+        // Unanswered messages are more recent than archived context, so they come first —
+        // newest-first ordering still holds across the concatenation.
+        return (readNewestFirst(storeKey(convKey)) + readNewestFirst(contextKey(convKey))).take(maxCount)
     }
 
     fun getUnreadMessages(convKey: String): List<Pair<String?, String>> {
@@ -95,7 +117,9 @@ class NotificationStore private constructor(context: Context) {
         val oldFiredKey = "reminder_fired_$oldSk"
         if (prefs.contains(oldUrgencyKey)) editor.putInt("reminder_urgency_$newSk", prefs.getInt(oldUrgencyKey, 0))
         if (prefs.contains(oldFiredKey)) editor.putBoolean("reminder_fired_$newSk", prefs.getBoolean(oldFiredKey, false))
-        editor.remove(oldSk).remove(oldUnread).remove(oldUrgencyKey).remove(oldFiredKey).apply()
+        val oldCtx = contextKey(oldConvKey)
+        prefs.getString(oldCtx, null)?.let { editor.putString(contextKey(newConvKey), it) }
+        editor.remove(oldSk).remove(oldUnread).remove(oldUrgencyKey).remove(oldFiredKey).remove(oldCtx).apply()
         // Cancel the old key's scheduled reminder — the caller reschedules under the new
         // key as part of the normal per-message flow, using the migrated urgency above.
         ReminderWorker.cancel(appContext, oldConvKey)
@@ -103,6 +127,19 @@ class NotificationStore private constructor(context: Context) {
 
     fun markReplied(convKey: String) {
         val sk = storeKey(convKey)
+        // Archive what was just answered as earlier-context (bounded, replaces any
+        // previous archive) instead of discarding it outright — see getEarlierContext.
+        val justAnswered = getThread(convKey)
+        if (justAnswered.isNotEmpty()) {
+            val arr = JSONArray()
+            justAnswered.takeLast(CONTEXT_MAX).forEach { (sender, text) ->
+                arr.put(JSONObject().apply {
+                    if (sender != null) put("s", sender) else put("s", JSONObject.NULL)
+                    put("t", text)
+                })
+            }
+            save(contextKey(convKey), arr)
+        }
         prefs.edit()
             .remove(sk)
             .remove(unreadKey(convKey))
@@ -131,6 +168,7 @@ class NotificationStore private constructor(context: Context) {
         prefs.getBoolean("reminder_fired_${storeKey(convKey)}", false)
 
     private fun unreadKey(convKey: String) = "unread_${storeKey(convKey)}"
+    private fun contextKey(convKey: String) = "ctx_${storeKey(convKey)}"
 
     private fun storeKey(convKey: String) = "conv_${convKey.replace(Regex("[^a-zA-Z0-9_:.-]"), "_").take(200)}"
 
@@ -143,6 +181,9 @@ class NotificationStore private constructor(context: Context) {
 
     companion object {
         @Volatile private var instance: NotificationStore? = null
+
+        // Bounded snapshot of "what led to the last reply" — see getEarlierContext.
+        const val CONTEXT_MAX = 6
 
         fun getInstance(context: Context): NotificationStore =
             instance ?: synchronized(this) {

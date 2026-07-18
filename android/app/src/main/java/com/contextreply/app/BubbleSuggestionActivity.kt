@@ -343,6 +343,9 @@ class BubbleSuggestionActivity : Activity() {
                 val thread = if (convKey != null)
                     NotificationStore.getInstance(this@BubbleSuggestionActivity).getThread(convKey)
                 else emptyList()
+                val earlierContext = if (convKey != null)
+                    NotificationStore.getInstance(this@BubbleSuggestionActivity).getEarlierContext(convKey)
+                else emptyList()
                 val contactMemory = if (convKey != null)
                     ContactMemory.buildMemoryBlock(this@BubbleSuggestionActivity, convKey) else null
                 val lastSent = if (convKey != null)
@@ -352,6 +355,7 @@ class BubbleSuggestionActivity : Activity() {
                     messageExtra.ifEmpty { textMap["casual"] ?: "" },
                     thread,
                     regenerate = true,
+                    earlierContext = earlierContext,
                     contactMemory = contactMemory,
                     lastSentReply = lastSent,
                     strategy = selectedStrategy,

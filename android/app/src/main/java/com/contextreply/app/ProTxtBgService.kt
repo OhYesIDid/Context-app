@@ -792,6 +792,7 @@ class ProTxtBgService : NotificationListenerService() {
         urgent: Boolean = false,
     ) {
         val fullThread = store.getThread(convKey)
+        val earlierContext = store.getEarlierContext(convKey)
         val contactMemory = ContactMemory.buildMemoryBlock(this, convKey)
         val lastSent = ContactMemory.getLastSent(this, convKey)
         val contactContext = ContactSignals.getContactContext(this, convKey)
@@ -819,6 +820,7 @@ class ProTxtBgService : NotificationListenerService() {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "enrichments built, calling worker")
                 val result = WorkerClient.call(
                     this, latestMessage, fullThread, enrichments,
+                    earlierContext = earlierContext,
                     contactMemory = contactMemory,
                     lastSentReply = lastSent,
                     contactContext = contactContext,

@@ -33,6 +33,7 @@ object WorkerClient {
         message: String,
         thread: List<Pair<String?, String>>,
         enrichments: JSONObject = JSONObject(),
+        earlierContext: List<Pair<String?, String>> = emptyList(),
         regenerate: Boolean = false,
         contactMemory: String? = null,
         lastSentReply: String? = null,
@@ -56,6 +57,16 @@ object WorkerClient {
             if (thread.isNotEmpty()) {
                 put("conversationThread", JSONArray().also { arr ->
                     thread.forEach { (sender, text) ->
+                        arr.put(JSONObject().apply {
+                            if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
+                            put("text", text)
+                        })
+                    }
+                })
+            }
+            if (earlierContext.isNotEmpty()) {
+                put("earlierContext", JSONArray().also { arr ->
+                    earlierContext.forEach { (sender, text) ->
                         arr.put(JSONObject().apply {
                             if (sender != null) put("sender", sender) else put("sender", JSONObject.NULL)
                             put("text", text)
