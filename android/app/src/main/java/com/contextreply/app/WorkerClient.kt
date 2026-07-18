@@ -52,8 +52,11 @@ object WorkerClient {
             nativeRecentEdits?.let { "Most recent edits (not yet reflected in full profile):\n$it" }
         ).joinToString("\n\n").ifEmpty { null }
 
+        val appUserId = prefs.getString("rc_app_user_id", null)
+
         val body = JSONObject().apply {
             put("message", message)
+            if (appUserId != null) put("appUserId", appUserId)
             if (thread.isNotEmpty()) {
                 put("conversationThread", JSONArray().also { arr ->
                     thread.forEach { (sender, text) ->
@@ -151,7 +154,12 @@ object WorkerClient {
             if (code != 200) {
                 val errorBody = conn.errorStream?.use { it.bufferedReader().readText() } ?: ""
                 android.util.Log.e("WorkerClient", "HTTP $code: $errorBody")
-                FirebaseCrashlytics.getInstance().recordException(Exception("Worker HTTP $code: ${errorBody.take(200)}"))
+                // 403 here is the Pro-entitlement gate declining an "other"-intent request —
+                // expected, not a bug, for a non-Pro user (or a not-yet-synced appUserId
+                // right after first launch). Don't spam Crashlytics with intentional rejections.
+                if (code != 403) {
+                    FirebaseCrashlytics.getInstance().recordException(Exception("Worker HTTP $code: ${errorBody.take(200)}"))
+                }
                 return null
             }
             val response = conn.inputStream.bufferedReader().use { it.readText() }

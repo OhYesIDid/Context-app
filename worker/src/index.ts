@@ -12,6 +12,53 @@ export interface Env {
   WORKER_SECRET: string; // HMAC-SHA256 key shared with the Android client
   DEBUG_KEY: string | undefined; // separate key for /debug/recent endpoint
   RATE_LIMIT_KV: KVNamespace | undefined; // optional — omit binding to disable rate limiting
+  REVENUECAT_SECRET_KEY: string | undefined; // RC server-side API key — see verifyProEntitlement
+}
+
+// Independently verifies Pro entitlement against RevenueCat's own servers, rather than
+// trusting the client's local "is_pro" flag — that flag lives in plain SharedPreferences
+// with no server-side backstop, so a patched client or a rooted device could set it to
+// true without ever actually purchasing anything and get unlimited free-form suggestions
+// via suggest_all_messages (see the "other"-intent gate below). This is the one place
+// Pro status actually needs enforcing server-side: every other "Pro feature" (tone tabs,
+// strategy chips) is a pure UI gate with no extra Claude cost either way, but bypassing
+// suggest_all_messages means extra paid API calls per bypassed message.
+const RC_ENTITLEMENT = 'ConTxt Pro';
+async function verifyProEntitlement(appUserId: string | undefined, env: Env): Promise<boolean> {
+  // Not configured yet (REVENUECAT_SECRET_KEY needs `wrangler secret put`, a manual
+  // one-time step) — fail open so this is inert until deliberately turned on, rather
+  // than an immediate regression for every existing Pro user the moment this deploys.
+  if (!env.REVENUECAT_SECRET_KEY) return true;
+  if (!appUserId) return false; // configured, but nothing to verify against
+  const cacheKey = `rcpro:${appUserId}`;
+  if (env.RATE_LIMIT_KV) {
+    const cached = await env.RATE_LIMIT_KV.get(cacheKey);
+    if (cached != null) return cached === '1';
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`, {
+      headers: { Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    // A real 404 means RevenueCat has never heard of this app_user_id — definitively not
+    // entitled. Any other non-ok status (5xx, auth misconfig, etc.) is ambiguous — fail
+    // open rather than block a possibly-legitimate paying user during an RC outage.
+    if (res.status === 404) return false;
+    if (!res.ok) return true;
+    const data = await res.json() as { subscriber?: { entitlements?: Record<string, { expires_date?: string | null }> } };
+    const ent = data.subscriber?.entitlements?.[RC_ENTITLEMENT];
+    const isPro = !!ent && (ent.expires_date == null || new Date(ent.expires_date).getTime() > Date.now());
+    if (env.RATE_LIMIT_KV) {
+      await env.RATE_LIMIT_KV.put(cacheKey, isPro ? '1' : '0', { expirationTtl: 300 });
+    }
+    return isPro;
+  } catch {
+    clearTimeout(timer);
+    return true; // network error / timeout — fail open, same reasoning as non-ok above
+  }
 }
 
 const DEBUG_LOG_KEY = 'dbg:log';
@@ -234,6 +281,11 @@ async function handleClassifyBookings(rawBody: string, env: Env): Promise<Respon
 interface SuggestRequest {
   message: string;
   intents?: string[];
+  // RevenueCat app_user_id — used only to independently verify Pro entitlement
+  // server-side for the suggest_all_messages gate below (verifyProEntitlement).
+  // Never trusted for anything else; body.intents/other fields are still used
+  // as-is for prompt building even from an unverified client, same as before.
+  appUserId?: string;
   conversationThread?: ConversationMessage[];
   // Messages from the exchange that led to the *previous* reply — archived by
   // NotificationStore.markReplied instead of discarded, so a reply doesn't erase
@@ -671,7 +723,23 @@ export default {
       });
     }
 
-    const intents = body.intents ?? detectIntents(body.message);
+    // Pro gate for suggest_all_messages: computed from our own detectIntents() on the raw
+    // message, never from body.intents — a client trying to bypass this could otherwise
+    // just claim a real intent regardless of what the message actually says. Mirrors the
+    // client's own gate (ProTxtBgService.kt: "!suggestAll && effectiveIntentsStr == 'other'")
+    // but verified against RevenueCat's servers instead of a local, unenforced preference.
+    const serverDetectedIntents = detectIntents(body.message);
+    if (serverDetectedIntents.length === 1 && serverDetectedIntents[0] === 'other') {
+      const verifiedPro = await verifyProEntitlement(body.appUserId, env);
+      if (!verifiedPro) {
+        return new Response(
+          JSON.stringify({ error: 'Pro required for suggestions on general messages' }),
+          { status: 403, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
+        );
+      }
+    }
+
+    const intents = body.intents ?? serverDetectedIntents;
 
     // If the Kotlin side passed a short Maps URL it couldn't resolve, do it here
     // (Cloudflare Workers can follow goo.gl/maps.app.goo.gl redirect chains freely).

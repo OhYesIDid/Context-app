@@ -523,6 +523,16 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
             .edit().putBoolean("is_pro", active).apply()
     }
 
+    // RevenueCat app_user_id — sent with worker requests so the worker can
+    // independently verify Pro entitlement server-side (see worker's
+    // verifyProEntitlement) instead of trusting this device's local is_pro flag,
+    // which has no server-side backstop on its own.
+    @ReactMethod
+    fun setAppUserId(id: String) {
+        Prefs.main(reactApplicationContext)
+            .edit().putString("rc_app_user_id", id).apply()
+    }
+
     @ReactMethod
     fun setDefaultTone(tone: String) {
         Prefs.main(reactApplicationContext)

@@ -6,6 +6,17 @@ function syncProToNative(isPro: boolean) {
   NativeModules.ProTxtSettings?.setProStatus(isPro);
 }
 
+// Lets the worker independently verify Pro entitlement against RevenueCat's own
+// servers instead of trusting the local is_pro flag — see verifyProEntitlement in
+// worker/src/index.ts. Synced once at configure time; the app_user_id is stable
+// for the lifetime of the install (anonymous or identified), so no listener needed.
+async function syncAppUserIdToNative() {
+  try {
+    const id = await Purchases.getAppUserID();
+    NativeModules.ProTxtSettings?.setAppUserId(id);
+  } catch {}
+}
+
 const RC_API_KEY_ANDROID = process.env.EXPO_PUBLIC_RC_API_KEY_ANDROID ?? '';
 
 export const PRO_ENTITLEMENT = 'ConTxt Pro';
@@ -14,6 +25,7 @@ export function configurePurchases() {
   try {
     if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
     Purchases.configure({ apiKey: RC_API_KEY_ANDROID });
+    syncAppUserIdToNative();
   } catch (e) {
     console.warn('RevenueCat configure failed:', e);
   }
