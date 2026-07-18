@@ -41,6 +41,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   _openingPromise = (async () => {
     const db = await SQLite.openDatabaseAsync('contextreply.db');
     await _migrate(db);
+    await _runVersionedMigrations(db);
     if (!_encryptDone) {
       try { await _encryptExistingRows(db); } catch { /* non-fatal */ }
       try { await _migrateIdentifierIndex(db); } catch { /* non-fatal */ }
@@ -173,6 +174,42 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   try { await db.runAsync('ALTER TABLE memories ADD COLUMN location_lat_enc TEXT'); } catch (_) {}
   try { await db.runAsync('ALTER TABLE memories ADD COLUMN location_lng_enc TEXT'); } catch (_) {}
   try { await db.runAsync('ALTER TABLE platform_identities ADD COLUMN identifier_hash TEXT'); } catch (_) {}
+}
+
+// ── Versioned migrations ─────────────────────────────────────────────────────
+// Everything above (_migrate) predates version tracking and stays exactly as it
+// is: unconditional CREATE TABLE IF NOT EXISTS + try/catch ALTER TABLE, run on
+// every open regardless of PRAGMA user_version. This section only governs *new*
+// schema changes going forward — add a numbered entry to MIGRATIONS instead of
+// another ad-hoc ALTER line in _migrate(), and it'll run exactly once, in order,
+// tracked via PRAGMA user_version instead of relying on a swallowed exception to
+// tell "already applied" apart from "this actually failed."
+//
+// To add a migration: bump SCHEMA_VERSION and add the matching key to MIGRATIONS.
+//   const SCHEMA_VERSION = 2;
+//   const MIGRATIONS: Record<number, ...> = {
+//     2: async (db) => { await db.execAsync('ALTER TABLE contacts ADD COLUMN foo TEXT'); },
+//   };
+const SCHEMA_VERSION = 1;
+const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> = {
+  // 1 is reserved as the baseline for installs updating from before version
+  // tracking existed — _migrate() above already applied everything "version 1"
+  // would represent, so there's no SQL to run here, just a version to stamp.
+};
+
+async function _runVersionedMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  let version = row?.user_version ?? 0;
+  const steps = Object.keys(MIGRATIONS).map(Number).sort((a, b) => a - b);
+  for (const step of steps) {
+    if (step <= version) continue;
+    await MIGRATIONS[step](db);
+    version = step;
+    await db.execAsync(`PRAGMA user_version = ${version}`);
+  }
+  if (version < SCHEMA_VERSION) {
+    await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  }
 }
 
 // Re-encrypts any rows that still have plaintext in sensitive fields.
