@@ -497,7 +497,7 @@ export default function App() {
         />
       )}
       {activeTab === 'followups' && (
-        <FollowUpsScreen followUps={followUps} setFollowUps={setFollowUps} />
+        <FollowUpsScreen followUps={followUps} setFollowUps={setFollowUps} onGoToSettings={() => setActiveTab('settings')} />
       )}
       {activeTab === 'upcoming' && (
         <UpcomingScreen
@@ -837,13 +837,14 @@ export default function App() {
       </ScrollView>
       )}
 
-      {/* Bottom navigation */}
+      {/* Bottom navigation — three tabs for three content types. Settings is
+          chrome, not content: reachable via the gear icon on every screen's
+          header instead of taking a fourth tab slot. */}
       <View style={styles.bottomNav}>
         {([
           { key: 'home',      icon: '⌂',  label: 'Home'      },
           { key: 'followups', icon: '☑',  label: 'Follow-ups' },
           { key: 'upcoming',  icon: '🗓',  label: 'Upcoming'  },
-          { key: 'settings',  icon: '⚙',  label: 'Settings'  },
         ] as { key: Tab; icon: string; label: string }[]).map(tab => {
           const active = activeTab === tab.key;
           const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;

@@ -104,8 +104,13 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSetti
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Upcoming</Text>
-        {upcomingData.isSyncing && <Text style={styles.syncingHint}>Updating…</Text>}
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Upcoming</Text>
+          {upcomingData.isSyncing && <Text style={styles.syncingHint}>Updating…</Text>}
+        </View>
+        <Pressable onPress={onGoToSettings} style={styles.settingsBtn}>
+          <Text style={styles.settingsIcon}>⚙</Text>
+        </Pressable>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
@@ -177,9 +182,12 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSetti
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   title:  { fontSize: 24, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
   syncingHint: { fontSize: 12, color: MUTED, fontWeight: '500' },
+  settingsBtn:  { width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
+  settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
   listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },

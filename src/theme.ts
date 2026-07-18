@@ -54,3 +54,4 @@ export const MUTED = COLORS.muted;
 export const GREEN = COLORS.success;
 export const AMBER = COLORS.warning;
 export const RED = COLORS.danger;
+export const CONTEXT = COLORS.context;

@@ -18,9 +18,10 @@ const URGENCY_COLOR: Record<string, string> = {
 interface Props {
   followUps: FollowUp[];
   setFollowUps: (items: FollowUp[]) => void;
+  onGoToSettings: () => void;
 }
 
-export default function FollowUpsScreen({ followUps, setFollowUps }: Props) {
+export default function FollowUpsScreen({ followUps, setFollowUps, onGoToSettings }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const done    = followUps.filter(f => f.status === 'done');
 
@@ -44,6 +45,9 @@ export default function FollowUpsScreen({ followUps, setFollowUps }: Props) {
     <View style={styles.root}>
       <View style={styles.header}>
         <Text style={styles.title}>Follow-ups</Text>
+        <Pressable onPress={onGoToSettings} style={styles.settingsBtn}>
+          <Text style={styles.settingsIcon}>⚙</Text>
+        </Pressable>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
@@ -114,8 +118,10 @@ export default function FollowUpsScreen({ followUps, setFollowUps }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
 
-  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
   title:        { fontSize: 24, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
+  settingsBtn:  { width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
+  settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
   listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },

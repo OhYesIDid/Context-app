@@ -14,7 +14,7 @@ import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
 import type { UpcomingData } from '../services/upcomingEvents';
-import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED } from '../theme';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED, CONTEXT, FONTS } from '../theme';
 
 const URGENCY_DOT: Record<string, string> = {
   overdue: RED,
@@ -67,21 +67,6 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
   const overdueCount = pending.filter(f => urgency(f) === 'overdue').length;
   const todayCount   = pending.filter(f => urgency(f) === 'today').length;
 
-  // Today card items — dynamic, priority-ordered
-  const todayItems: { icon: string; iconBg: string; title: string; sub: string; action?: string; onAction?: () => void }[] = [];
-  if (overdueCount > 0) {
-    todayItems.push({ icon: '⏰', iconBg: '#ef444420', title: `${overdueCount} overdue follow-up${overdueCount > 1 ? 's' : ''}`, sub: 'Action needed now', action: 'View', onAction: onGoToFollowUps });
-  }
-  if (todayCount > 0) {
-    todayItems.push({ icon: '📋', iconBg: '#f59e0b20', title: `${todayCount} follow-up${todayCount > 1 ? 's' : ''} due today`, sub: sorted.filter(f => urgency(f) === 'today').map(f => f.contactName ?? f.text.slice(0, 20)).join(', '), action: 'View', onAction: onGoToFollowUps });
-  }
-  if (!isPro) {
-    todayItems.push({ icon: '⭐', iconBg: '#e2933c20', title: 'Upgrade to ConTxt Pro', sub: 'Suggestions for every message, not just ETA & plans', action: 'Upgrade', onAction: onOpenPaywall });
-  }
-  if (todayItems.length === 0) {
-    todayItems.push({ icon: '✅', iconBg: '#22c55e20', title: 'You\'re all caught up', sub: 'No follow-ups due today' });
-  }
-
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* Header */}
@@ -104,33 +89,52 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         </Pressable>
       )}
 
-      {/* Follow-ups card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
-              <Text style={styles.cardIconText}>📋</Text>
-            </View>
-            <Text style={styles.cardTitle}>Follow-ups</Text>
-            {overdueCount > 0 && (
-              <View style={[styles.badge, { backgroundColor: RED }]}>
-                <Text style={styles.badgeText}>{overdueCount} overdue</Text>
-              </View>
-            )}
+      {/* Status strip — one glanceable line instead of a stacked "Today" card,
+          same underlying overdue/today counts. Style stat folds in here as a
+          pill instead of its own full card. */}
+      <View style={styles.statusStrip}>
+        <View style={[styles.statusDot, { backgroundColor: overdueCount > 0 ? RED : todayCount > 0 ? AMBER : GREEN }]} />
+        <Text style={styles.statusText} numberOfLines={1}>
+          {overdueCount > 0 ? `${overdueCount} overdue` : todayCount > 0 ? `${todayCount} due today` : 'All caught up'}
+          {overdueCount > 0 && todayCount > 0 && <Text style={styles.statusTextMuted}> · {todayCount} due today</Text>}
+        </Text>
+        {styleStats?.hasProfile && (
+          <View style={styles.stylePill}>
+            <Text style={styles.stylePillText}>{styleStats.editCount} LEARNED</Text>
           </View>
-          <Pressable onPress={onGoToFollowUps}>
-            <Text style={styles.cardLink}>View all</Text>
-          </Pressable>
-        </View>
-        <View style={styles.divider} />
+        )}
+      </View>
 
-        {pending.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No follow-ups yet</Text>
-            <Text style={styles.emptySubText}>Add one when you make a commitment in a conversation</Text>
+      {/* Pro upsell — separate from the setup banner above; different nudge, different fix */}
+      {!isPro && (
+        <Pressable style={styles.proNudge} onPress={onOpenPaywall}>
+          <Text style={styles.proNudgeText}>Suggestions for every message, not just ETA & plans</Text>
+          <Text style={styles.proNudgeAction}>Upgrade</Text>
+        </Pressable>
+      )}
+
+      {/* Follow-ups — confirmed + AI-suggested merged into one card, tagged not duplicated */}
+      {(pending.length > 0 || pendingFollowUps.length > 0) && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
+                <Text style={styles.cardIconText}>📋</Text>
+              </View>
+              <Text style={styles.cardTitle}>Follow-ups</Text>
+              {overdueCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: RED }]}>
+                  <Text style={styles.badgeText}>{overdueCount} overdue</Text>
+                </View>
+              )}
+            </View>
+            <Pressable onPress={onGoToFollowUps}>
+              <Text style={styles.cardLink}>View all</Text>
+            </Pressable>
           </View>
-        ) : (
-          preview.map(f => {
+          <View style={styles.divider} />
+
+          {preview.slice(0, 2).map(f => {
             const u = urgency(f);
             const label = formatDueLabel(f);
             return (
@@ -145,85 +149,15 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
                 {label ? <Text style={[styles.followupTime, { color: URGENCY_TIME[u] }]}>{label}</Text> : null}
               </Pressable>
             );
-          })
-        )}
+          })}
 
-        <View style={styles.cardFooter}>
-          <Text style={styles.footerText}>{pending.length} pending{pending.length !== followUps.length ? ` · ${followUps.filter(f => f.status === 'done').length} done` : ''}</Text>
-        </View>
-      </View>
-
-      {/* Pending calendar actions card */}
-      {pendingCalendarActions.length > 0 && (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
-                <Text style={styles.cardIconText}>📅</Text>
-              </View>
-              <Text style={styles.cardTitle}>Suggested Events</Text>
-              <View style={[styles.badge, { backgroundColor: '#e2933c33', borderWidth: 1, borderColor: '#e2933c55' }]}>
-                <Text style={[styles.badgeText, { color: PURPLE }]}>{pendingCalendarActions.length}</Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.divider} />
-
-          {pendingCalendarActions.map(action => (
-            <View key={action.id} style={styles.calendarItem}>
-              <View style={styles.calendarBody}>
-                <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
-                <Text style={styles.calendarSub}>
-                  {action.contactName ? `with ${action.contactName}` : ''}
-                  {action.contactName && action.datetime ? ' · ' : ''}
-                  {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
-                </Text>
-              </View>
-              <View style={styles.calendarActions}>
-                <Pressable
-                  style={styles.calendarAddBtn}
-                  onPress={() => {
-                    const title = encodeURIComponent(action.title);
-                    const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
-                    Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
-                    clearPendingCalendarAction(action.id);
-                    onCalendarActionDismiss(action.id);
-                  }}
-                >
-                  <Text style={styles.calendarAddText}>Add</Text>
-                </Pressable>
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
-                >
-                  <Text style={styles.calendarDismiss}>✕</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Suggested follow-ups card */}
-      {pendingFollowUps.length > 0 && (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIcon, { backgroundColor: '#22c55e20' }]}>
-                <Text style={styles.cardIconText}>✅</Text>
-              </View>
-              <Text style={styles.cardTitle}>Suggested Follow-ups</Text>
-              <View style={[styles.badge, { backgroundColor: '#22c55e1a', borderWidth: 1, borderColor: '#22c55e33' }]}>
-                <Text style={[styles.badgeText, { color: GREEN }]}>{pendingFollowUps.length}</Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.divider} />
-
-          {pendingFollowUps.map(item => (
+          {pendingFollowUps.slice(0, 2).map(item => (
             <View key={item.id} style={styles.calendarItem}>
               <View style={styles.calendarBody}>
-                <Text style={styles.calendarTitle} numberOfLines={1}>{item.task}</Text>
+                <View style={styles.suggestedRow}>
+                  <Text style={styles.calendarTitle} numberOfLines={1}>{item.task}</Text>
+                  <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
+                </View>
                 <Text style={styles.calendarSub}>
                   {[item.contactName ? `from ${item.contactName}` : null, item.dueHint].filter(Boolean).join(' · ')}
                 </Text>
@@ -247,11 +181,17 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
               </View>
             </View>
           ))}
+
+          <View style={styles.cardFooter}>
+            <Text style={styles.footerText}>
+              {pending.length} pending{pendingFollowUps.length > 0 ? ` · ${pendingFollowUps.length} suggested` : ''}
+            </Text>
+          </View>
         </View>
       )}
 
-      {/* Upcoming events card */}
-      {(upcomingData.calendarItems.length > 0 || upcomingData.bookingItems.length > 0) && (() => {
+      {/* Upcoming — suggested calendar events + confirmed calendar/bookings merged */}
+      {(pendingCalendarActions.length > 0 || upcomingData.calendarItems.length > 0 || upcomingData.bookingItems.length > 0) && (() => {
         // Anything with a real date (calendar events + bookings with a resolved travel
         // date) sorts chronologically first; confirmations with no known travel date
         // (just "confirmed N days ago") are appended after.
@@ -264,6 +204,7 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         const PREVIEW_COUNT = 5;
         const shown = upcomingExpanded ? allItems : allItems.slice(0, PREVIEW_COUNT);
         const hiddenCount = allItems.length - PREVIEW_COUNT;
+        const totalCount = allItems.length + pendingCalendarActions.length;
         return (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -272,14 +213,50 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
                   <Text style={styles.cardIconText}>🗓</Text>
                 </View>
                 <Text style={styles.cardTitle}>Upcoming</Text>
-                {allItems.length > 0 && (
+                {totalCount > 0 && (
                   <View style={[styles.badge, { backgroundColor: '#f59e0b1a', borderWidth: 1, borderColor: '#f59e0b33' }]}>
-                    <Text style={[styles.badgeText, { color: AMBER }]}>{allItems.length}</Text>
+                    <Text style={[styles.badgeText, { color: AMBER }]}>{totalCount}</Text>
                   </View>
                 )}
               </View>
             </View>
             <View style={styles.divider} />
+
+            {pendingCalendarActions.map(action => (
+              <View key={action.id} style={styles.calendarItem}>
+                <View style={styles.calendarBody}>
+                  <View style={styles.suggestedRow}>
+                    <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
+                    <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
+                  </View>
+                  <Text style={styles.calendarSub}>
+                    {action.contactName ? `with ${action.contactName}` : ''}
+                    {action.contactName && action.datetime ? ' · ' : ''}
+                    {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
+                  </Text>
+                </View>
+                <View style={styles.calendarActions}>
+                  <Pressable
+                    style={styles.calendarAddBtn}
+                    onPress={() => {
+                      const title = encodeURIComponent(action.title);
+                      const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
+                      Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
+                      clearPendingCalendarAction(action.id);
+                      onCalendarActionDismiss(action.id);
+                    }}
+                  >
+                    <Text style={styles.calendarAddText}>Add</Text>
+                  </Pressable>
+                  <Pressable
+                    hitSlop={10}
+                    onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
+                  >
+                    <Text style={styles.calendarDismiss}>✕</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
 
             {shown.map(item => (
               <View key={item.id} style={styles.upcomingItem}>
@@ -312,62 +289,6 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         );
       })()}
 
-      {/* Today card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <View style={[styles.cardIcon, { backgroundColor: '#f59e0b20' }]}>
-              <Text style={styles.cardIconText}>☀️</Text>
-            </View>
-            <Text style={styles.cardTitle}>Today</Text>
-          </View>
-        </View>
-        <View style={styles.divider} />
-
-        {todayItems.map((item, i) => (
-          <View key={i} style={styles.todayItem}>
-            <View style={[styles.todayIcon, { backgroundColor: item.iconBg }]}>
-              <Text style={styles.todayIconText}>{item.icon}</Text>
-            </View>
-            <View style={styles.todayBody}>
-              <Text style={styles.todayTitle}>{item.title}</Text>
-              {item.sub ? <Text style={styles.todaySub} numberOfLines={1}>{item.sub}</Text> : null}
-            </View>
-            {item.action && item.onAction && (
-              <Pressable style={styles.todayAction} onPress={item.onAction}>
-                <Text style={styles.todayActionText}>{item.action}</Text>
-              </Pressable>
-            )}
-          </View>
-        ))}
-      </View>
-
-      {/* Your Style card — only once there's a real profile behind it (>=3 edits),
-          same threshold as the in-bubble attribution tag, never a fake "learning..." claim */}
-      {styleStats?.hasProfile && (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIcon, { backgroundColor: '#e2933c20' }]}>
-                <Text style={styles.cardIconText}>✨</Text>
-              </View>
-              <Text style={styles.cardTitle}>Your Style</Text>
-            </View>
-          </View>
-          <View style={styles.divider} />
-          <View style={{ padding: 14, paddingTop: 12 }}>
-            <Text style={styles.styleStatsLine}>
-              Learned from {styleStats.editCount} of your replies
-            </Text>
-            {styleStats.contactsMatched > 0 && (
-              <Text style={[styles.styleStatsLine, { marginTop: 4 }]}>
-                Matched your tone with {styleStats.contactsMatched} {styleStats.contactsMatched === 1 ? 'contact' : 'contacts'}
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-
     </ScrollView>
   );
 }
@@ -394,15 +315,10 @@ const styles = StyleSheet.create({
   cardIconText: { fontSize: 16 },
   cardTitle:   { fontSize: 15, fontWeight: '600', color: TEXT },
   cardLink:    { fontSize: 13, color: PURPLE, fontWeight: '600' },
-  styleStatsLine: { fontSize: 13.5, color: TEXT },
   divider:     { height: 1, backgroundColor: BORDER, marginHorizontal: 14 },
 
   badge:     { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   badgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-
-  emptyState:   { padding: 20, alignItems: 'center' },
-  emptyText:    { color: MUTED, fontSize: 14, fontWeight: '500' },
-  emptySubText: { color: MUTED, fontSize: 12, marginTop: 4, textAlign: 'center', lineHeight: 18 },
 
   followupItem:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
   dot:             { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
@@ -416,14 +332,20 @@ const styles = StyleSheet.create({
   addBtn:     { flexDirection: 'row', alignItems: 'center', backgroundColor: BORDER, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   addBtnText: { fontSize: 13, color: MUTED, fontWeight: '500' },
 
-  todayItem:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
-  todayIcon:     { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  todayIconText: { fontSize: 16 },
-  todayBody:     { flex: 1, minWidth: 0 },
-  todayTitle:    { fontSize: 14, color: TEXT, fontWeight: '400' },
-  todaySub:      { fontSize: 12, color: MUTED, marginTop: 2 },
-  todayAction:   { backgroundColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0 },
-  todayActionText: { fontSize: 12, color: MUTED, fontWeight: '500' },
+  statusStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: SURFACE, borderRadius: 16, borderTopLeftRadius: 6, borderWidth: 1, borderColor: BORDER, padding: 14, marginBottom: 12 },
+  statusDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  statusText:  { fontSize: 14, fontWeight: '600', color: TEXT, flexShrink: 1 },
+  statusTextMuted: { fontWeight: '400', color: MUTED },
+  stylePill:      { marginLeft: 'auto', borderWidth: 1, borderColor: CONTEXT + '66', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
+  stylePillText:  { fontSize: 9.5, fontWeight: '600', color: CONTEXT, fontFamily: FONTS.mono, letterSpacing: 0.4 },
+
+  proNudge:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, backgroundColor: '#e2933c12', borderRadius: 14, borderWidth: 1, borderColor: '#e2933c33', padding: 12, marginBottom: 12 },
+  proNudgeText:   { flex: 1, fontSize: 12.5, color: TEXT },
+  proNudgeAction: { fontSize: 13, fontWeight: '700', color: PURPLE },
+
+  suggestedRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  suggestedTag:     { borderWidth: 1, borderColor: CONTEXT + '55', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1.5, flexShrink: 0 },
+  suggestedTagText: { fontSize: 8.5, fontWeight: '600', color: CONTEXT, letterSpacing: 0.3 },
 
   calendarItem:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
   calendarBody:    { flex: 1, minWidth: 0 },
