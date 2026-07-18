@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
 import { formatTripDateRange } from '../services/upcomingEvents';
-import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED, FONTS } from '../theme';
+import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
 
 interface Props {
   upcomingData: UpcomingData;
@@ -13,15 +13,15 @@ interface Props {
 function CalendarRow({ item }: { item: UpcomingCalendarItem }) {
   return (
     <View style={styles.item}>
-      <View style={[styles.itemIcon, { backgroundColor: '#e2933c15' }]}>
+      <View style={[styles.itemIcon, { backgroundColor: CONTEXT + '15' }]}>
         <Text style={styles.itemIconText}>{item.icon}</Text>
       </View>
       <View style={styles.itemBody}>
         <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.itemSub}>{item.subtitle}</Text>
       </View>
-      <View style={[styles.badge, { backgroundColor: '#e2933c15' }]}>
-        <Text style={[styles.badgeText, { color: PURPLE }]}>Cal</Text>
+      <View style={[styles.badge, { backgroundColor: CONTEXT + '15' }]}>
+        <Text style={[styles.badgeText, { color: CONTEXT }]}>Cal</Text>
       </View>
     </View>
   );
@@ -64,7 +64,7 @@ function TripCard({ trip }: { trip: Trip }) {
   return (
     <Pressable style={styles.tripCard} onPress={() => setExpanded(v => !v)}>
       <View style={styles.tripHeader}>
-        <View style={[styles.itemIcon, { backgroundColor: '#e2933c15' }]}>
+        <View style={[styles.itemIcon, { backgroundColor: CONTEXT + '15' }]}>
           <Text style={styles.itemIconText}>🧳</Text>
         </View>
         <View style={styles.itemBody}>

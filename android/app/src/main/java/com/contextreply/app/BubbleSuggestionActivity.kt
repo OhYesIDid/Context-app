@@ -130,6 +130,8 @@ class BubbleSuggestionActivity : Activity() {
         val BORDER    = Theme.BORDER
         val GREEN     = Theme.GREEN
         val GREEN_BG  = Theme.GREEN_BG
+        val CONTEXT    = Theme.CONTEXT
+        val CONTEXT_BG = Theme.CONTEXT_BG
 
         val AVATAR_PALETTE = listOf(0xFF6366f1L, 0xFF8b5cf6L, 0xFFec4899L, 0xFFf43f5eL,
                                     0xFFf59e0bL, 0xFF10b981L, 0xFF06b6d4L, 0xFF3b82f6L)
@@ -952,14 +954,18 @@ class BubbleSuggestionActivity : Activity() {
         val activeIntents = detectedIntents.filter { it != "other" }
         val unusedIntents = allKnownIntents.filter { it !in detectedIntents }
 
+        // active=true chips are detected context signals (ETA/Calendar/Location) — the
+        // teal accent is exactly what it's for. active=false ("+ ETA"/"+ Calendar" etc.,
+        // discoverable add-this chips) stays green — a distinct "you can add this"
+        // affordance, not a signal that's already present.
         fun makeChip(label: String, active: Boolean = true): TextView = TextView(this).apply {
             text = label
-            setTextColor(if (active) PURPLE else GREEN)
+            setTextColor(if (active) CONTEXT else GREEN)
             textSize = 11f
             typeface = AppFonts.medium(this@BubbleSuggestionActivity)
             setPadding(dp(8), dp(3), dp(8), dp(3))
             background = GradientDrawable().apply {
-                setColor(if (active) PURPLE_BG else GREEN_BG)
+                setColor(if (active) CONTEXT_BG else GREEN_BG)
                 cornerRadius = dp(12).toFloat()
             }
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)

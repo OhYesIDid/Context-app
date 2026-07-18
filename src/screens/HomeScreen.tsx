@@ -260,15 +260,15 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
 
             {shown.map(item => (
               <View key={item.id} style={styles.upcomingItem}>
-                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? '#e2933c15' : '#f59e0b15' }]}>
+                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? CONTEXT + '15' : '#f59e0b15' }]}>
                   <Text style={styles.upcomingIconText}>{item.icon}</Text>
                 </View>
                 <View style={styles.upcomingBody}>
                   <Text style={styles.upcomingTitle} numberOfLines={1}>{item.title}</Text>
                   <Text style={styles.upcomingSub}>{item.subtitle}</Text>
                 </View>
-                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? '#e2933c15' : '#f59e0b15' }]}>
-                  <Text style={[styles.upcomingBadgeText, { color: item.source === 'cal' ? PURPLE : AMBER }]}>
+                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? CONTEXT + '15' : '#f59e0b15' }]}>
+                  <Text style={[styles.upcomingBadgeText, { color: item.source === 'cal' ? CONTEXT : AMBER }]}>
                     {item.source === 'cal' ? 'Cal' : 'Gmail'}
                   </Text>
                 </View>

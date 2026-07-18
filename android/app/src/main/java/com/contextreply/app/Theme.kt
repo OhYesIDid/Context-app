@@ -15,7 +15,8 @@ object Theme {
 
     val SIGNAL     = Color.parseColor("#e2933c")  // primary accent — was PURPLE #6366f1
     val SIGNAL_BG  = Color.parseColor("#e2933c22")
-    val CONTEXT    = Color.parseColor("#2f8f8a")  // secondary accent — calendar/location/trip signals, not yet applied
+    val CONTEXT    = Color.parseColor("#2f8f8a")  // secondary accent — calendar/location/trip signals
+    val CONTEXT_BG = Color.parseColor("#2f8f8a22")
 
     val GREEN    = Color.parseColor("#22c55e")
     val GREEN_BG = Color.parseColor("#22c55e22")
