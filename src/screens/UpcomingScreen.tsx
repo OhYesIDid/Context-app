@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
 import { formatTripDateRange } from '../services/upcomingEvents';
-import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED } from '../theme';
+import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED, FONTS } from '../theme';
 
 interface Props {
   upcomingData: UpcomingData;
@@ -184,18 +184,18 @@ const styles = StyleSheet.create({
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  title:  { fontSize: 24, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
-  syncingHint: { fontSize: 12, color: MUTED, fontWeight: '500' },
+  title:  { fontSize: 24, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
+  syncingHint: { fontSize: 12, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
   settingsBtn:  { width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
   listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },
 
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
 
   errorBanner:      { backgroundColor: '#ef444415', borderWidth: 1, borderColor: '#ef444433', borderRadius: 14, padding: 12, marginBottom: 16 },
-  errorBannerTitle: { fontSize: 13, fontWeight: '600', color: RED, marginBottom: 4 },
+  errorBannerTitle: { fontSize: 13, fontFamily: FONTS.semibold, fontWeight: '600', color: RED, marginBottom: 4 },
   errorBannerText:  { fontSize: 12, color: MUTED },
 
   item:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   itemTitle: { fontSize: 15, color: TEXT, fontWeight: '400' },
   itemSub:   { fontSize: 12, color: MUTED, marginTop: 2 },
   badge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
+  badgeText: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   tripCard:  { backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
   tripHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -214,8 +214,8 @@ const styles = StyleSheet.create({
 
   emptyState:  { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
   emptyIcon:   { fontSize: 48, marginBottom: 16 },
-  emptyTitle:  { fontSize: 18, fontWeight: '600', color: TEXT, marginBottom: 8 },
+  emptyTitle:  { fontSize: 18, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT, marginBottom: 8 },
   emptySub:    { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20 },
   connectBtn:  { marginTop: 20, backgroundColor: PURPLE, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 24 },
-  connectBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  connectBtnText: { fontSize: 14, fontFamily: FONTS.semibold, fontWeight: '600', color: '#fff' },
 });

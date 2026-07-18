@@ -12,7 +12,7 @@ import {
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
-import { PURPLE, SURFACE, BORDER, TEXT, MUTED } from '../theme';
+import { PURPLE, SURFACE, BORDER, TEXT, MUTED, FONTS } from '../theme';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -362,25 +362,25 @@ const styles = StyleSheet.create({
   avatar:     { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e2933c30', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2933c40' },
   avatarText: { fontSize: 24 },
   headerInfo: { flex: 1 },
-  name:       { fontSize: 20, fontWeight: '700', color: TEXT, letterSpacing: -0.3 },
+  name:       { fontSize: 20, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.3 },
   meta:       { fontSize: 12, color: MUTED, marginTop: 2 },
 
   section:      { marginBottom: 20 },
-  sectionLabel: { fontSize: 10, fontWeight: '700', color: MUTED, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 },
+  sectionLabel: { fontSize: 10, fontFamily: FONTS.bold, fontWeight: '700', color: MUTED, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: SURFACE },
   chipActive:   { borderColor: PURPLE, backgroundColor: '#e2933c20' },
   chipText:     { fontSize: 13, color: MUTED },
-  chipTextActive: { color: PURPLE, fontWeight: '600' },
+  chipTextActive: { color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   platformChip:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
   platformIcon:       { fontSize: 13 },
-  platformLabel:      { fontSize: 12, color: TEXT, fontWeight: '500' },
+  platformLabel:      { fontSize: 12, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
   platformIdentifier: { fontSize: 11, color: MUTED, maxWidth: 120 },
 
   addPlatformChip:     { borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
-  addPlatformChipText: { fontSize: 12, color: MUTED, fontWeight: '500' },
+  addPlatformChipText: { fontSize: 12, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
 
   memoriesBox: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 12, gap: 6 },
   memoryRow:   { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
@@ -390,14 +390,14 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: 13, color: MUTED, fontStyle: 'italic' },
 
   closeBtn:     { margin: 16, marginTop: 8, backgroundColor: PURPLE, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  closeBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  closeBtnText: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: '#fff' },
 
-  pickerTitle: { fontSize: 17, fontWeight: '700', color: TEXT, paddingHorizontal: 20, marginTop: 8 },
+  pickerTitle: { fontSize: 17, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, paddingHorizontal: 20, marginTop: 8 },
   pickerHint:  { fontSize: 12, color: MUTED, paddingHorizontal: 20, marginTop: 6, marginBottom: 14, lineHeight: 17 },
   pickerSearch: { marginHorizontal: 20, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: TEXT, fontSize: 14, marginBottom: 10 },
   pickerList:  { maxHeight: 320, paddingHorizontal: 20 },
   pickerRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
-  pickerRowName:     { fontSize: 14, color: TEXT, fontWeight: '500' },
+  pickerRowName:     { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
   pickerRowPlatform: { fontSize: 12, color: MUTED, marginTop: 1 },
-  pickerRowAction:   { fontSize: 13, color: PURPLE, fontWeight: '600' },
+  pickerRowAction:   { fontSize: 13, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { PURPLE, SURFACE, BORDER, TEXT, MUTED } from '../theme';
+import { PURPLE, SURFACE, BORDER, TEXT, MUTED, FONTS } from '../theme';
 
 const MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   sheet:   { backgroundColor: '#1c1c1e', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 },
   handle:  { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
 
-  title:    { fontSize: 20, fontWeight: '700', color: TEXT, letterSpacing: -0.3, marginBottom: 8 },
+  title:    { fontSize: 20, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.3, marginBottom: 8 },
   subtitle: { fontSize: 13, color: MUTED, lineHeight: 19, marginBottom: 16 },
 
   mapBox:  { borderRadius: 16, overflow: 'hidden', backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, marginBottom: 12 },
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   addressMuted: { fontSize: 13, color: MUTED, fontStyle: 'italic', marginBottom: 20 },
 
   confirmBtn:     { backgroundColor: PURPLE, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
-  confirmBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  confirmBtnText: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: '#fff' },
   dismissBtn:     { paddingVertical: 12, alignItems: 'center' },
-  dismissBtnText: { fontSize: 14, fontWeight: '500', color: MUTED },
+  dismissBtnText: { fontSize: 14, fontFamily: FONTS.medium, fontWeight: '500', color: MUTED },
 });

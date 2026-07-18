@@ -55,7 +55,7 @@ import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, 
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
 import { logEvent } from './src/services/analytics';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
-import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED } from './src/theme';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, FONTS } from './src/theme';
 
 const TONE_LABEL: Record<Tone, string> = {
   formal: 'Formal',
@@ -725,7 +725,7 @@ export default function App() {
                     style={[styles.chip, defaultTone === t && { borderColor: TONE_COLOR[t], backgroundColor: TONE_COLOR[t] + '22' }]}
                     onPress={() => saveDefaultTone(t)}
                   >
-                    <Text style={[styles.chipText, defaultTone === t && { color: TONE_COLOR[t], fontWeight: '600' }]}>
+                    <Text style={[styles.chipText, defaultTone === t && { color: TONE_COLOR[t], fontFamily: FONTS.semibold, fontWeight: '600' }]}>
                       {TONE_LABEL[t]}
                     </Text>
                   </Pressable>
@@ -1028,7 +1028,7 @@ export default function App() {
                 <Text style={styles.settingText}>{googleAuthed ? 'Gmail connected' : 'Sign in with Google'}</Text>
                 <Text style={styles.setupStatus}>{googleAuthed ? 'Booking lookups enabled' : 'Sign in with Google in Settings to enable'}</Text>
               </View>
-              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80', fontWeight: '600' }]}>✓ On</Text>}
+              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80', fontFamily: FONTS.semibold, fontWeight: '600' }]}>✓ On</Text>}
             </View>
             <Text style={[styles.modalSection, { marginTop: 16 }]}>LOOKBACK PERIOD</Text>
             <View style={styles.chipRow}>
@@ -1322,19 +1322,19 @@ const styles = StyleSheet.create({
   scroll: { padding: 24, paddingTop: 16, paddingBottom: 48 },
 
   header: { marginBottom: 28 },
-  title: { fontSize: 26, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
+  title: { fontSize: 26, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: MUTED, marginTop: 4 },
 
   bottomNav:     { flexDirection: 'row', backgroundColor: '#131315', borderTopWidth: 1, borderTopColor: BORDER, paddingBottom: 4 },
   navItem:       { flex: 1, alignItems: 'center', paddingVertical: 8 },
   navIcon:       { fontSize: 22, color: MUTED, textAlign: 'center' },
   navIconActive: { color: PURPLE },
-  navLabel:      { fontSize: 10, color: MUTED, fontWeight: '500', marginTop: 2 },
+  navLabel:      { fontSize: 10, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500', marginTop: 2 },
   navLabelActive:{ color: PURPLE },
   navBadge:      { position: 'absolute', top: -4, right: -8, backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  navBadgeText:  { fontSize: 10, fontWeight: '700', color: '#fff' },
+  navBadgeText:  { fontSize: 10, fontFamily: FONTS.monoSemibold, fontWeight: '700', color: '#fff' },
 
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   sectionCard: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 24, overflow: 'hidden' },
 
   statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
@@ -1347,7 +1347,7 @@ const styles = StyleSheet.create({
   settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingText: { fontSize: 16, color: TEXT },
   setupStatus: { fontSize: 12, color: MUTED, marginTop: 1 },
-  setupAction: { fontSize: 13, color: PURPLE, fontWeight: '600' },
+  setupAction: { fontSize: 13, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
   setupDot: { fontSize: 18, color: MUTED, width: 20, textAlign: 'center' },
   setupDotDone: { color: '#4ade80' },
 
@@ -1355,21 +1355,21 @@ const styles = StyleSheet.create({
   categoryValue: { fontSize: 14, color: MUTED },
 
   smallButton: { backgroundColor: PURPLE, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
-  smallButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  smallButtonText: { color: '#fff', fontSize: 13, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: BORDER },
   chipActive: { backgroundColor: PURPLE + '33', borderColor: PURPLE },
   chipText: { color: MUTED, fontSize: 12 },
-  chipTextActive: { color: PURPLE, fontWeight: '600' },
+  chipTextActive: { color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },
   modalHandle: { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: TEXT, marginBottom: 24 },
-  modalSection: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, marginBottom: 24 },
+  modalSection: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   modalClose: { marginTop: 24, backgroundColor: PURPLE, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  modalCloseText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  modalCloseText: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   searchInput: { backgroundColor: BORDER, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: TEXT, marginBottom: 16 },
   shareInput: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, fontSize: 16, color: TEXT, minHeight: 80, textAlignVertical: 'top' },
@@ -1377,22 +1377,22 @@ const styles = StyleSheet.create({
   setupHint: { color: MUTED, fontSize: 12, marginBottom: 12 },
 
   contactCard: { paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: BORDER },
-  contactName: { color: TEXT, fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  contactName: { color: TEXT, fontSize: 14, fontFamily: FONTS.semibold, fontWeight: '600', marginBottom: 8 },
   chipLabel: { color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
 
   proBadge: { backgroundColor: PURPLE + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: PURPLE + '55' },
-  proBadgeText: { color: '#a78bfa', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  proBadgeText: { color: '#a78bfa', fontSize: 10, fontFamily: FONTS.bold, fontWeight: '700', letterSpacing: 0.8 },
 
   paywallIconRing: { width: 64, height: 64, borderRadius: 32, backgroundColor: PURPLE + '22', borderWidth: 1, borderColor: PURPLE + '55', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   paywallFeatureList: { gap: 10, marginBottom: 4 },
   paywallFeatureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  paywallFeatureCheck: { color: PURPLE, fontSize: 15, fontWeight: '700', width: 18 },
+  paywallFeatureCheck: { color: PURPLE, fontSize: 15, fontFamily: FONTS.bold, fontWeight: '700', width: 18 },
   paywallFeatureText: { color: TEXT, fontSize: 15, flex: 1, lineHeight: 22 },
   paywallPkgCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BORDER, borderRadius: 12, padding: 14, backgroundColor: SURFACE, gap: 12 },
   paywallPkgCardSelected: { borderColor: PURPLE, backgroundColor: PURPLE + '11' },
-  paywallPkgName: { fontSize: 15, fontWeight: '600', color: MUTED },
+  paywallPkgName: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED },
   paywallBestValue: { backgroundColor: PURPLE + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
-  paywallBestValueText: { color: '#a78bfa', fontSize: 11, fontWeight: '700' },
+  paywallBestValueText: { color: '#a78bfa', fontSize: 11, fontFamily: FONTS.bold, fontWeight: '700' },
   paywallRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   paywallRadioSelected: { borderColor: PURPLE },
   paywallRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: PURPLE },

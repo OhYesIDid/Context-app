@@ -22,7 +22,7 @@ import { importDeviceContacts } from '../services/deviceContacts';
 import { importGoogleContacts } from '../services/googlePeople';
 import { refreshContactListCache } from '../services/styleSync';
 import { pickAndParseWhatsAppExport } from '../services/whatsappParser';
-import { BG, SURFACE, BORDER, TEXT, MUTED, PURPLE, GREEN, RED } from '../theme';
+import { BG, SURFACE, BORDER, TEXT, MUTED, PURPLE, GREEN, RED, FONTS } from '../theme';
 
 const { ProTxtSettings: ConTxtSettings } = NativeModules;
 
@@ -487,38 +487,38 @@ const s = StyleSheet.create({
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
 
   icon:      { fontSize: 52, marginBottom: 24 },
-  stepTitle: { fontSize: 26, fontWeight: '700', color: TEXT, textAlign: 'center', marginBottom: 14, letterSpacing: -0.4 },
+  stepTitle: { fontSize: 26, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, textAlign: 'center', marginBottom: 14, letterSpacing: -0.4 },
   stepDesc:  { fontSize: 16, color: MUTED, textAlign: 'center', lineHeight: 24 },
 
   pill:      { marginTop: 24, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   pillGreen: { backgroundColor: GREEN + '22', borderColor: GREEN + '55' },
   pillRed:   { backgroundColor: RED + '22',   borderColor: RED + '55'   },
-  pillText:  { fontSize: 14, fontWeight: '500', color: TEXT },
+  pillText:  { fontSize: 14, fontFamily: FONTS.medium, fontWeight: '500', color: TEXT },
 
   progressOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   progressCard: { backgroundColor: '#fff', borderRadius: 16, padding: 28, width: 280, alignItems: 'center' },
-  progressLabel: { fontSize: 15, fontWeight: '600', color: '#1e1b4b', marginBottom: 16, textAlign: 'center' },
+  progressLabel: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: '#1e1b4b', marginBottom: 16, textAlign: 'center' },
   progressTrack: { width: '100%', height: 6, backgroundColor: '#e0e7ff', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 6, backgroundColor: '#e2933c', borderRadius: 3 },
-  progressCount: { fontSize: 13, color: '#6b7280', marginTop: 10 },
+  progressCount: { fontSize: 13, color: '#6b7280', marginTop: 10, fontFamily: FONTS.mono },
   bgBtn: { marginTop: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  bgBtnText: { fontSize: 13, color: '#e2933c', fontWeight: '500' },
+  bgBtnText: { fontSize: 13, color: '#e2933c', fontFamily: FONTS.medium, fontWeight: '500' },
 
   importRows: { width: '100%', marginTop: 28 },
   importRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
   importLeft: { flex: 1, marginRight: 12 },
-  importLabel: { fontSize: 15, color: TEXT, fontWeight: '500' },
+  importLabel: { fontSize: 15, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
   importStatus: { fontSize: 12, color: GREEN, marginTop: 3 },
   importHint:   { fontSize: 12, color: MUTED, marginTop: 3 },
   importBtn:    { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: PURPLE + '22', borderWidth: 1, borderColor: PURPLE + '55', minWidth: 70, alignItems: 'center' },
   importBtnDisabled: { opacity: 0.35 },
-  importBtnText: { fontSize: 14, color: PURPLE, fontWeight: '600' },
+  importBtnText: { fontSize: 14, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
   importBtnTextDisabled: { color: MUTED },
 
   footer:     { paddingHorizontal: 24, paddingBottom: 36 },
   primaryBtn: { backgroundColor: PURPLE, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 28 },
   primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontFamily: FONTS.bold, fontWeight: '700' },
 
   dots:    { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   dot:     { width: 6, height: 6, borderRadius: 3, backgroundColor: BORDER },

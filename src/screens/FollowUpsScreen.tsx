@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import type { FollowUp } from '../services/followUps';
 import { deleteFollowUp, formatDueLabel, markDone, urgency } from '../services/followUps';
-import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED } from '../theme';
+import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED, FONTS } from '../theme';
 
 const URGENCY_COLOR: Record<string, string> = {
   overdue: RED, today: AMBER, soon: PURPLE, later: MUTED, none: BORDER,
@@ -119,30 +119,30 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
 
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
-  title:        { fontSize: 24, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
+  title:        { fontSize: 24, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.5 },
   settingsBtn:  { width: 36, height: 36, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
   listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },
 
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
+  sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
 
   item:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
   checkBtn:    { paddingTop: 1 },
   checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   checkCircleDone: { backgroundColor: GREEN, borderColor: GREEN },
-  checkMark:   { color: '#fff', fontSize: 12, fontWeight: '700' },
+  checkMark:   { color: '#fff', fontSize: 12, fontFamily: FONTS.bold, fontWeight: '700' },
 
   itemContent: { flex: 1, minWidth: 0 },
   itemText:    { fontSize: 15, color: TEXT, fontWeight: '400', lineHeight: 21 },
   itemMeta:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   metaTag:     { fontSize: 11, color: MUTED, backgroundColor: BORDER, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  metaDue:     { fontSize: 11, fontWeight: '600' },
+  metaDue:     { fontSize: 11, fontFamily: FONTS.monoSemibold, fontWeight: '600' },
   deleteBtn:   { fontSize: 14, color: MUTED, paddingTop: 2 },
 
   emptyState:  { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
   emptyIcon:   { fontSize: 48, marginBottom: 16 },
-  emptyTitle:  { fontSize: 18, fontWeight: '600', color: TEXT, marginBottom: 8 },
+  emptyTitle:  { fontSize: 18, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT, marginBottom: 8 },
   emptySub:    { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20 },
 });
