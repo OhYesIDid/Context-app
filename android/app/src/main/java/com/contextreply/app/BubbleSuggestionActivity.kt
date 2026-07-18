@@ -354,10 +354,20 @@ class BubbleSuggestionActivity : Activity() {
                     ContactMemory.buildMemoryBlock(this@BubbleSuggestionActivity, convKey) else null
                 val lastSent = if (convKey != null)
                     ContactMemory.getLastSent(this@BubbleSuggestionActivity, convKey) else null
+                val regenMessage = messageExtra.ifEmpty { textMap["casual"] ?: "" }
+                // Rebuild live Maps/Calendar data fresh — previously omitted entirely on
+                // regen, so a refreshed suggestion had no current ETA/location to work
+                // from (this is what looked like "stale" location/ETA data on refresh:
+                // there was no fresh data at all, just whatever Claude could infer from
+                // the bare conversation thread).
+                val enrichments = ProTxtBgService.getInstance()
+                    ?.buildEnrichments(regenMessage, thread, convKey, intentsRaw)
+                    ?: JSONObject()
                 val result = WorkerClient.call(
                     this@BubbleSuggestionActivity,
-                    messageExtra.ifEmpty { textMap["casual"] ?: "" },
+                    regenMessage,
                     thread,
+                    enrichments,
                     regenerate = true,
                     earlierContext = earlierContext,
                     contactMemory = contactMemory,

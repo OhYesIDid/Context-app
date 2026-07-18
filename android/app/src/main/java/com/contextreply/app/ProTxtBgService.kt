@@ -1232,7 +1232,11 @@ class ProTxtBgService : NotificationListenerService() {
         })
     }
 
-    private fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), convKey: String? = null, intentsStr: String? = null): JSONObject {
+    // Not private — BubbleSuggestionActivity.triggerRegen() calls this via getInstance()
+    // to rebuild live Maps/Calendar data on refresh instead of sending a stale/empty
+    // enrichments payload (regen previously skipped this entirely, so a refreshed
+    // suggestion had no fresh ETA/location data to work from at all).
+    fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), convKey: String? = null, intentsStr: String? = null): JSONObject {
         val enrichments = JSONObject()
         for (key in requiredEnrichments(message, intentsStr)) {
             when (key) {
