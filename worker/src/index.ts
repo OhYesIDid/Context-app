@@ -724,7 +724,15 @@ export default {
     // incorrect attributions when the title actually matched an unrelated event already
     // on the calendar. A close title match against an already-fetched event is a strong
     // signal the action came from enrichment data rather than what this contact said.
-    if (action?.type === 'calendar_add' && action.title && body.contactName) {
+    //
+    // Also skip entirely for a group thread (more than one distinct sender in the
+    // recent thread): body.contactName is a single name, but in a group there's no
+    // guarantee the specific proposal came from that particular person rather than
+    // someone else in the conversation — stapling it on regardless would misattribute
+    // the event to the wrong participant.
+    const distinctSenders = new Set((body.conversationThread ?? []).map((m) => m.sender).filter((s): s is string => s != null));
+    const isGroupThread = distinctSenders.size > 1;
+    if (action?.type === 'calendar_add' && action.title && body.contactName && !isGroupThread) {
       const existingEvents = body.enrichments?.calendar?.events ?? [];
       const titleLower = action.title.toLowerCase();
       const matchesExistingEvent = existingEvents.some((e) => {
