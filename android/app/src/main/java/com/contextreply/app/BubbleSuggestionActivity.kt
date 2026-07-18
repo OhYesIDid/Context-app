@@ -147,12 +147,13 @@ class BubbleSuggestionActivity : Activity() {
                 text = "Couldn't generate a reply"
                 setTextColor(TEXT)
                 textSize = 16f
-                setTypeface(null, Typeface.BOLD)
+                typeface = AppFonts.bold(this@BubbleSuggestionActivity)
             })
             root.addView(TextView(this).apply {
                 text = "The request failed or timed out."
                 setTextColor(MUTED)
                 textSize = 13f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 lp.topMargin = dp(4)
                 lp.bottomMargin = dp(16)
@@ -163,7 +164,7 @@ class BubbleSuggestionActivity : Activity() {
                 setTextColor(Color.WHITE)
                 textSize = 15f
                 gravity = Gravity.CENTER
-                setTypeface(null, Typeface.BOLD)
+                typeface = AppFonts.bold(this@BubbleSuggestionActivity)
                 background = GradientDrawable().apply {
                     setColor(PURPLE)
                     cornerRadius = dp(12).toFloat()
@@ -182,6 +183,7 @@ class BubbleSuggestionActivity : Activity() {
                 setTextColor(MUTED)
                 textSize = 15f
                 gravity = Gravity.CENTER
+                typeface = AppFonts.medium(this@BubbleSuggestionActivity)
                 setPadding(dp(16), dp(13), dp(16), dp(13))
                 setOnClickListener {
                     sendAction(ProTxtBgService.ACTION_DISMISS, "", null, notifId, convKey, null)
@@ -198,6 +200,7 @@ class BubbleSuggestionActivity : Activity() {
             setTextColor(TEXT)
             setHintTextColor(MUTED)
             textSize = 15f
+            typeface = AppFonts.regular(this@BubbleSuggestionActivity)
             minLines = 2
             maxLines = 6
             isEnabled = !showSkeleton
@@ -223,7 +226,7 @@ class BubbleSuggestionActivity : Activity() {
             setTextColor(if (showSkeleton) MUTED else Color.WHITE)
             textSize = 15f
             gravity = Gravity.CENTER
-            setTypeface(null, Typeface.BOLD)
+            typeface = AppFonts.bold(this@BubbleSuggestionActivity)
             isEnabled = !showSkeleton
             background = GradientDrawable().apply {
                 setColor(if (showSkeleton) SURFACE2 else PURPLE)
@@ -266,6 +269,7 @@ class BubbleSuggestionActivity : Activity() {
             text = enrichmentLoadingLabel(detectedIntents)
             setTextColor(MUTED)
             textSize = 12f
+            typeface = AppFonts.regular(this@BubbleSuggestionActivity)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             }
@@ -423,7 +427,7 @@ class BubbleSuggestionActivity : Activity() {
                 setTextColor(Color.WHITE)
                 textSize = 15f
                 gravity = Gravity.CENTER
-                setTypeface(null, Typeface.BOLD)
+                typeface = AppFonts.bold(this@BubbleSuggestionActivity)
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(avatarColor)
@@ -442,13 +446,14 @@ class BubbleSuggestionActivity : Activity() {
                     text = contact.take(28)
                     setTextColor(TEXT)
                     textSize = 15f
-                    setTypeface(null, Typeface.BOLD)
+                    typeface = AppFonts.bold(this@BubbleSuggestionActivity)
                 })
                 if (platformLabel != null) {
                     addView(TextView(this@BubbleSuggestionActivity).apply {
                         text = platformLabel
                         setTextColor(MUTED)
                         textSize = 11f
+                        typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                     })
                 }
             })
@@ -460,7 +465,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "Urgent"
                     setTextColor(Color.parseColor("#f97316"))
                     textSize = 11f
-                    setTypeface(null, Typeface.BOLD)
+                    typeface = AppFonts.bold(this@BubbleSuggestionActivity)
                     background = GradientDrawable().apply {
                         setColor(Color.parseColor("#f9731622"))
                         cornerRadius = dp(8).toFloat()
@@ -478,6 +483,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "↗"
                     setTextColor(PURPLE)
                     textSize = 16f
+                    typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                     setPadding(dp(8), 0, 0, 0)
                     setOnClickListener { doOpenChat() }
                 })
@@ -519,6 +525,7 @@ class BubbleSuggestionActivity : Activity() {
                         text = quoteInitial
                         setTextColor(MUTED)
                         textSize = 13f
+                        typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                         setLineSpacing(0f, 1.25f)
                         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                         quoteText = this
@@ -611,6 +618,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = bannerText
                 setTextColor(accentColor)
                 textSize = 12f
+                typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
 
@@ -639,6 +647,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "Already linked via $crossAppSrc · $currentAppLabel"
                     setTextColor(MUTED)
                     textSize = 11f
+                    typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                     val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                     lp.topMargin = dp(2); lp.bottomMargin = dp(6)
                     layoutParams = lp
@@ -653,6 +662,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "Keep separate"
                     setTextColor(MUTED)
                     textSize = 12f
+                    typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                     setPadding(0, dp(4), dp(14), dp(4))
                     setOnClickListener {
                         val prefs = Prefs.main(this@BubbleSuggestionActivity)
@@ -667,7 +677,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "Yes, link"
                     setTextColor(accentColor)
                     textSize = 12f
-                    setTypeface(null, Typeface.BOLD)
+                    typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
                     setPadding(0, dp(4), 0, dp(4))
                     setOnClickListener { confirmMatch() }
                 })
@@ -676,7 +686,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = "Yes"
                     setTextColor(accentColor)
                     textSize = 12f
-                    setTypeface(null, Typeface.BOLD)
+                    typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
                     setPadding(dp(12), dp(4), dp(6), dp(4))
                     setOnClickListener { confirmMatch() }
                 })
@@ -694,6 +704,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "No"
                 setTextColor(MUTED)
                 textSize = 12f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                 setPadding(dp(6), dp(4), 0, dp(4))
                 setOnClickListener {
                     if (alternatives.isEmpty()) {
@@ -707,7 +718,7 @@ class BubbleSuggestionActivity : Activity() {
                         text = "Who is this?"
                         setTextColor(accentColor)
                         textSize = 12f
-                        setTypeface(null, Typeface.BOLD)
+                        typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
                         setPadding(0, 0, 0, dp(6))
                     })
                     for (candidate in alternatives) {
@@ -718,6 +729,7 @@ class BubbleSuggestionActivity : Activity() {
                             text = cName
                             setTextColor(accentColor)
                             textSize = 12f
+                            typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                             setPadding(0, dp(3), 0, dp(3))
                             setOnClickListener {
                                 val prefs = Prefs.main(this@BubbleSuggestionActivity)
@@ -743,6 +755,7 @@ class BubbleSuggestionActivity : Activity() {
                         text = "+ Save to contacts"
                         setTextColor(MUTED)
                         textSize = 12f
+                        typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                         setPadding(0, dp(6), 0, 0)
                         setOnClickListener {
                             startActivity(Intent(ContactsContract.Intents.Insert.ACTION).apply {
@@ -785,7 +798,7 @@ class BubbleSuggestionActivity : Activity() {
                         setStroke(1, if (isActive) PURPLE else BORDER)
                     }
                     chip.setTextColor(if (isActive) PURPLE else MUTED)
-                    chip.setTypeface(null, if (isActive) Typeface.BOLD else Typeface.NORMAL)
+                    chip.typeface = if (isActive) AppFonts.semibold(this) else AppFonts.regular(this)
                 }
             }
 
@@ -862,7 +875,7 @@ class BubbleSuggestionActivity : Activity() {
                     setStroke(1, if (active) PURPLE else BORDER)
                 }
                 v.setTextColor(if (active) PURPLE else MUTED)
-                v.setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
+                v.typeface = if (active) AppFonts.semibold(this) else AppFonts.regular(this)
             }
         }
         refreshTabsFn[0] = ::refreshTabs
@@ -909,6 +922,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "🔒 Tone learning — Pro"
                 textSize = 11f
                 setTextColor(MUTED)
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                 setPadding(dp(10), dp(5), dp(10), dp(5))
                 background = GradientDrawable().apply {
                     setColor(Color.TRANSPARENT)
@@ -932,6 +946,7 @@ class BubbleSuggestionActivity : Activity() {
             text = label
             setTextColor(if (active) PURPLE else GREEN)
             textSize = 11f
+            typeface = AppFonts.medium(this@BubbleSuggestionActivity)
             setPadding(dp(8), dp(3), dp(8), dp(3))
             background = GradientDrawable().apply {
                 setColor(if (active) PURPLE_BG else GREEN_BG)
@@ -966,6 +981,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "+ Context"
                 setTextColor(MUTED)
                 textSize = 11f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
             }
             unusedIntents.forEach { i ->
                 addContextRow.addView(makeChip("+ ${intentLabels[i] ?: i}", false).apply {
@@ -1001,6 +1017,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = actionLabel
                 setTextColor(GREEN)
                 textSize = 13f
+                typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
                 gravity = Gravity.CENTER
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 background = GradientDrawable().apply {
@@ -1083,6 +1100,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "+ Action"
                 setTextColor(MUTED)
                 textSize = 11f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
             }
             val addActionExpanded = booleanArrayOf(false)
             val addActionRow = LinearLayout(this).apply {
@@ -1186,6 +1204,7 @@ class BubbleSuggestionActivity : Activity() {
                     text = attributionText
                     setTextColor(PURPLE)
                     textSize = 11.5f
+                    typeface = AppFonts.medium(this@BubbleSuggestionActivity)
                     val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                     lp.bottomMargin = dp(10)
                     layoutParams = lp
@@ -1212,6 +1231,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "Mark as read"
                 setTextColor(MUTED)
                 textSize = 13f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                 setPadding(0, 0, dp(14), 0)
                 setOnClickListener {
                     sendBroadcast(Intent(this@BubbleSuggestionActivity, ReplySendReceiver::class.java).apply {
@@ -1231,6 +1251,7 @@ class BubbleSuggestionActivity : Activity() {
                 text = "Dismiss"
                 setTextColor(MUTED)
                 textSize = 13f
+                typeface = AppFonts.regular(this@BubbleSuggestionActivity)
                 setOnClickListener {
                     val dismissText = textMap["casual"]?.takeIf { it.isNotEmpty() } ?: ""
                     sendAction(ProTxtBgService.ACTION_DISMISS, dismissText, null, notifId, convKey, null)
@@ -1246,6 +1267,7 @@ class BubbleSuggestionActivity : Activity() {
             text = collapsedLabel
             setTextColor(MUTED)
             textSize = 11.5f
+            typeface = AppFonts.mono(this@BubbleSuggestionActivity)
             setPadding(0, dp(4), 0, dp(4))
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             lp.bottomMargin = dp(8)
@@ -1270,6 +1292,7 @@ class BubbleSuggestionActivity : Activity() {
             text = if (isStale) "↺ Refresh" else "↺"
             setTextColor(if (isStale) PURPLE else MUTED)
             textSize = 16f
+            typeface = AppFonts.semibold(this@BubbleSuggestionActivity)
             isEnabled = !showSkeleton
             setOnClickListener {
                 Analytics.log(this@BubbleSuggestionActivity, "suggestion_regenerated", mapOf("source" to "bubble"))
