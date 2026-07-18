@@ -1,7 +1,10 @@
 package com.contextreply.app
 
+import android.animation.ArgbEvaluator
+import android.animation.LayoutTransition
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.view.animation.OvershootInterpolator
 import android.app.Activity
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -413,6 +416,16 @@ class BubbleSuggestionActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(BG)
             setPadding(dp(18), dp(16), dp(18), dp(16))
+            // Every visibility toggle within root (skeleton→content, "More options"
+            // expand/collapse, tone tabs appearing) gets a smooth animated transition
+            // instead of an instant snap, for free, without touching each call site.
+            // A slight overshoot on appearing views is the springy, physical motion
+            // M3 Expressive is actually about — not just a plain fade.
+            layoutTransition = LayoutTransition().apply {
+                setDuration(220)
+                setInterpolator(LayoutTransition.CHANGE_APPEARING, OvershootInterpolator(1.2f))
+                setInterpolator(LayoutTransition.APPEARING, OvershootInterpolator(1.2f))
+            }
         }
 
         // ── Header: avatar + name + platform ─────────────────────────────────
@@ -886,7 +899,19 @@ class BubbleSuggestionActivity : Activity() {
                     cornerRadius = dp(20).toFloat()
                     setStroke(1, if (active) PURPLE else BORDER)
                 }
-                v.setTextColor(if (active) PURPLE else MUTED)
+                // Animate the text color transition instead of an instant hard recolor —
+                // the background swap (fill/stroke) reads fine as an instant change since
+                // it's a shape+border, but a snapped text color is the part that looked
+                // like a plain "just recolor" toggle.
+                val fromColor = v.currentTextColor
+                val toColor = if (active) PURPLE else MUTED
+                if (fromColor != toColor) {
+                    ValueAnimator.ofObject(ArgbEvaluator(), fromColor, toColor).apply {
+                        duration = 160
+                        addUpdateListener { v.setTextColor(it.animatedValue as Int) }
+                        start()
+                    }
+                }
                 v.typeface = if (active) AppFonts.semibold(this) else AppFonts.regular(this)
             }
         }
