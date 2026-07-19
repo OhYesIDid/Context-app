@@ -563,16 +563,11 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
   const db = await getDatabase();
   await db.runAsync('UPDATE style_edits SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
   await db.runAsync('UPDATE memories SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
-  // platform_identities unique index is on (platform, identifier_hash) — use INSERT OR IGNORE to
-  // avoid conflicts when both contacts somehow share an identity, then delete the rest.
-  await db.runAsync(
-    `INSERT OR IGNORE INTO platform_identities
-       (id, contact_id, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at)
-     SELECT id, ?, platform, identifier, identifier_hash, identifier_type, confidence, user_confirmed, created_at, updated_at
-     FROM platform_identities WHERE contact_id = ?`,
-    [toId, fromId]
-  );
-  await db.runAsync('DELETE FROM platform_identities WHERE contact_id = ?', [fromId]);
+  // platform_identities' unique index is on (platform, identifier_hash) — it has no contact_id
+  // column, so a given identity can only ever be linked to one contact at a time. That means a
+  // plain UPDATE of contact_id can never collide with another row for the same identity (there
+  // isn't one to collide with); no copy-then-delete dance or conflict handling is needed here.
+  await db.runAsync('UPDATE platform_identities SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
   await db.runAsync(
     `UPDATE contacts SET
        interaction_count = interaction_count + (
