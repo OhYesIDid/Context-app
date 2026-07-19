@@ -15,13 +15,18 @@ const NATIVE_BOOKING_WINDOW_MS = 48 * 3600_000;
 function syncNativeBookingCache(bookings: BookingItem[]): void {
   try {
     const now = Date.now();
+    const todayMs = dayStart(new Date(now));
     const imminent = bookings
       .filter((b) => b.destination && b.travelDate)
       .filter((b) => {
         const start = new Date(b.travelDate!).getTime();
-        const end = b.travelDateEnd ? new Date(b.travelDateEnd).getTime() : start;
+        // Day-granularity comparison for the "underway" end check — a raw-ms comparison
+        // against a date-only travelDateEnd (parsed as UTC midnight) would read the trip
+        // as already over by ~1am local, dropping it out of the native cache hours before
+        // its actual final day ends. See the matching fix in buildUpcomingData.
+        const endDayMs = dayStart(new Date(b.travelDateEnd ?? b.travelDate!));
         // Include anything starting within the window, or already-underway multi-day trips.
-        return (start >= now && start - now <= NATIVE_BOOKING_WINDOW_MS) || (start <= now && end >= now);
+        return (start >= now && start - now <= NATIVE_BOOKING_WINDOW_MS) || (start <= now && endDayMs >= todayMs);
       })
       .map((b) => ({ destination: b.destination, type: b.type, travelDate: b.travelDate, travelDateEnd: b.travelDateEnd }));
     NativeModules.ProTxtSettings?.syncUpcomingBookings?.(JSON.stringify(imminent));
@@ -149,13 +154,16 @@ function groupIntoTrips(items: UpcomingBookingItem[], todayMs: number): Trip[] {
       ?? clusterItems.find(i => i.destination)?.destination
       ?? null;
     const startMs = dayStart(startDate);
+    const endMs = dayStart(endDate);
     return {
       id: `trip_${startDate.getTime()}_${idx}`,
       destination: destination ?? 'Trip',
       startDate,
       endDate,
       items: clusterItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
-      isToday: startMs === todayMs,
+      // "Today" covers the whole trip window, not just its start — a trip on its final day
+      // should still read as happening today, not just on whichever day it began.
+      isToday: todayMs >= startMs && todayMs <= endMs,
       isTomorrow: startMs === todayMs + 86400000,
     };
   }).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
@@ -327,7 +335,16 @@ function buildUpcomingData(events: CalendarEvent[], bookings: BookingItem[], boo
   const allBookingItems: UpcomingBookingItem[] = bookings
     .map(b => {
       const travelMs = b.travelDate ? new Date(b.travelDate).getTime() : NaN;
-      const isUpcomingTravel = !Number.isNaN(travelMs) && travelMs >= todayMs;
+      // A trip counts as "upcoming" through its LAST day, not just up to its start date —
+      // otherwise a multi-day trip that's already underway (started before today, ends today
+      // or later) wrongly falls out of isUpcomingTravel the moment its start date passes,
+      // even while today is still within the trip. Compare at day granularity (not raw ms)
+      // so a date-only travelDateEnd string (parsed as UTC midnight) doesn't read as "already
+      // over" by any time later than ~1am local — the exact bug that made a Brighton trip
+      // disappear from Upcoming on its own final day.
+      const travelEndMs = b.travelDateEnd ? dayStart(new Date(b.travelDateEnd))
+        : (Number.isNaN(travelMs) ? NaN : dayStart(new Date(travelMs)));
+      const isUpcomingTravel = !Number.isNaN(travelMs) && !Number.isNaN(travelEndMs) && travelEndMs >= todayMs;
       const date = isUpcomingTravel ? new Date(travelMs) : new Date(b.date);
       const eventMs = dayStart(date);
       return {
