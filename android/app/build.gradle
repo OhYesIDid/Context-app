@@ -188,6 +188,12 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
+    testImplementation 'junit:junit:4.13.2'
+    // Plain (non-Robolectric) unit tests link against a stub android.jar whose
+    // org.json.JSONObject throws "not mocked" at runtime — a real org.json jar on the
+    // test classpath resolves ahead of the stub and lets JSONObject actually work.
+    testImplementation 'org.json:json:20231013'
+
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
     def isWebpAnimatedEnabled = (findProperty('expo.webp.animated') ?: "") == "true";

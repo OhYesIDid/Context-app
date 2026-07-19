@@ -99,34 +99,6 @@ class ProTxtBgService : NotificationListenerService() {
         )
         val pendingBubbles = ConcurrentHashMap<String, PendingBubble>()
 
-        // Collapses rapid-fire messages from the same thread into one API call.
-        // Adaptive around this default: a message that reads as finished fires sooner,
-        // one that reads as a continuation waits longer for the rest to arrive.
-        private const val DEBOUNCE_MS = 2_500L
-        private const val DEBOUNCE_FAST_MS = 1_200L
-        private const val DEBOUNCE_SLOW_MS = 4_000L
-
-        // Trailing words that read as "more is coming" rather than a finished thought —
-        // e.g. "wait" or "so" at the end of a message almost always precedes a follow-up.
-        private val CONTINUATION_TRAILERS = setOf(
-            "wait", "so", "and", "but", "also", "actually", "well", "um", "umm", "hmm",
-            "like", "because", "cause", "coz", "plus", "though", "anyway", "anyways",
-        )
-
-        // Punctuation/word heuristic on the single message that just arrived (not the
-        // whole burst) — cheapest signal available, no new tracking needed. Ends in
-        // ./!/? reads as a complete thought; ends on a known continuation word or a
-        // trailing comma reads as mid-sentence. Anything else keeps the default wait.
-        private fun computeDebounceMs(text: String): Long {
-            val trimmed = text.trim()
-            if (trimmed.isEmpty()) return DEBOUNCE_MS
-            if (trimmed.last() in charArrayOf('.', '!', '?')) return DEBOUNCE_FAST_MS
-            if (trimmed.last() == ',') return DEBOUNCE_SLOW_MS
-            val lastWord = trimmed.substringAfterLast(' ').lowercase().trim(',', '.', '!', '?', ':', ';', '-')
-            if (lastWord in CONTINUATION_TRAILERS) return DEBOUNCE_SLOW_MS
-            return DEBOUNCE_MS
-        }
-
         // Safety net for the worker job: enrichment calls (e.g. GoogleAuthUtil.getToken())
         // have no caller-side timeout and can block the pool thread indefinitely, and
         // without this, a single hung call leaves the loading notification stuck forever
@@ -187,41 +159,12 @@ class ProTxtBgService : NotificationListenerService() {
             Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
         )
 
-        // Strips "AppName: " prefixes that messaging apps prepend to contact names in their
-        // notification titles (e.g. "WhatsApp: Maya Hinge" → "Maya Hinge"). Only strips
-        // single-word prefixes so group names like "Ski - Val d'isere" are left intact.
-        fun stripAppPrefix(key: String): String {
-            val colonSpace = key.indexOf(": ")
-            if (colonSpace <= 0) return key
-            val prefix = key.substring(0, colonSpace)
-            return if (prefix.none { it == ' ' }) key.substring(colonSpace + 2) else key
-        }
-
-        fun packageToPlatform(pkg: String): String? = when {
-            pkg.contains("whatsapp")                               -> "whatsapp"
-            pkg.contains("telegram")                               -> "telegram"
-            pkg.contains("instagram")                              -> "instagram"
-            pkg.contains("messenger") || pkg.contains("facebook")  -> "messenger"
-            pkg.contains("signal")                                 -> "signal"
-            pkg.contains("google.android.apps.messaging")          -> "sms"
-            else -> null
-        }
-
-        fun appLabel(pkg: String): String = when {
-            pkg.contains("whatsapp")                          -> "WhatsApp"
-            pkg.contains("telegram")                          -> "Telegram"
-            pkg.contains("hinge")                             -> "Hinge"
-            pkg.contains("tinder")                            -> "Tinder"
-            pkg.contains("bumble")                            -> "Bumble"
-            pkg.contains("instagram")                         -> "Instagram"
-            pkg.contains("messenger") || pkg.contains("facebook") -> "Messenger"
-            pkg.contains("signal")                            -> "Signal"
-            pkg.contains("snapchat")                          -> "Snapchat"
-            pkg.contains("twitter") || pkg.contains(".x.")    -> "X"
-            pkg.contains("viber")                             -> "Viber"
-            pkg.contains("discord")                           -> "Discord"
-            else -> pkg.substringAfterLast(".").replaceFirstChar { it.uppercase() }
-        }
+        // Logic lives in IntentAndSignals (pure, JUnit-testable) — these stay as thin
+        // delegates so the several other files calling ProTxtBgService.stripAppPrefix(...)
+        // etc. don't need to change.
+        fun stripAppPrefix(key: String): String = IntentAndSignals.stripAppPrefix(key)
+        fun packageToPlatform(pkg: String): String? = IntentAndSignals.packageToPlatform(pkg)
+        fun appLabel(pkg: String): String = IntentAndSignals.appLabel(pkg)
     }
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
@@ -686,7 +629,7 @@ class ProTxtBgService : NotificationListenerService() {
         val bundleInboundIntents = notifThread
             .takeLast(INTENT_LOOKBACK_COUNT)
             .filter { (sender, _) -> sender != null }
-            .flatMap { (_, msgText) -> detectIntents(msgText) }
+            .flatMap { (_, msgText) -> IntentAndSignals.detectIntents(intentPatterns, msgText) }
             .filter { it != "other" }
             .distinct()
         if (bundleInboundIntents.isNotEmpty()) {
@@ -717,7 +660,7 @@ class ProTxtBgService : NotificationListenerService() {
 
             ContactSignals.recordIncoming(this, convKey)
             if (activeBubbles.contains(convKey)) return@schedule
-            val directIntentsStr = detectIntents(latestMessage).joinToString(",")
+            val directIntentsStr = IntentAndSignals.detectIntents(intentPatterns, latestMessage).joinToString(",")
             // Inherit intent from recent conversation context when the latest message
             // doesn't independently trigger one. E.g. "what time works?" (other intent)
             // inherits "availability" from "are you free saturday?" in the same thread
@@ -759,7 +702,7 @@ class ProTxtBgService : NotificationListenerService() {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
             }
-            val urgencyScore = computeUrgencyScore(latestMessage, effectiveIntentsStr, convKey)
+            val urgencyScore = IntentAndSignals.computeUrgencyScore(latestMessage, effectiveIntentsStr, arrivalBuffer[convKey]?.size ?: 0)
             runWorkerJob(
                 convKey, notifId, latestMessage, effectiveIntentsStr,
                 replyPendingIntent, remoteInputKey, openChatIntent,
@@ -771,7 +714,7 @@ class ProTxtBgService : NotificationListenerService() {
                 store.recordPendingReminder(convKey, urgencyScore)
                 ReminderWorker.schedule(this, convKey, urgencyScore)
             }
-        }, computeDebounceMs(text), TimeUnit.MILLISECONDS)
+        }, IntentAndSignals.computeDebounceMs(text), TimeUnit.MILLISECONDS)
     }
 
     // Submits the worker call for a conversation and arms the timeout watchdog. Shared by
@@ -933,7 +876,7 @@ class ProTxtBgService : NotificationListenerService() {
             cached.notifId, convKey, cached.replyPendingIntent, cached.remoteInputKey,
             cached.openChatIntent, cached.message, cached.detectedIntents, cached.markAsReadPendingIntent,
         )
-        val urgencyScore = computeUrgencyScore(cached.message, cached.detectedIntents, convKey)
+        val urgencyScore = IntentAndSignals.computeUrgencyScore(cached.message, cached.detectedIntents, arrivalBuffer[convKey]?.size ?: 0)
         runWorkerJob(
             convKey, cached.notifId, cached.message, cached.detectedIntents,
             cached.replyPendingIntent, cached.remoteInputKey, cached.openChatIntent,
@@ -1155,72 +1098,6 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private fun patternsFor(intent: String): List<Regex> = intentPatterns[intent] ?: emptyList()
-
-    private val INTENT_ENRICHMENTS = mapOf(
-        "eta"               to listOf("maps"),
-        "availability"      to listOf("calendar"),
-        "booking"           to listOf("bookings"), // label only — no native Gmail fetch wired up yet, unlike the TS/share-sheet path
-        "location_share"    to listOf("location_coords"),
-        "incoming_location" to listOf("incoming_location", "maps"),
-        "general"           to listOf("calendar"),
-        "other"             to listOf<String>(),
-    )
-
-    private fun computeUrgencyScore(message: String, intentsStr: String, convKey: String): Int {
-        var score = 0
-        val lc = message.lowercase()
-        if (Regex("""\b(asap|urgent|emergency|immediately|right now|help me|need you now)\b""").containsMatchIn(lc)) score += 2
-        if (Regex("""\b(wtf|seriously|come on|hello\?+|are you there|why aren.?t you)\b""").containsMatchIn(lc)) score += 1
-        if (Regex("""\?{2,}|!{2,}""").containsMatchIn(message)) score += 1
-        if ((arrivalBuffer[convKey]?.size ?: 0) >= 2) score += 1
-        if (intentsStr.contains("eta") || intentsStr.contains("availability")) score += 1
-        return score.coerceIn(0, 3)
-    }
-
-    private fun detectIntents(message: String): List<String> {
-        val intents = mutableListOf<String>()
-        if (patternsFor("eta").any { it.containsMatchIn(message) }) intents.add("eta")
-        if (patternsFor("availability").any { it.containsMatchIn(message) }) intents.add("availability")
-        if (patternsFor("booking").any { it.containsMatchIn(message) }) intents.add("booking")
-        if (patternsFor("location_share").any { it.containsMatchIn(message) }) intents.add("location_share")
-        if (patternsFor("incoming_location").any { it.containsMatchIn(message) }) intents.add("incoming_location")
-        // general is a fallback signal only — anything more specific above takes priority.
-        if (intents.isEmpty() && patternsFor("general").any { it.containsMatchIn(message) }) intents.add("general")
-        return intents.ifEmpty { listOf("other") }
-    }
-
-    // Extracts lat/lng from a full Google or Apple Maps URL. Returns null for short URLs.
-    private fun extractMapsCoordinates(text: String): Pair<Double, Double>? {
-        val patterns = listOf(
-            Regex("""@(-?\d+\.\d+),(-?\d+\.\d+)"""),                    // /place/Name/@lat,lng,zoom
-            Regex("""[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)"""),               // ?q=lat,lng
-            Regex("""[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)"""),              // Apple Maps ?ll=lat,lng
-            Regex("""(-?\d{1,3}\.\d{5,})\s*,\s*(-?\d{1,3}\.\d{5,})"""), // raw coords
-        )
-        for (pattern in patterns) {
-            val m = pattern.find(text) ?: continue
-            val lat = m.groupValues[1].toDoubleOrNull() ?: continue
-            val lon = m.groupValues[2].toDoubleOrNull() ?: continue
-            if (lat in -90.0..90.0 && lon in -180.0..180.0) return Pair(lat, lon)
-        }
-        return null
-    }
-
-    // Extracts a Maps short URL that the worker must resolve to get coordinates.
-    private fun extractShortMapsUrl(text: String): String? =
-        Regex("""https?://(?:maps\.app\.goo\.gl|goo\.gl/maps)/\S+""").find(text)?.value
-
-    private fun requiredEnrichments(message: String, intentsStr: String? = null): List<String> {
-        // Use the already-resolved intents (which include inherited context) when available,
-        // so follow-up messages like "ok cool" still get maps/calendar enrichments.
-        val intents = if (!intentsStr.isNullOrEmpty() && intentsStr != "other")
-            intentsStr.split(",").map { it.trim() }
-        else
-            detectIntents(message)
-        return intents.flatMap { INTENT_ENRICHMENTS[it] ?: emptyList() }.distinct()
-    }
-
     private fun putMapsEnrichment(enrichments: JSONObject, eta: EtaData) {
         enrichments.put("maps", JSONObject().apply {
             put("duration", eta.duration)
@@ -1238,7 +1115,7 @@ class ProTxtBgService : NotificationListenerService() {
     // suggestion had no fresh ETA/location data to work from at all).
     fun buildEnrichments(message: String, thread: List<Pair<String?, String>> = emptyList(), convKey: String? = null, intentsStr: String? = null): JSONObject {
         val enrichments = JSONObject()
-        for (key in requiredEnrichments(message, intentsStr)) {
+        for (key in IntentAndSignals.requiredEnrichments(intentPatterns, message, intentsStr)) {
             when (key) {
                 "maps" -> {
                     // Prefer coords from the incoming_location enrichment (already resolved,
@@ -1252,7 +1129,7 @@ class ProTxtBgService : NotificationListenerService() {
                             }
                         if (fromEnrichment != null) return@run fromEnrichment
                         val searchText = listOf(message) + thread.map { it.second }
-                        searchText.firstNotNullOfOrNull { extractMapsCoordinates(it) }
+                        searchText.firstNotNullOfOrNull { IntentAndSignals.extractMapsCoordinates(it) }
                     }
                     val liveResolution: DestinationResolution? = if (incomingCoords != null) {
                         val label = enrichments.optJSONObject("incoming_location")
@@ -1365,7 +1242,7 @@ class ProTxtBgService : NotificationListenerService() {
                     val obj = JSONObject()
                     var resolved = false
                     for (t in searchText) {
-                        val coords = extractMapsCoordinates(t)
+                        val coords = IntentAndSignals.extractMapsCoordinates(t)
                         if (coords != null) {
                             obj.put("lat", coords.first)
                             obj.put("lon", coords.second)
@@ -1377,7 +1254,7 @@ class ProTxtBgService : NotificationListenerService() {
                     }
                     if (!resolved) {
                         // Short URL — pass it to the worker for redirect resolution
-                        val shortUrl = searchText.firstNotNullOfOrNull { extractShortMapsUrl(it) }
+                        val shortUrl = searchText.firstNotNullOfOrNull { IntentAndSignals.extractShortMapsUrl(it) }
                         if (shortUrl != null) obj.put("shortUrl", shortUrl)
                         else obj.put("nativePin", true) // WhatsApp 📍 or Telegram pin
                     }
@@ -1385,96 +1262,11 @@ class ProTxtBgService : NotificationListenerService() {
                 }
             }
         }
-        detectEmotionalCharge(message, thread)?.let { enrichments.put("emotion", it) }
+        IntentAndSignals.detectEmotionalCharge(message, thread)?.let { enrichments.put("emotion", it) }
         return enrichments
     }
 
-    private fun detectEmotionalCharge(message: String, thread: List<Pair<String?, String>>): JSONObject? {
-        // Combine the current message with the last 2 inbound messages for better signal on
-        // short replies like "k" that only make sense in context.
-        val recentInbound = thread.takeLast(3)
-            .filter { (sender, _) -> sender != null }
-            .map { it.second }
-        val corpus = (recentInbound + message).joinToString(" ")
-
-        data class Signal(val emotion: String, val patterns: List<Regex>)
-
-        val highConfidence = listOf(
-            Signal("anger", listOf(
-                Regex("""!{2,}"""),
-                Regex("""\b(hate|furious|disgusting|unbelievable|ridiculous|pathetic|useless|terrible|awful|pissed)\b""", RegexOption.IGNORE_CASE),
-                Regex("""\b(can'?t believe|so done|fed up|had enough|not okay|not ok|done with)\b""", RegexOption.IGNORE_CASE),
-                Regex("""(?<![a-z])[A-Z]{4,}(?![a-z])"""),  // SHOUTING
-            )),
-            Signal("urgency", listOf(
-                Regex("""\b(urgent|asap|emergency|right now|immediately|hurry|need you now)\b""", RegexOption.IGNORE_CASE),
-                Regex("""\?{2,}"""),
-            )),
-            Signal("anxiety", listOf(
-                Regex("""\b(worried|scared|anxious|nervous|panicking|freaking out|stressed|terrified)\b""", RegexOption.IGNORE_CASE),
-                Regex("""\b(are you okay|you alright|is everything ok|what happened|hope you'?re ok)\b""", RegexOption.IGNORE_CASE),
-            )),
-        )
-
-        val lowConfidence = listOf(
-            Signal("frustration", listOf(
-                Regex("""\b(ugh|sigh|smh|ffs|seriously|really\?)\b""", RegexOption.IGNORE_CASE),
-                Regex("""\b(tired of|sick of|again\?|always|never listens)\b""", RegexOption.IGNORE_CASE),
-            )),
-            Signal("passive_agg", listOf(
-                Regex("""\b(fine|whatever|k|sure|ok)\b\.?\s*$""", RegexOption.IGNORE_CASE),
-                Regex("""\.{3,}$"""),  // trailing ellipsis on short message
-            )),
-        )
-
-        // High-confidence: check full corpus (message + recent thread)
-        for ((emotion, patterns) in highConfidence) {
-            if (patterns.any { it.containsMatchIn(corpus) }) {
-                return JSONObject().apply {
-                    put("emotion", emotion)
-                    put("confidence", "high")
-                }
-            }
-        }
-
-        // Low-confidence: only trigger on short messages (< 30 chars) to reduce false positives
-        if (message.trim().length < 30) {
-            for ((emotion, patterns) in lowConfidence) {
-                if (patterns.any { it.containsMatchIn(message) }) {
-                    return JSONObject().apply {
-                        put("emotion", emotion)
-                        put("confidence", "low")
-                    }
-                }
-            }
-        }
-
-        return null
-    }
-
     fun getLastLocation(): android.location.Location? = lastLocation
-
-    private fun extractEventKeyword(message: String): String? {
-        val patterns = listOf(
-            Regex("""when (?:is|are)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            Regex("""what (?:day|time|date) (?:is|are)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            Regex("""what (?:is|are) the (?:day|time|date) (?:of|for)(?: my| the| our)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            Regex("""remind me (?:about|of)(?: my| the)? (.+?)(?:\?|$)""", RegexOption.IGNORE_CASE),
-            // "What time does doodies bday start?" / "When does the party kick off?"
-            Regex("""what (?:day|time|date) does (.+?) (?:start|begin|kick off|happen|take place)\b""", RegexOption.IGNORE_CASE),
-            Regex("""when does (.+?) (?:start|begin|kick off|happen|take place)\b""", RegexOption.IGNORE_CASE),
-        )
-        return patterns.firstNotNullOfOrNull { re ->
-            re.find(message)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length > 1 && it.length < 50 }
-        }
-    }
-
-    private fun extractSearchTerm(keyword: String): String {
-        val stopwords = setOf("my", "the", "a", "an", "our", "your", "his", "her", "their", "its")
-        val words = keyword.split(Regex("\\s+"))
-        val word = words.firstOrNull { !stopwords.contains(it.lowercase().replace(Regex("'s$"), "")) } ?: words[0]
-        return word.replace(Regex("'s$", RegexOption.IGNORE_CASE), "")
-    }
 
     private fun calendarApiCall(token: String, timeMin: String, timeMax: String, maxResults: Int, q: String? = null): JSONArray {
         val qParam = if (q != null) "&q=${URLEncoder.encode(q, "UTF-8")}" else ""
@@ -1490,53 +1282,13 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    // True when the message is clearly asking about a past event ("last week", "did you make it",
-    // "how was the concert last Friday"). False for future/availability questions.
-    private fun isPastTemporalQuery(message: String): Boolean = listOf(
-        Regex("""\blast\s+(week|month|friday|thursday|wednesday|tuesday|monday|weekend|night)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\byesterday\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(did you|were you|was it|how was|how did|did it go)\b""", RegexOption.IGNORE_CASE),
-    ).any { it.containsMatchIn(message) }
-
-    // Extracts a specific date anchor from the message (e.g. "30th July", "July 30").
-    // Returns an Instant at midnight UTC on that date in the current year (or next year if the
-    // date has already passed this year), or null if no specific date is found.
-    private fun extractMentionedDate(message: String): Instant? {
-        val monthNames = mapOf(
-            "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
-            "jul" to 7, "aug" to 8, "sep" to 9, "oct" to 10, "nov" to 11, "dec" to 12,
-            "january" to 1, "february" to 2, "march" to 3, "april" to 4, "june" to 6,
-            "july" to 7, "august" to 8, "september" to 9, "october" to 10, "november" to 11, "december" to 12,
-        )
-        val patterns = listOf(
-            // "30th July", "2nd August", "21st March"
-            Regex("""(\d{1,2})(?:st|nd|rd|th)?\s+(${monthNames.keys.joinToString("|")})""", RegexOption.IGNORE_CASE),
-            // "July 30", "August 2"
-            Regex("""(${monthNames.keys.joinToString("|")})\s+(\d{1,2})(?:st|nd|rd|th)?""", RegexOption.IGNORE_CASE),
-        )
-        for (re in patterns) {
-            val m = re.find(message) ?: continue
-            val (day, month) = if (m.groupValues[1].toIntOrNull() != null)
-                m.groupValues[1].toInt() to (monthNames[m.groupValues[2].lowercase()] ?: continue)
-            else
-                m.groupValues[2].toInt() to (monthNames[m.groupValues[1].lowercase()] ?: continue)
-            if (day < 1 || day > 31) continue
-            val now = java.time.LocalDate.now()
-            var candidate = java.time.LocalDate.of(now.year, month, minOf(day, java.time.YearMonth.of(now.year, month).lengthOfMonth()))
-            // If the date has already passed this year, use next year
-            if (candidate.isBefore(now)) candidate = candidate.withYear(now.year + 1)
-            return candidate.atStartOfDay(ZoneOffset.UTC).toInstant()
-        }
-        return null
-    }
-
     private fun fetchCalendarData(message: String, thread: List<Pair<String?, String>> = emptyList()): JSONObject? {
         // Search the latest message first, then fall back to recent thread messages so that
         // "What time does it start?" can resolve "it" from earlier in the conversation.
         val recentTexts = listOf(message) + thread.takeLast(8).reversed().map { it.second }
-        val keyword = recentTexts.firstNotNullOfOrNull { extractEventKeyword(it) }
-        val isPast = isPastTemporalQuery(message)
-        val mentionedDate = recentTexts.firstNotNullOfOrNull { extractMentionedDate(it) }
+        val keyword = recentTexts.firstNotNullOfOrNull { IntentAndSignals.extractEventKeyword(it) }
+        val isPast = IntentAndSignals.isPastTemporalQuery(message)
+        val mentionedDate = recentTexts.firstNotNullOfOrNull { IntentAndSignals.extractMentionedDate(it) }
         return try {
             val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
             val token = GoogleAuthUtil.getToken(
@@ -1561,7 +1313,7 @@ class ProTxtBgService : NotificationListenerService() {
             val timeMax = URLEncoder.encode(OffsetDateTime.ofInstant(windowEnd, ZoneOffset.UTC).toString(), "UTF-8")
 
             val items = if (keyword != null) {
-                val searchTerm = extractSearchTerm(keyword)
+                val searchTerm = IntentAndSignals.extractSearchTerm(keyword)
                 val first = calendarApiCall(token, timeMin, timeMax, 10, searchTerm)
                 if (first.length() > 0) first else calendarApiCall(token, timeMin, timeMax, 30)
             } else {
@@ -1590,8 +1342,6 @@ class ProTxtBgService : NotificationListenerService() {
             null
         }
     }
-
-    private fun isEtaIntent(message: String): Boolean = patternsFor("eta").any { it.containsMatchIn(message) }
 
     private fun reverseGeocode(lat: Double, lng: Double): String? = try {
         val geocoder = android.location.Geocoder(this, java.util.Locale.getDefault())
@@ -1634,41 +1384,6 @@ class ProTxtBgService : NotificationListenerService() {
         return lastLocation
     }
 
-    // Words that look like destinations when extracted but are not routable place names.
-    private val DESTINATION_NOISE = setOf(
-        "you", "us", "me", "them", "here", "there", "it", "that", "this",
-        "the area", "your place",
-    )
-
-    private val HOME_KEYWORDS = setOf(
-        "home", "my place", "my house", "my flat", "my apartment", "my home",
-    )
-
-    // A leading time-of-day mention ("meeting at 9pm at McDonald's") gets swept up by the
-    // "at X" pattern below matching the EARLIER "at" (before the time) rather than the one
-    // right before the actual place, producing "9pm at McDonald's" — a string starting with
-    // a time expression that the Directions API won't resolve as an address at all, causing
-    // the whole ETA lookup to silently fail. Stripped back off rather than passed through.
-    private val DESTINATION_TIME_PREFIX = Regex("""^\d{1,2}(:\d{2})?\s?(am|pm)?\s+at\s+""", RegexOption.IGNORE_CASE)
-
-    private fun extractDestination(message: String): String? {
-        val patterns = listOf(
-            Regex("""(?:how far|far) (?:are you |is it )?(?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
-            Regex("""(?:near|at|by|in|outside|around) (.+?)(?:\?|,|\. | are | is | and | - |$)""", RegexOption.IGNORE_CASE),
-            Regex("""distance (?:from|to) (.+?)(?:\?|,|$)""", RegexOption.IGNORE_CASE),
-        )
-        return patterns.firstNotNullOfOrNull { re ->
-            val found = re.find(message)?.groupValues?.getOrNull(1)?.trim() ?: return@firstNotNullOfOrNull null
-            val raw = found.replace(DESTINATION_TIME_PREFIX, "").trim()
-            // Reject noise words and overly long / short extractions
-            if (raw.length < 2 || raw.length > 60) return@firstNotNullOfOrNull null
-            if (DESTINATION_NOISE.any { raw.equals(it, ignoreCase = true) }) return@firstNotNullOfOrNull null
-            // Reject if the extracted text reads like a sentence fragment (contains a verb phrase)
-            if (Regex("""\b(are|is|do|will|can|have|going)\b""", RegexOption.IGNORE_CASE).containsMatchIn(raw)) return@firstNotNullOfOrNull null
-            raw
-        }
-    }
-
     private fun getEnrichmentPref(enrichment: String, key: String, default: String): String {
         val prefs = Prefs.main(this)
         return try {
@@ -1678,8 +1393,8 @@ class ProTxtBgService : NotificationListenerService() {
     }
 
     private fun fetchEtaData(message: String): DestinationResolution? {
-        val raw = extractDestination(message) ?: return null
-        if (raw.lowercase().trim() in HOME_KEYWORDS) {
+        val raw = IntentAndSignals.extractDestination(message) ?: return null
+        if (raw.lowercase().trim() in IntentAndSignals.HOME_KEYWORDS) {
             val prefs = Prefs.main(this)
             if (!prefs.contains("home_lat")) return null
             val lat = prefs.getFloat("home_lat", 0f).toDouble()
@@ -1918,7 +1633,7 @@ class ProTxtBgService : NotificationListenerService() {
         // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching.
         val phoneMatch = ContactMatcher.bestMatchByPhone(this, senderName)
         if (phoneMatch != null) {
-            val (crossApp, srcPkg) = crossAppLink(phoneMatch.contactId, convKey, confirmed)
+            val (crossApp, srcPkg) = IntentAndSignals.crossAppLink(phoneMatch.contactId, convKey, confirmed)
             if (!crossApp) {
                 confirmed.put(convKey, phoneMatch.contactId)
                 prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
@@ -1960,7 +1675,7 @@ class ProTxtBgService : NotificationListenerService() {
         // first name). Silently linking on name alone risks permanently misattributing a
         // stranger's messages, memory, and follow-ups to the wrong real contact. Always
         // show the confirmation banner; only a verified phone match above skips it.
-        val (crossApp, srcPkg) = crossAppLink(primary.contactId, convKey, confirmed)
+        val (crossApp, srcPkg) = IntentAndSignals.crossAppLink(primary.contactId, convKey, confirmed)
         return JSONObject().apply {
             put("contactId",   primary.contactId)
             put("displayName", primary.displayName)
@@ -1969,20 +1684,6 @@ class ProTxtBgService : NotificationListenerService() {
             if (crossApp) { put("crossApp", true); put("crossAppSourceLabel", appLabel(srcPkg)) }
             put("candidates",  candidatesJson())
         }.toString()
-    }
-
-    // Returns (true, sourcePkg) when contactId is already linked from a different package.
-    // Synthetic auto:/sep: IDs are per-sender and never constitute a cross-app link.
-    private fun crossAppLink(contactId: String, currentConvKey: String, confirmed: JSONObject): Pair<Boolean, String> {
-        if (contactId.startsWith("auto:") || contactId.startsWith("sep:")) return false to ""
-        val currentPkg = currentConvKey.substringBefore(":")
-        for (key in confirmed.keys()) {
-            if (confirmed.optString(key) == contactId) {
-                val existingPkg = key.substringBefore(":")
-                if (existingPkg != currentPkg) return true to existingPkg
-            }
-        }
-        return false to ""
     }
 
     private fun postSuggestionNotification(
