@@ -1,10 +1,13 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { insertMemory, upsertContact } from './database';
 
-// Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg
+// Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg  (no dash before the sender)
 //     Android: DD/MM/YYYY, HH:MM - Sender: msg
 //          US: M/D/YY, H:MM AM/PM - Sender: msg
-const LINE_RE = /^[\[⁨]?(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}),?\s+[\d:]+(?:\s*[AP]M)?[\]⁩]?\s*[-–]\s*(.+?):\s(.+)$/;
+// The dash is optional: it was previously required unconditionally, which meant the
+// documented iOS format (no dash) never actually matched and iOS exports silently
+// produced zero messages.
+const LINE_RE = /^[\[⁨]?(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}),?\s+[\d:]+(?:\s*[AP]M)?[\]⁩]?\s*[-–]?\s*(.+?):\s(.+)$/;
 
 const SYSTEM_SENDER_RE = /^(Messages and calls|You deleted|This message was deleted|Your security code|Waiting for this message|null|‎)/i;
 
