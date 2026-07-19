@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
 import { formatTripDateRange } from '../services/upcomingEvents';
-import { PURPLE, AMBER, RED, BG, SURFACE, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
+import { PURPLE, AMBER, RED, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
 
 interface Props {
   upcomingData: UpcomingData;
@@ -10,9 +10,9 @@ interface Props {
   onGoToSettings: () => void;
 }
 
-function CalendarRow({ item }: { item: UpcomingCalendarItem }) {
+function CalendarRow({ item, isLast }: { item: UpcomingCalendarItem; isLast: boolean }) {
   return (
-    <View style={styles.item}>
+    <View style={[styles.item, isLast && styles.itemLast]}>
       <View style={[styles.itemIcon, { backgroundColor: CONTEXT + '15' }]}>
         <Text style={styles.itemIconText}>{item.icon}</Text>
       </View>
@@ -39,17 +39,17 @@ function openInGmail(gmailId: string) {
   else Linking.openURL(url).catch(() => {});
 }
 
-function BookingRow({ item }: { item: UpcomingBookingItem }) {
+function BookingRow({ item, isLast }: { item: UpcomingBookingItem; isLast?: boolean }) {
   return (
-    <Pressable style={styles.item} onPress={() => openInGmail(item.gmailId)}>
-      <View style={[styles.itemIcon, { backgroundColor: '#f59e0b15' }]}>
+    <Pressable style={[styles.item, isLast && styles.itemLast]} onPress={() => openInGmail(item.gmailId)}>
+      <View style={[styles.itemIcon, { backgroundColor: AMBER + '15' }]}>
         <Text style={styles.itemIconText}>{item.icon}</Text>
       </View>
       <View style={styles.itemBody}>
         <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.itemSub}>{item.subtitle}</Text>
       </View>
-      <View style={[styles.badge, { backgroundColor: '#f59e0b15' }]}>
+      <View style={[styles.badge, { backgroundColor: AMBER + '15' }]}>
         <Text style={[styles.badgeText, { color: AMBER }]}>Gmail</Text>
       </View>
     </Pressable>
@@ -71,19 +71,42 @@ function TripCard({ trip }: { trip: Trip }) {
           <Text style={styles.itemTitle} numberOfLines={1}>{trip.destination}</Text>
           <Text style={styles.itemSub}>{dayLabel}{dateRange} · {trip.items.length} booking{trip.items.length === 1 ? '' : 's'}</Text>
         </View>
-        <Text style={styles.chevron}>{expanded ? '⌄' : '›'}</Text>
+        <Text style={[styles.chevron, expanded && { color: CONTEXT }]}>{expanded ? '⌄' : '›'}</Text>
       </View>
       {expanded && (
         <View style={styles.tripItems}>
-          {trip.items.map(item => <BookingRow key={item.id} item={item} />)}
+          {trip.items.map((item, i) => <BookingRow key={item.id} item={item} isLast={i === trip.items.length - 1} />)}
         </View>
       )}
     </Pressable>
   );
 }
 
-function ItemRow({ item }: { item: UpcomingCalendarItem | UpcomingBookingItem }) {
-  return item.kind === 'calendar' ? <CalendarRow item={item} /> : <BookingRow item={item} />;
+function ItemRow({ item, isLast }: { item: UpcomingCalendarItem | UpcomingBookingItem; isLast: boolean }) {
+  return item.kind === 'calendar' ? <CalendarRow item={item} isLast={isLast} /> : <BookingRow item={item} isLast={isLast} />;
+}
+
+// One card per date bucket (TODAY / TOMORROW / LATER / RECENT BOOKINGS),
+// mirroring HomeScreen's Upcoming card: icon+label header, count badge,
+// divider-separated rows instead of a separately-bordered box per row.
+function SectionCard({ icon, iconBg, label, count, children }: { icon: string; iconBg: string; label: string; count: number; children: React.ReactNode }) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleRow}>
+          <View style={[styles.cardIcon, { backgroundColor: iconBg }]}>
+            <Text style={styles.cardIconText}>{icon}</Text>
+          </View>
+          <Text style={styles.cardTitle}>{label}</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{count}</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.divider} />
+      {children}
+    </View>
+  );
 }
 
 const byDate = (a: { date: Date }, b: { date: Date }) => a.date.getTime() - b.date.getTime();
@@ -148,31 +171,27 @@ export default function UpcomingScreen({ upcomingData, googleAuthed, onGoToSetti
         )}
 
         {today.length > 0 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: trips.length > 0 ? 20 : 0 }]}>TODAY</Text>
-            {today.map(item => <ItemRow key={item.id} item={item} />)}
-          </>
+          <SectionCard icon="☀️" iconBg={CONTEXT + '20'} label="Today" count={today.length}>
+            {today.map((item, i) => <ItemRow key={item.id} item={item} isLast={i === today.length - 1} />)}
+          </SectionCard>
         )}
 
         {tomorrow.length > 0 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>TOMORROW</Text>
-            {tomorrow.map(item => <ItemRow key={item.id} item={item} />)}
-          </>
+          <SectionCard icon="🗓" iconBg={CONTEXT + '20'} label="Tomorrow" count={tomorrow.length}>
+            {tomorrow.map((item, i) => <ItemRow key={item.id} item={item} isLast={i === tomorrow.length - 1} />)}
+          </SectionCard>
         )}
 
         {later.length > 0 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>LATER</Text>
-            {later.map(item => <ItemRow key={item.id} item={item} />)}
-          </>
+          <SectionCard icon="📆" iconBg={CONTEXT + '20'} label="Later" count={later.length}>
+            {later.map((item, i) => <ItemRow key={item.id} item={item} isLast={i === later.length - 1} />)}
+          </SectionCard>
         )}
 
         {recentBookings.length > 0 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>RECENT BOOKINGS</Text>
-            {recentBookings.map(item => <BookingRow key={item.id} item={item} />)}
-          </>
+          <SectionCard icon="✉️" iconBg={AMBER + '20'} label="Recent bookings" count={recentBookings.length}>
+            {recentBookings.map((item, i) => <BookingRow key={item.id} item={item} isLast={i === recentBookings.length - 1} />)}
+          </SectionCard>
         )}
       </ScrollView>
     </View>
@@ -190,26 +209,39 @@ const styles = StyleSheet.create({
   settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
-  listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },
+  listContent: { padding: 16, paddingTop: 8, paddingBottom: 40 },
 
   sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
 
-  errorBanner:      { backgroundColor: '#ef444415', borderWidth: 1, borderColor: '#ef444433', borderRadius: 14, padding: 12, marginBottom: 16 },
+  errorBanner:      { backgroundColor: RED + '15', borderWidth: 1, borderColor: RED + '33', borderRadius: 14, padding: 12, marginBottom: 16 },
   errorBannerTitle: { fontSize: 13, fontFamily: FONTS.semibold, fontWeight: '600', color: RED, marginBottom: 4 },
   errorBannerText:  { fontSize: 12, color: MUTED },
 
-  item:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
-  itemIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  itemIconText: { fontSize: 17 },
+  // Card: matches HomeScreen's Upcoming card — one bordered SURFACE container
+  // with an icon/title/count header and divider-separated rows.
+  card:       { backgroundColor: SURFACE, borderRadius: 18, borderWidth: 1, borderColor: BORDER, marginBottom: 12, overflow: 'hidden' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardIcon:    { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  cardIconText: { fontSize: 16 },
+  cardTitle:   { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT },
+  divider:     { height: 1, backgroundColor: BORDER, marginHorizontal: 14 },
+  countBadge:     { marginLeft: 'auto', backgroundColor: SURFACE2, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  countBadgeText: { fontSize: 11, fontFamily: FONTS.monoSemibold, fontWeight: '600', color: MUTED },
+
+  item:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
+  itemLast: { borderBottomWidth: 0 },
+  itemIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  itemIconText: { fontSize: 15 },
   itemBody: { flex: 1, minWidth: 0 },
-  itemTitle: { fontSize: 15, color: TEXT, fontWeight: '400' },
+  itemTitle: { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
   itemSub:   { fontSize: 12, color: MUTED, marginTop: 2 },
   badge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   badgeText: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600' },
 
-  tripCard:  { backgroundColor: SURFACE, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+  tripCard:  { backgroundColor: SURFACE, borderRadius: 18, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: BORDER },
   tripHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  tripItems: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: BORDER, gap: 0 },
+  tripItems: { marginTop: 10, paddingTop: 4, borderTopWidth: 1, borderTopColor: BORDER, marginHorizontal: -14 },
   chevron:   { fontSize: 18, color: MUTED, flexShrink: 0 },
 
   emptyState:  { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },

@@ -12,7 +12,7 @@ import {
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
-import { PURPLE, SURFACE, BORDER, TEXT, MUTED, FONTS } from '../theme';
+import { PURPLE, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
 
 const { ProTxtSettings } = NativeModules;
 
@@ -351,38 +351,42 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: '#000000bb', justifyContent: 'flex-end' },
-  sheet:   { backgroundColor: '#1c1c1e', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', paddingBottom: 8 },
+  sheet:   { backgroundColor: SURFACE, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: BORDER, borderBottomWidth: 0, maxHeight: '90%', paddingBottom: 8 },
   handle:  { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
   content: { padding: 20, paddingTop: 8, paddingBottom: 16 },
 
   loadingState: { padding: 40, alignItems: 'center' },
   loadingText:  { color: MUTED, fontSize: 15 },
 
-  header:     { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
-  avatar:     { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e2933c30', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2933c40' },
+  header:     { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24 },
+  avatar:     { width: 52, height: 52, borderRadius: 26, backgroundColor: PURPLE + '25', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: PURPLE + '40' },
   avatarText: { fontSize: 24 },
   headerInfo: { flex: 1 },
   name:       { fontSize: 20, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, letterSpacing: -0.3 },
-  meta:       { fontSize: 12, color: MUTED, marginTop: 2 },
+  meta:       { fontSize: 12, color: MUTED, fontFamily: FONTS.mono, marginTop: 3 },
 
-  section:      { marginBottom: 20 },
-  sectionLabel: { fontSize: 10, fontFamily: FONTS.bold, fontWeight: '700', color: MUTED, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 },
+  section:      { marginBottom: 22 },
+  sectionLabel: { fontSize: 10, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: SURFACE },
-  chipActive:   { borderColor: PURPLE, backgroundColor: '#e2933c20' },
-  chipText:     { fontSize: 13, color: MUTED },
+  chip:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: SURFACE2 },
+  chipActive:   { borderColor: PURPLE, backgroundColor: PURPLE + '20' },
+  chipText:     { fontSize: 13, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
   chipTextActive: { color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
 
-  platformChip:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  // Platform identities use the CONTEXT (teal) accent rather than SIGNAL —
+  // these are passive "where we've seen this person" signals, not an
+  // actionable/urgent state, so they get the secondary accent per the
+  // SIGNAL-for-action / CONTEXT-for-context-signal split used elsewhere.
+  platformChip:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: CONTEXT + '15', borderWidth: 1, borderColor: CONTEXT + '40', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
   platformIcon:       { fontSize: 13 },
   platformLabel:      { fontSize: 12, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
-  platformIdentifier: { fontSize: 11, color: MUTED, maxWidth: 120 },
+  platformIdentifier: { fontSize: 11, color: CONTEXT, fontFamily: FONTS.mono, maxWidth: 120 },
 
   addPlatformChip:     { borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
   addPlatformChipText: { fontSize: 12, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
 
-  memoriesBox: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 12, gap: 6 },
+  memoriesBox: { backgroundColor: SURFACE2, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 12, gap: 8 },
   memoryRow:   { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   memoryDot:   { color: PURPLE, fontSize: 16, lineHeight: 20, marginTop: 1 },
   memoryText:  { flex: 1, fontSize: 13, color: TEXT, lineHeight: 20 },
@@ -394,7 +398,7 @@ const styles = StyleSheet.create({
 
   pickerTitle: { fontSize: 17, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, paddingHorizontal: 20, marginTop: 8 },
   pickerHint:  { fontSize: 12, color: MUTED, paddingHorizontal: 20, marginTop: 6, marginBottom: 14, lineHeight: 17 },
-  pickerSearch: { marginHorizontal: 20, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: TEXT, fontSize: 14, marginBottom: 10 },
+  pickerSearch: { marginHorizontal: 20, backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: TEXT, fontFamily: FONTS.regular, fontSize: 14, marginBottom: 10 },
   pickerList:  { maxHeight: 320, paddingHorizontal: 20 },
   pickerRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   pickerRowName:     { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },

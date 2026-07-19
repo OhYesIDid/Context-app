@@ -48,6 +48,7 @@ export const FONTS_TO_LOAD = {
 export const PURPLE = COLORS.signal;
 export const BG = COLORS.bg;
 export const SURFACE = COLORS.bg2;
+export const SURFACE2 = COLORS.bg3; // elevated surface nested inside a SURFACE card — mirrors Theme.kt's SURFACE2
 export const BORDER = COLORS.border;
 export const TEXT = COLORS.text;
 export const MUTED = COLORS.muted;

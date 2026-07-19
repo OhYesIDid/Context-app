@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import type { FollowUp } from '../services/followUps';
 import { deleteFollowUp, formatDueLabel, markDone, urgency } from '../services/followUps';
-import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED, FONTS } from '../theme';
+import { PURPLE, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, GREEN, AMBER, RED, FONTS } from '../theme';
 
 const URGENCY_COLOR: Record<string, string> = {
   overdue: RED, today: AMBER, soon: PURPLE, later: MUTED, none: BORDER,
@@ -29,6 +29,8 @@ export default function FollowUpsScreen({ followUps, setFollowUps, onGoToSetting
     const order = ['overdue', 'today', 'soon', 'later', 'none'];
     return order.indexOf(urgency(a)) - order.indexOf(urgency(b)) || (a.dueAt ?? Infinity) - (b.dueAt ?? Infinity);
   });
+
+  const overdueCount = pending.filter(f => urgency(f) === 'overdue').length;
 
   const handleDone = async (id: string) => {
     setFollowUps(await markDone(id));
@@ -60,15 +62,29 @@ export default function FollowUpsScreen({ followUps, setFollowUps, onGoToSetting
         )}
 
         {sortedPending.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>PENDING</Text>
-            {sortedPending.map(f => {
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardIcon, { backgroundColor: PURPLE + '20' }]}>
+                  <Text style={styles.cardIconText}>📋</Text>
+                </View>
+                <Text style={styles.cardTitle}>Pending</Text>
+                {overdueCount > 0 && (
+                  <View style={[styles.badge, { backgroundColor: RED }]}>
+                    <Text style={styles.badgeText}>{overdueCount} overdue</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={styles.divider} />
+
+            {sortedPending.map((f, i) => {
               const u = urgency(f);
               const label = formatDueLabel(f);
               return (
-                <View key={f.id} style={styles.item}>
-                  <Pressable style={styles.checkBtn} onPress={() => handleDone(f.id)}>
-                    <View style={styles.checkCircle} />
+                <View key={f.id} style={[styles.item, i === sortedPending.length - 1 && styles.itemLast]}>
+                  <Pressable style={styles.checkBtn} onPress={() => handleDone(f.id)} hitSlop={8}>
+                    <View style={[styles.checkCircle, { borderColor: URGENCY_COLOR[u] }]} />
                   </Pressable>
                   <View style={styles.itemContent}>
                     <Text style={[styles.itemText, u === 'overdue' && { color: '#fca5a5' }]}>{f.text}</Text>
@@ -86,15 +102,24 @@ export default function FollowUpsScreen({ followUps, setFollowUps, onGoToSetting
                 </View>
               );
             })}
-          </>
+          </View>
         )}
 
         {done.length > 0 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>DONE</Text>
-            {done.slice(0, 10).map(f => (
-              <View key={f.id} style={[styles.item, { opacity: 0.5 }]}>
-                <View style={[styles.checkBtn]}>
+          <View style={[styles.card, styles.doneCard]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardIcon, { backgroundColor: GREEN + '20' }]}>
+                  <Text style={styles.cardIconText}>✓</Text>
+                </View>
+                <Text style={styles.cardTitle}>Done</Text>
+              </View>
+            </View>
+            <View style={styles.divider} />
+
+            {done.slice(0, 10).map((f, i) => (
+              <View key={f.id} style={[styles.item, i === Math.min(done.length, 10) - 1 && styles.itemLast, { opacity: 0.55 }]}>
+                <View style={styles.checkBtn}>
                   <View style={[styles.checkCircle, styles.checkCircleDone]}>
                     <Text style={styles.checkMark}>✓</Text>
                   </View>
@@ -108,7 +133,7 @@ export default function FollowUpsScreen({ followUps, setFollowUps, onGoToSetting
                 </Pressable>
               </View>
             ))}
-          </>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -124,11 +149,25 @@ const styles = StyleSheet.create({
   settingsIcon: { fontSize: 17, color: MUTED },
 
   list:        { flex: 1 },
-  listContent: { padding: 16, paddingTop: 4, paddingBottom: 40 },
+  listContent: { padding: 16, paddingTop: 8, paddingBottom: 40 },
 
-  sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
+  // Card treatment matches HomeScreen's Follow-ups card: one bordered SURFACE
+  // container with an icon/title/badge header and divider-separated rows,
+  // instead of a separately-bordered box per row.
+  card:       { backgroundColor: SURFACE, borderRadius: 18, borderWidth: 1, borderColor: BORDER, marginBottom: 12, overflow: 'hidden' },
+  doneCard:   { marginTop: 4 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardIcon:    { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  cardIconText: { fontSize: 16 },
+  cardTitle:   { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT },
+  divider:     { height: 1, backgroundColor: BORDER, marginHorizontal: 14 },
 
-  item:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+  badge:     { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  badgeText: { fontSize: 11, fontFamily: FONTS.bold, fontWeight: '700', color: '#fff' },
+
+  item:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
+  itemLast:    { borderBottomWidth: 0 },
   checkBtn:    { paddingTop: 1 },
   checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   checkCircleDone: { backgroundColor: GREEN, borderColor: GREEN },
@@ -137,7 +176,7 @@ const styles = StyleSheet.create({
   itemContent: { flex: 1, minWidth: 0 },
   itemText:    { fontSize: 15, color: TEXT, fontWeight: '400', lineHeight: 21 },
   itemMeta:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  metaTag:     { fontSize: 11, color: MUTED, backgroundColor: BORDER, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  metaTag:     { fontSize: 11, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500', backgroundColor: SURFACE2, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   metaDue:     { fontSize: 11, fontFamily: FONTS.monoSemibold, fontWeight: '600' },
   deleteBtn:   { fontSize: 14, color: MUTED, paddingTop: 2 },
 

@@ -55,7 +55,7 @@ import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, 
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
 import { logEvent } from './src/services/analytics';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
-import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, FONTS } from './src/theme';
+import { PURPLE, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, GREEN, RED, CONTEXT, FONTS } from './src/theme';
 
 const TONE_LABEL: Record<Tone, string> = {
   formal: 'Formal',
@@ -515,8 +515,14 @@ export default function App() {
         </View>
 
         {/* ACCOUNT */}
-        <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: PURPLE + '20' }]}>
+              <Text style={styles.sectionIconText}>👤</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Account</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingText}>Google account</Text>
@@ -553,7 +559,7 @@ export default function App() {
             }}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: savedHome ? '#4ade80' : MUTED }]} />
+              <View style={[styles.statusDot, { backgroundColor: savedHome ? GREEN : MUTED }]} />
               <View>
                 <Text style={styles.settingText}>Home location</Text>
                 <Text style={styles.setupStatus} numberOfLines={1}>
@@ -588,8 +594,14 @@ export default function App() {
         </View>
 
         {/* PERMISSIONS */}
-        <Text style={styles.sectionLabel}>PERMISSIONS</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: PURPLE + '20' }]}>
+              <Text style={styles.sectionIconText}>🔐</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Permissions</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           {(Platform.Version as number) >= 33 && (
             <Pressable
               style={styles.settingRow}
@@ -599,7 +611,7 @@ export default function App() {
               }}
             >
               <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: notificationPermGranted ? '#4ade80' : '#f87171' }]} />
+                <View style={[styles.statusDot, { backgroundColor: notificationPermGranted ? GREEN : RED }]} />
                 <View>
                   <Text style={styles.settingText}>Notifications</Text>
                   <Text style={styles.setupStatus}>{notificationPermGranted ? 'Enabled' : 'Needed to show suggestions at all — tap to enable'}</Text>
@@ -613,7 +625,7 @@ export default function App() {
             onPress={() => Linking.sendIntent('android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS').catch(() => {})}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: notifPermission ? '#4ade80' : '#f87171' }]} />
+              <View style={[styles.statusDot, { backgroundColor: notifPermission ? GREEN : RED }]} />
               <View>
                 <Text style={styles.settingText}>Notification access</Text>
                 <Text style={styles.setupStatus}>{notifPermission ? 'Listening for messages' : 'Tap to enable'}</Text>
@@ -629,7 +641,7 @@ export default function App() {
             }}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: locationGranted ? '#4ade80' : '#f87171' }]} />
+              <View style={[styles.statusDot, { backgroundColor: locationGranted ? GREEN : RED }]} />
               <View>
                 <Text style={styles.settingText}>Location</Text>
                 <Text style={styles.setupStatus}>{locationGranted ? 'Enabled — used for ETA suggestions' : 'Tap to enable'}</Text>
@@ -643,7 +655,7 @@ export default function App() {
               onPress={() => ProTxtSettings?.openAppLocationSettings?.() ?? Linking.openSettings()}
             >
               <View style={styles.settingLeft}>
-                <View style={[styles.statusDot, { backgroundColor: backgroundLocationGranted ? '#4ade80' : '#f87171' }]} />
+                <View style={[styles.statusDot, { backgroundColor: backgroundLocationGranted ? GREEN : RED }]} />
                 <View>
                   <Text style={styles.settingText}>Background location</Text>
                   <Text style={styles.setupStatus}>
@@ -659,7 +671,7 @@ export default function App() {
             onPress={() => ProTxtSettings?.openAccessibilitySettings?.()}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? '#4ade80' : MUTED }]} />
+              <View style={[styles.statusDot, { backgroundColor: accessibilityEnabled ? GREEN : MUTED }]} />
               <View>
                 <Text style={styles.settingText}>Keyboard overlay <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
                 <Text style={styles.setupStatus}>{accessibilityEnabled ? 'Active' : 'Off — tap to enable'}</Text>
@@ -670,14 +682,20 @@ export default function App() {
         </View>
 
         {/* REPLY SURFACES */}
-        <Text style={styles.sectionLabel}>REPLY SURFACES</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: PURPLE + '20' }]}>
+              <Text style={styles.sectionIconText}>💬</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Reply surfaces</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           <Pressable
             style={styles.settingRow}
             onPress={() => ProTxtSettings?.openAppNotificationSettings?.()}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: bubblesEnabled ? '#4ade80' : '#f87171' }]} />
+              <View style={[styles.statusDot, { backgroundColor: bubblesEnabled ? GREEN : RED }]} />
               <View>
                 <Text style={styles.settingText}>Suggestion bubbles</Text>
                 <Text style={styles.setupStatus}>
@@ -692,7 +710,7 @@ export default function App() {
             onPress={() => ProTxtSettings?.openInputMethodSettings?.()}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? '#4ade80' : MUTED }]} />
+              <View style={[styles.statusDot, { backgroundColor: keyboardDefault ? GREEN : MUTED }]} />
               <View>
                 <Text style={styles.settingText}>ConTxt Keyboard <Text style={{ color: MUTED, fontSize: 11 }}>beta</Text></Text>
                 <Text style={styles.setupStatus}>{keyboardDefault ? 'Active' : 'Install keyboard APK then set as default'}</Text>
@@ -703,8 +721,14 @@ export default function App() {
         </View>
 
         {/* REPLY PREFERENCES */}
-        <Text style={styles.sectionLabel}>REPLY PREFERENCES</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: PURPLE + '20' }]}>
+              <Text style={styles.sectionIconText}>🎛</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Reply preferences</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           <Pressable style={styles.settingRow} onPress={() => { if (!isPro) openPaywall(); }} disabled={isPro}>
             <View style={{ flex: 1, marginRight: 16 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -790,8 +814,14 @@ export default function App() {
         </View>
 
         {/* ENRICHMENT SOURCES */}
-        <Text style={styles.sectionLabel}>ENRICHMENT SOURCES</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: CONTEXT + '20' }]}>
+              <Text style={styles.sectionIconText}>🔌</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Enrichment sources</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           <Pressable style={styles.settingRow} onPress={() => setGmailSettingsVisible(true)}>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingText}>Gmail Bookings</Text>
@@ -800,7 +830,7 @@ export default function App() {
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80' }]}>✓</Text>}
+              {googleAuthed && <Text style={[styles.setupStatus, { color: GREEN }]}>✓</Text>}
               <Text style={styles.chevron}>›</Text>
             </View>
           </Pressable>
@@ -819,8 +849,14 @@ export default function App() {
         </View>
 
         {/* CONTACTS */}
-        <Text style={styles.sectionLabel}>CONTACTS</Text>
         <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: CONTEXT + '20' }]}>
+              <Text style={styles.sectionIconText}>👥</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Contacts</Text>
+          </View>
+          <View style={styles.sectionDivider} />
           <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setContactsVisible(true)}>
             <View>
               <Text style={styles.settingText}>Manage contacts</Text>
@@ -1028,7 +1064,7 @@ export default function App() {
                 <Text style={styles.settingText}>{googleAuthed ? 'Gmail connected' : 'Sign in with Google'}</Text>
                 <Text style={styles.setupStatus}>{googleAuthed ? 'Booking lookups enabled' : 'Sign in with Google in Settings to enable'}</Text>
               </View>
-              {googleAuthed && <Text style={[styles.setupStatus, { color: '#4ade80', fontFamily: FONTS.semibold, fontWeight: '600' }]}>✓ On</Text>}
+              {googleAuthed && <Text style={[styles.setupStatus, { color: GREEN, fontFamily: FONTS.semibold, fontWeight: '600' }]}>✓ On</Text>}
             </View>
             <Text style={[styles.modalSection, { marginTop: 16 }]}>LOOKBACK PERIOD</Text>
             <View style={styles.chipRow}>
@@ -1240,7 +1276,7 @@ export default function App() {
             )}
 
             {paywallError && (
-              <Text style={{ color: '#f87171', fontSize: 13, textAlign: 'center', marginBottom: 12 }}>{paywallError}</Text>
+              <Text style={{ color: RED, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>{paywallError}</Text>
             )}
 
             <Pressable
@@ -1331,11 +1367,19 @@ const styles = StyleSheet.create({
   navIconActive: { color: PURPLE },
   navLabel:      { fontSize: 10, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500', marginTop: 2 },
   navLabelActive:{ color: PURPLE },
-  navBadge:      { position: 'absolute', top: -4, right: -8, backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  navBadge:      { position: 'absolute', top: -4, right: -8, backgroundColor: RED, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   navBadgeText:  { fontSize: 10, fontFamily: FONTS.monoSemibold, fontWeight: '700', color: '#fff' },
 
   sectionLabel: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  sectionCard: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 24, overflow: 'hidden' },
+  sectionCard: { backgroundColor: SURFACE, borderRadius: 18, borderWidth: 1, borderColor: BORDER, marginBottom: 24, overflow: 'hidden' },
+
+  // Icon-badge section header, matching HomeScreen's card header pattern
+  // (colored circular icon + title) instead of a bare uppercase label.
+  sectionHeader:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  sectionIcon:     { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  sectionIconText: { fontSize: 14 },
+  sectionTitle:    { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT },
+  sectionDivider:  { height: 1, backgroundColor: BORDER, marginHorizontal: 16 },
 
   statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
 
@@ -1349,7 +1393,7 @@ const styles = StyleSheet.create({
   setupStatus: { fontSize: 12, color: MUTED, marginTop: 1 },
   setupAction: { fontSize: 13, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
   setupDot: { fontSize: 18, color: MUTED, width: 20, textAlign: 'center' },
-  setupDotDone: { color: '#4ade80' },
+  setupDotDone: { color: GREEN },
 
   chevron: { fontSize: 20, color: MUTED, lineHeight: 22 },
   categoryValue: { fontSize: 14, color: MUTED },
@@ -1364,14 +1408,14 @@ const styles = StyleSheet.create({
   chipTextActive: { color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
 
   modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#1c1c1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },
+  modalSheet: { backgroundColor: SURFACE, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, maxHeight: '90%' },
   modalHandle: { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, marginBottom: 24 },
   modalSection: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   modalClose: { marginTop: 24, backgroundColor: PURPLE, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   modalCloseText: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, fontWeight: '600' },
 
-  searchInput: { backgroundColor: BORDER, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: TEXT, marginBottom: 16 },
+  searchInput: { backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, fontFamily: FONTS.regular, color: TEXT, marginBottom: 16 },
   shareInput: { backgroundColor: SURFACE, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, fontSize: 16, color: TEXT, minHeight: 80, textAlignVertical: 'top' },
 
   setupHint: { color: MUTED, fontSize: 12, marginBottom: 12 },
@@ -1381,7 +1425,7 @@ const styles = StyleSheet.create({
   chipLabel: { color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
 
   proBadge: { backgroundColor: PURPLE + '22', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: PURPLE + '55' },
-  proBadgeText: { color: '#a78bfa', fontSize: 10, fontFamily: FONTS.bold, fontWeight: '700', letterSpacing: 0.8 },
+  proBadgeText: { color: PURPLE, fontSize: 10, fontFamily: FONTS.bold, fontWeight: '700', letterSpacing: 0.8 },
 
   paywallIconRing: { width: 64, height: 64, borderRadius: 32, backgroundColor: PURPLE + '22', borderWidth: 1, borderColor: PURPLE + '55', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   paywallFeatureList: { gap: 10, marginBottom: 4 },
@@ -1392,7 +1436,7 @@ const styles = StyleSheet.create({
   paywallPkgCardSelected: { borderColor: PURPLE, backgroundColor: PURPLE + '11' },
   paywallPkgName: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: MUTED },
   paywallBestValue: { backgroundColor: PURPLE + '33', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
-  paywallBestValueText: { color: '#a78bfa', fontSize: 11, fontFamily: FONTS.bold, fontWeight: '700' },
+  paywallBestValueText: { color: PURPLE, fontSize: 11, fontFamily: FONTS.bold, fontWeight: '700' },
   paywallRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
   paywallRadioSelected: { borderColor: PURPLE },
   paywallRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: PURPLE },

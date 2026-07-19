@@ -22,7 +22,7 @@ import { importDeviceContacts } from '../services/deviceContacts';
 import { importGoogleContacts } from '../services/googlePeople';
 import { refreshContactListCache } from '../services/styleSync';
 import { pickAndParseWhatsAppExport } from '../services/whatsappParser';
-import { BG, SURFACE, BORDER, TEXT, MUTED, PURPLE, GREEN, RED, FONTS } from '../theme';
+import { BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, PURPLE, GREEN, RED, CONTEXT, FONTS } from '../theme';
 
 const { ProTxtSettings: ConTxtSettings } = NativeModules;
 
@@ -267,7 +267,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 0:
         return (
           <>
-            <Text style={s.icon}>💬</Text>
+            <View style={s.iconRing}><Text style={s.icon}>💬</Text></View>
             <Text style={s.stepTitle}>Meet ConTxt</Text>
             <Text style={s.stepDesc}>Smart reply suggestions that appear before you open your messages. Set up takes about a minute.</Text>
           </>
@@ -275,18 +275,19 @@ export default function SetupWizard({ onComplete }: Props) {
       case 1:
         return (
           <>
-            <Text style={s.icon}>🔔</Text>
+            <View style={s.iconRing}><Text style={s.icon}>🔔</Text></View>
             <Text style={s.stepTitle}>Allow notification access</Text>
             <Text style={s.stepDesc}>ConTxt reads incoming messages to prepare suggestions. Your messages stay on your device.</Text>
             <View style={[s.pill, nlsConnected ? s.pillGreen : s.pillRed]}>
-              <Text style={s.pillText}>{nlsConnected ? '🟢  Enabled' : '🔴  Not enabled'}</Text>
+              <View style={[s.pillDot, { backgroundColor: nlsConnected ? GREEN : RED }]} />
+              <Text style={s.pillText}>{nlsConnected ? 'Enabled' : 'Not enabled'}</Text>
             </View>
           </>
         );
       case 2:
         return (
           <>
-            <Text style={s.icon}>📲</Text>
+            <View style={s.iconRing}><Text style={s.icon}>📲</Text></View>
             <Text style={s.stepTitle}>Send you notifications</Text>
             <Text style={s.stepDesc}>Required to deliver reply suggestions as Android notification bubbles.</Text>
           </>
@@ -294,7 +295,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 3:
         return (
           <>
-            <Text style={s.icon}>💬</Text>
+            <View style={s.iconRing}><Text style={s.icon}>💬</Text></View>
             <Text style={s.stepTitle}>Enable suggestion bubbles</Text>
             <Text style={s.stepDesc}>Tap below to open notification settings, then enable Bubbles for ConTxt under {bubbleLabel}.</Text>
           </>
@@ -302,7 +303,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 4:
         return (
           <>
-            <Text style={s.icon}>📍</Text>
+            <View style={[s.iconRing, s.iconRingContext]}><Text style={s.icon}>📍</Text></View>
             <Text style={s.stepTitle}>ETA suggestions</Text>
             <Text style={s.stepDesc}>When someone asks where you are, ConTxt can include your estimated arrival time.</Text>
           </>
@@ -310,7 +311,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 5:
         return (
           <>
-            <Text style={s.icon}>📅</Text>
+            <View style={[s.iconRing, s.iconRingContext]}><Text style={s.icon}>📅</Text></View>
             <Text style={s.stepTitle}>Availability suggestions</Text>
             <Text style={s.stepDesc}>See your calendar so ConTxt can suggest times when you're free.</Text>
           </>
@@ -318,7 +319,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 6:
         return (
           <>
-            <Text style={s.icon}>👥</Text>
+            <View style={s.iconRing}><Text style={s.icon}>👥</Text></View>
             <Text style={s.stepTitle}>Import contacts</Text>
             <Text style={s.stepDesc}>Better suggestions come from knowing who you're talking to.</Text>
             <View style={s.importRows}>
@@ -348,7 +349,7 @@ export default function SetupWizard({ onComplete }: Props) {
       case 7:
         return (
           <>
-            <Text style={s.icon}>✅</Text>
+            <View style={[s.iconRing, s.iconRingGreen]}><Text style={s.icon}>✅</Text></View>
             <Text style={s.stepTitle}>You're all set!</Text>
             <Text style={s.stepDesc}>ConTxt runs in the background. Suggestions appear when someone asks about your ETA, availability, or plans — when your context makes a real difference.</Text>
           </>
@@ -403,7 +404,7 @@ export default function SetupWizard({ onComplete }: Props) {
               </>
             ) : (
               <>
-                <ActivityIndicator color="#e2933c" style={{ marginVertical: 8 }} />
+                <ActivityIndicator color={PURPLE} style={{ marginVertical: 8 }} />
                 {(importProgress?.current ?? 0) > 0 && (
                   <Text style={s.progressCount}>{importProgress!.current} imported so far…</Text>
                 )}
@@ -486,23 +487,34 @@ const s = StyleSheet.create({
 
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
 
-  icon:      { fontSize: 52, marginBottom: 24 },
+  // Icon ring — same "colored circle + emoji" badge motif as the card icons
+  // on Home/FollowUps/Upcoming, scaled up for a full-screen onboarding step.
+  // Amber (SIGNAL) by default for action/permission steps; teal (CONTEXT) for
+  // location/calendar steps; green for the final "done" step.
+  iconRing:        { width: 88, height: 88, borderRadius: 44, backgroundColor: PURPLE + '18', borderWidth: 1, borderColor: PURPLE + '40', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  iconRingContext: { backgroundColor: CONTEXT + '18', borderColor: CONTEXT + '40' },
+  iconRingGreen:   { backgroundColor: GREEN + '18', borderColor: GREEN + '40' },
+  icon:      { fontSize: 40 },
   stepTitle: { fontSize: 26, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, textAlign: 'center', marginBottom: 14, letterSpacing: -0.4 },
   stepDesc:  { fontSize: 16, color: MUTED, textAlign: 'center', lineHeight: 24 },
 
-  pill:      { marginTop: 24, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  pillGreen: { backgroundColor: GREEN + '22', borderColor: GREEN + '55' },
-  pillRed:   { backgroundColor: RED + '22',   borderColor: RED + '55'   },
+  pill:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  pillDot:   { width: 8, height: 8, borderRadius: 4 },
+  pillGreen: { backgroundColor: GREEN + '18', borderColor: GREEN + '55' },
+  pillRed:   { backgroundColor: RED + '18',   borderColor: RED + '55'   },
   pillText:  { fontSize: 14, fontFamily: FONTS.medium, fontWeight: '500', color: TEXT },
 
-  progressOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  progressCard: { backgroundColor: '#fff', borderRadius: 16, padding: 28, width: 280, alignItems: 'center' },
-  progressLabel: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: '#1e1b4b', marginBottom: 16, textAlign: 'center' },
-  progressTrack: { width: '100%', height: 6, backgroundColor: '#e0e7ff', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, backgroundColor: '#e2933c', borderRadius: 3 },
-  progressCount: { fontSize: 13, color: '#6b7280', marginTop: 10, fontFamily: FONTS.mono },
+  // Dark SURFACE card, in line with every other sheet/overlay in the app —
+  // this was previously a stray white Tailwind-indigo card (#fff bg,
+  // #1e1b4b text, #e0e7ff track) left over from the pre-Instrument palette.
+  progressOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  progressCard: { backgroundColor: SURFACE, borderRadius: 18, borderWidth: 1, borderColor: BORDER, padding: 28, width: 280, alignItems: 'center' },
+  progressLabel: { fontSize: 15, fontFamily: FONTS.semibold, fontWeight: '600', color: TEXT, marginBottom: 16, textAlign: 'center' },
+  progressTrack: { width: '100%', height: 6, backgroundColor: SURFACE2, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 6, backgroundColor: PURPLE, borderRadius: 3 },
+  progressCount: { fontSize: 13, color: MUTED, marginTop: 10, fontFamily: FONTS.mono },
   bgBtn: { marginTop: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  bgBtnText: { fontSize: 13, color: '#e2933c', fontFamily: FONTS.medium, fontWeight: '500' },
+  bgBtnText: { fontSize: 13, color: PURPLE, fontFamily: FONTS.medium, fontWeight: '500' },
 
   importRows: { width: '100%', marginTop: 28 },
   importRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
