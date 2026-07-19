@@ -25,7 +25,11 @@ async function persist(items: FollowUp[]): Promise<void> {
 
 export async function addFollowUp(draft: Omit<FollowUp, 'id' | 'createdAt' | 'status'>): Promise<FollowUp[]> {
   const items = await loadFollowUps();
-  const item: FollowUp = { ...draft, id: `fu_${Date.now()}`, createdAt: Date.now(), status: 'pending' };
+  // Date.now() alone can collide if two follow-ups are added within the same millisecond
+  // (e.g. a fast double-tap) — markDone/deleteFollowUp match by id, so a collision would
+  // silently act on both entries at once. The random suffix makes that practically impossible.
+  const id = `fu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const item: FollowUp = { ...draft, id, createdAt: Date.now(), status: 'pending' };
   const next = [item, ...items];
   await persist(next);
   return next;
