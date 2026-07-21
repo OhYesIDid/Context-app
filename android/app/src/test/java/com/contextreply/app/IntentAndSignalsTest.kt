@@ -1,6 +1,5 @@
 package com.contextreply.app
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -168,27 +167,6 @@ class IntentAndSignalsTest {
         assertEquals("birthday", IntentAndSignals.extractSearchTerm("the birthday"))
         assertEquals("party", IntentAndSignals.extractSearchTerm("her party"))
         assertEquals("doodie", IntentAndSignals.extractSearchTerm("doodie's birthday"))
-    }
-
-    // ── crossAppLink ─────────────────────────────────────────────────────────────
-
-    @Test fun `detects a contact already confirmed under a different package`() {
-        val confirmed = JSONObject().put("com.whatsapp:Alice", "contact-1")
-        val (isCrossApp, sourcePkg) = IntentAndSignals.crossAppLink("contact-1", "org.telegram.messenger:Alice", confirmed)
-        assertTrue(isCrossApp)
-        assertEquals("com.whatsapp", sourcePkg)
-    }
-
-    @Test fun `is not cross-app when the only confirmed entry is from the same package`() {
-        val confirmed = JSONObject().put("com.whatsapp:Alice", "contact-1")
-        val (isCrossApp, _) = IntentAndSignals.crossAppLink("contact-1", "com.whatsapp:Alice", confirmed)
-        assertFalse(isCrossApp)
-    }
-
-    @Test fun `synthetic auto- and sep- ids never count as a cross-app link`() {
-        val confirmed = JSONObject().put("com.whatsapp:Alice", "auto:alice")
-        val (isCrossApp, _) = IntentAndSignals.crossAppLink("auto:alice", "org.telegram.messenger:Alice", confirmed)
-        assertFalse(isCrossApp)
     }
 
     // ── extractDestination ───────────────────────────────────────────────────────

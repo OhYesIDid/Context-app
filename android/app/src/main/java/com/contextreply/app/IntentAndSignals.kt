@@ -252,25 +252,6 @@ object IntentAndSignals {
         return word.replace(Regex("'s$", RegexOption.IGNORE_CASE), "")
     }
 
-    // ── Contact cross-app link check ─────────────────────────────────────────────
-    // A small pure helper from the contact-linking flow (contactMatchJson stays in
-    // ProTxtBgService — it reads/writes SharedPreferences and calls ContactMatcher, both
-    // Context-dependent; this piece of its logic needed neither).
-
-    // Returns (true, sourcePkg) when contactId is already linked from a different package.
-    // Synthetic auto:/sep: IDs are per-sender and never constitute a cross-app link.
-    fun crossAppLink(contactId: String, currentConvKey: String, confirmed: JSONObject): Pair<Boolean, String> {
-        if (contactId.startsWith("auto:") || contactId.startsWith("sep:")) return false to ""
-        val currentPkg = currentConvKey.substringBefore(":")
-        for (key in confirmed.keys()) {
-            if (confirmed.optString(key) == contactId) {
-                val existingPkg = key.substringBefore(":")
-                if (existingPkg != currentPkg) return true to existingPkg
-            }
-        }
-        return false to ""
-    }
-
     // ── Destination extraction ───────────────────────────────────────────────────
 
     // Words that look like destinations when extracted but are not routable place names.

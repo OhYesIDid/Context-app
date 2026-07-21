@@ -1593,58 +1593,14 @@ class ProTxtBgService : NotificationListenerService() {
 
         // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching.
         val phoneMatch = ContactMatcher.bestMatchByPhone(this, senderName)
-        if (phoneMatch != null) {
-            val (crossApp, srcPkg) = IntentAndSignals.crossAppLink(phoneMatch.contactId, convKey, confirmed)
-            if (!crossApp) {
-                confirmed.put(convKey, phoneMatch.contactId)
-                prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
-                return null
-            }
-            return JSONObject().apply {
-                put("contactId",   phoneMatch.contactId)
-                put("displayName", phoneMatch.displayName)
-                put("preferredTone", phoneMatch.preferredTone ?: "")
-                put("confidence",  1.0)
-                put("crossApp", true)
-                put("crossAppSourceLabel", appLabel(srcPkg))
-                put("candidates",  JSONArray())
-            }.toString()
-        }
+        val nameMatches = if (phoneMatch == null) ContactMatcher.bestMatches(this, senderName, 3) else emptyList()
 
-        val candidates = ContactMatcher.bestMatches(this, senderName, 3)
-        val primary = candidates.firstOrNull() ?: run {
-            // No contact found anywhere — auto-register so the banner never repeats.
-            val autoId = "auto:${senderName.lowercase().replace(Regex("[^a-z0-9]"), "_").take(40)}"
-            confirmed.put(convKey, autoId)
+        val decision = ContactLinking.decideContactMatch(convKey, senderName, confirmed, phoneMatch, nameMatches)
+        decision.confirmIdentity?.let { contactId ->
+            confirmed.put(convKey, contactId)
             prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
-            return null
         }
-
-        fun candidatesJson() = JSONArray().also { arr ->
-            for (c in candidates) arr.put(JSONObject().apply {
-                put("contactId",    c.contactId)
-                put("displayName",  c.displayName)
-                put("preferredTone", c.preferredTone ?: "")
-                put("confidence",   c.confidence)
-            })
-        }
-
-        // Name-only fuzzy matches are never silently auto-confirmed, regardless of
-        // confidence — unlike the phone-anchor path above, a display name alone isn't a
-        // verified identity. An unsaved WhatsApp/Telegram sender can set their own display
-        // name to anything, including a real contact's name by coincidence (e.g. a common
-        // first name). Silently linking on name alone risks permanently misattributing a
-        // stranger's messages, memory, and follow-ups to the wrong real contact. Always
-        // show the confirmation banner; only a verified phone match above skips it.
-        val (crossApp, srcPkg) = IntentAndSignals.crossAppLink(primary.contactId, convKey, confirmed)
-        return JSONObject().apply {
-            put("contactId",   primary.contactId)
-            put("displayName", primary.displayName)
-            put("preferredTone", primary.preferredTone ?: "")
-            put("confidence",  primary.confidence)
-            if (crossApp) { put("crossApp", true); put("crossAppSourceLabel", appLabel(srcPkg)) }
-            put("candidates",  candidatesJson())
-        }.toString()
+        return decision.json
     }
 
     private fun postSuggestionNotification(
