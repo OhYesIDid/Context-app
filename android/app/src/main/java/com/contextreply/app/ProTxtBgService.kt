@@ -12,8 +12,6 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
@@ -206,15 +204,7 @@ class ProTxtBgService : NotificationListenerService() {
     private val workerPool = Executors.newFixedThreadPool(3)
     private lateinit var store: NotificationStore
 
-    @Volatile private var lastLocation: Location? = null
-    private val locationListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) {
-            // Reject fixes older than 2 minutes — the network provider sometimes delivers
-            // a stale cached location immediately on registration (e.g. last known home fix).
-            if (System.currentTimeMillis() - loc.time <= 2 * 60 * 1_000L) lastLocation = loc
-        }
-        @Deprecated("Deprecated in Java") override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
-    }
+    private val locationTracker = LocationTracker()
 
     // Fires when the keyguard is dismissed — re-post any pending bubbles.
     private val restoreBubblesReceiver = object : BroadcastReceiver() {
@@ -404,17 +394,7 @@ class ProTxtBgService : NotificationListenerService() {
         DeviceContactsResolver.populate(this)
         registerReceiver(restoreBubblesReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         ContextCompat.registerReceiver(this, keyboardSentReceiver, IntentFilter("com.contxt.keyboard.ACTION_SENT"), ContextCompat.RECEIVER_EXPORTED)
-        // Keep location live — short interval so lastLocation is always current.
-        // No fallback to getLastKnownLocation(); stale cache is worse than no data.
-        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        lm?.let { mgr ->
-            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
-                try {
-                    if (mgr.isProviderEnabled(provider))
-                        mgr.requestLocationUpdates(provider, 15_000L, 10f, locationListener, mainLooper)
-                } catch (_: SecurityException) {}
-            }
-        }
+        locationTracker.start(this)
         // Process notifications already in the shade (e.g. after reinstall / service restart).
         // Short delay gives the service time to fully bind before reading active notifications.
         Handler(Looper.getMainLooper()).postDelayed({
@@ -430,7 +410,7 @@ class ProTxtBgService : NotificationListenerService() {
             .putBoolean("nls_connected", false).apply()
         try { unregisterReceiver(restoreBubblesReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(keyboardSentReceiver) } catch (_: Exception) {}
-        try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
+        locationTracker.stop(this)
     }
 
     override fun onDestroy() {
@@ -438,7 +418,7 @@ class ProTxtBgService : NotificationListenerService() {
         instance = null
         scheduler.shutdownNow()
         workerPool.shutdownNow()
-        try { (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.removeUpdates(locationListener) } catch (_: Exception) {}
+        locationTracker.stop(this)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -1272,7 +1252,7 @@ class ProTxtBgService : NotificationListenerService() {
         return enrichments
     }
 
-    fun getLastLocation(): android.location.Location? = lastLocation
+    fun getLastLocation(): android.location.Location? = locationTracker.getLastLocation()
 
     private fun calendarApiCall(token: String, timeMin: String, timeMax: String, maxResults: Int, q: String? = null): JSONArray {
         val qParam = if (q != null) "&q=${URLEncoder.encode(q, "UTF-8")}" else ""
@@ -1349,46 +1329,10 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private fun reverseGeocode(lat: Double, lng: Double): String? = try {
-        val geocoder = android.location.Geocoder(this, java.util.Locale.getDefault())
-        @Suppress("DEPRECATION")
-        geocoder.getFromLocation(lat, lng, 1)
-            ?.firstOrNull()
-            ?.let { it.subLocality ?: it.locality ?: it.thoroughfare }
-    } catch (_: Exception) { null }
+    private fun reverseGeocode(lat: Double, lng: Double): String? = locationTracker.reverseGeocode(this, lat, lng)
 
-    // Returns the most recent live location. If lastLocation is fresh (< 30s) use it directly.
-    // Otherwise request a one-shot update and block the calling thread up to 5s for a new fix.
-    // Falls back to lastLocation (any age) if no fresh fix arrives in time.
-    // Called from worker threads only — never call from main thread.
-    private fun getCurrentLocation(): Location? {
-        val now = System.currentTimeMillis()
-        lastLocation?.let { if (now - it.time < 30_000) return it }
-
-        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return lastLocation
-        val latch = java.util.concurrent.CountDownLatch(1)
-
-        val oneShotListener = object : android.location.LocationListener {
-            override fun onLocationChanged(loc: android.location.Location) {
-                lastLocation = loc
-                latch.countDown()
-                try { lm.removeUpdates(this) } catch (_: Exception) {}
-            }
-            @Deprecated("") override fun onStatusChanged(p: String?, s: Int, e: android.os.Bundle?) {}
-        }
-
-        try {
-            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
-                if (lm.isProviderEnabled(provider))
-                    @Suppress("MissingPermission")
-                    lm.requestLocationUpdates(provider, 0L, 0f, oneShotListener, mainLooper)
-            }
-        } catch (_: SecurityException) { return lastLocation }
-
-        latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
-        try { lm.removeUpdates(oneShotListener) } catch (_: Exception) {}
-        return lastLocation
-    }
+    // Called from worker threads only — never call from the main thread (see LocationTracker).
+    private fun getCurrentLocation(): Location? = locationTracker.getCurrentLocation(this)
 
     private fun getEnrichmentPref(enrichment: String, key: String, default: String): String {
         val prefs = Prefs.main(this)
