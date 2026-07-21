@@ -786,6 +786,14 @@ class ProTxtBgService : NotificationListenerService() {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "worker call returned")
                 // Persist context update + snippets, keyed by contactId where available
                 ContactMemory.save(this, convKey, result.contextUpdate, result.snippets)
+                // Remember this destination for follow-ups later in the same conversation
+                // — NotificationStore.markReplied() wipes the thread on every reply, which
+                // otherwise loses a destination mentioned earlier the moment you reply once.
+                // Only recorded here, now that the Worker has confirmed it actually routes —
+                // see buildEnrichments's "maps" case for why this can't happen any earlier.
+                result.resolvedDestination?.let { (destinationText, label) ->
+                    ContactMemory.recordDestination(this, convKey, label, destinationText)
+                }
                 // User may have dismissed the loading bubble — don't post a stale result
                 if (!activeBubbles.contains(convKey)) return@submit
                 val casual = result.replies.optString("casual").takeIf { it.isNotEmpty() }
@@ -1156,12 +1164,12 @@ class ProTxtBgService : NotificationListenerService() {
                                 put("mode", mode)
                             })
                         }
-                        // Remember this destination for follow-ups later in the same conversation
-                        // — NotificationStore.markReplied() wipes the thread on every reply, which
-                        // otherwise loses a destination mentioned earlier the moment you reply once.
-                        if (convKey != null) {
-                            ContactMemory.recordDestination(this, convKey, directCandidate.second, directCandidate.first)
-                        }
+                        // NOT recorded into ContactMemory here — we don't yet know whether this
+                        // destination actually routes (resolution happens server-side now). See
+                        // runWorkerJob, which records it only once WorkerResult.resolvedDestination
+                        // confirms it — recording an unvalidated candidate eagerly would otherwise
+                        // poison future ambiguous-candidate lookups for this conversation with a
+                        // destination that can never resolve (e.g. a false-positive extraction).
                     } else {
                         // No live destination in this message/thread — check whether one was
                         // established earlier in this conversation (survives the reply-triggered

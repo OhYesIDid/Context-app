@@ -463,25 +463,33 @@ export async function resolveDirections(
 // fields regardless of outcome. No-op if apiKey is unset (inert until configured) or
 // neither request field is present. Exported as its own function (mirroring
 // resolveShortMapsUrl) so it's testable without constructing a full Request/HMAC flow.
+//
+// Returns the single destination that was actually confirmed to route, or null — the
+// caller reports this back to the Android client so it can record the destination in
+// ContactMemory only once routing is confirmed, not just because text was extracted.
+// Recording an unvalidated candidate (e.g. a false-positive extraction like "10pm" from
+// "...at 10pm") would otherwise poison future ambiguous-candidate lookups for this
+// conversation with a destination that can never resolve. Matches the old client-side
+// code's behavior, which only ever recorded after a synchronous, confirmed-successful
+// Directions call — deliberately never on the ambiguous multi-candidate path either.
 export async function resolveMapsEnrichments(
   enrichments: EnrichmentDataWithMapsRequest | undefined,
   apiKey: string | undefined,
-): Promise<void> {
-  if (!apiKey || !enrichments) return;
+): Promise<{ destinationText: string; label: string } | null> {
+  if (!apiKey || !enrichments) return null;
 
   if (enrichments.mapsRequest) {
     const req = enrichments.mapsRequest;
     const result = await resolveDirections(
       { lat: req.originLat, lon: req.originLon }, req.destination, req.mode, apiKey
     );
-    if (result) {
-      enrichments.maps = {
-        duration: result.duration, distance: result.distance, routeSummary: result.routeSummary,
-        destinationLabel: req.label, userLat: req.originLat, userLon: req.originLon,
-      };
-    }
     delete enrichments.mapsRequest;
-    return;
+    if (!result) return null;
+    enrichments.maps = {
+      duration: result.duration, distance: result.distance, routeSummary: result.routeSummary,
+      destinationLabel: req.label, userLat: req.originLat, userLon: req.originLon,
+    };
+    return { destinationText: req.destination, label: req.label };
   }
 
   if (enrichments.mapsRequests && enrichments.mapsOrigin) {
@@ -495,12 +503,14 @@ export async function resolveMapsEnrichments(
       )
     ).filter((r): r is NonNullable<typeof r> => r !== null);
 
+    let resolvedDestination: { destinationText: string; label: string } | null = null;
     if (resolvedCandidates.length === 1) {
       const c = resolvedCandidates[0];
       enrichments.maps = {
         duration: c.duration, distance: c.distance, routeSummary: c.routeSummary,
         destinationLabel: c.label, userLat: origin.lat, userLon: origin.lon,
       };
+      resolvedDestination = { destinationText: c.destination, label: c.label };
     } else if (resolvedCandidates.length > 1) {
       enrichments.mapsCandidates = resolvedCandidates.map((c) => ({
         label: c.label, duration: c.duration, distance: c.distance,
@@ -517,7 +527,10 @@ export async function resolveMapsEnrichments(
     delete enrichments.mapsRequests;
     delete enrichments.mapsOrigin;
     delete enrichments.mapsFallbackLocation;
+    return resolvedDestination;
   }
+
+  return null;
 }
 
 // ── Prompt building ───────────────────────────────────────────────────────────
@@ -881,7 +894,7 @@ export default {
     // of calling Google Directions itself (see ProTxtBgService.kt's buildEnrichments "maps"
     // case). Mirrors the shortUrl-resolution block above: resolved within this same request,
     // then the request-only fields are dropped so ENRICHMENT_FORMATTERS never sees them.
-    await resolveMapsEnrichments(body.enrichments, env.GOOGLE_MAPS_API_KEY);
+    const resolvedDestination = await resolveMapsEnrichments(body.enrichments, env.GOOGLE_MAPS_API_KEY);
 
     const builtPrompt = buildPrompt(body, intents);
 
@@ -949,6 +962,9 @@ export default {
     if (contextUpdate) responseBody.contextUpdate = contextUpdate;
     if (snippets && snippets.length > 0) responseBody.snippets = snippets;
     if (action) responseBody.action = action;
+    // Only set once resolveDirections actually confirmed the destination routes — see
+    // resolveMapsEnrichments's doc comment for why this can't just be "text was extracted".
+    if (resolvedDestination) responseBody.resolvedDestination = resolvedDestination;
 
     // Log after response is sent — ctx.waitUntil keeps the worker alive for the KV write
     if (env.RATE_LIMIT_KV) {

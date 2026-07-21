@@ -17,6 +17,12 @@ data class WorkerResult(
     val action: JSONObject? = null,
     val snippets: List<String> = emptyList(),
     val rateLimited: Boolean = false,
+    // (destinationText, label) — set only when the Worker actually confirmed this destination
+    // routes via Google Directions, never just because text was extracted from the message.
+    // ProTxtBgService.kt records it into ContactMemory only when this is present, instead of
+    // eagerly at enrichment-build time, so an unvalidated candidate (e.g. a false-positive
+    // extraction like "10pm" from "...at 10pm") never poisons future ambiguous-candidate lookups.
+    val resolvedDestination: Pair<String, String>? = null,
 ) {
     companion object {
         val RATE_LIMITED = WorkerResult(JSONObject(), null, null, rateLimited = true)
@@ -174,7 +180,12 @@ object WorkerClient {
                     snippetsArr.optString(it).ifEmpty { null }
                 }
             } else emptyList()
-            WorkerResult(replies, intent, contextUpdate, action, snippets)
+            val resolvedDestination = obj.optJSONObject("resolvedDestination")?.let {
+                val text = it.optString("destinationText").ifEmpty { null }
+                val label = it.optString("label").ifEmpty { null }
+                if (text != null && label != null) text to label else null
+            }
+            WorkerResult(replies, intent, contextUpdate, action, snippets, resolvedDestination = resolvedDestination)
         } finally {
             conn.disconnect()
         }

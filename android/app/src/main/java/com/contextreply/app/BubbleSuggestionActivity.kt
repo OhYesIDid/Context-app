@@ -379,6 +379,14 @@ class BubbleSuggestionActivity : Activity() {
                     lastSentReply = lastSent,
                     strategy = selectedStrategy,
                 )
+                // See ProTxtBgService.kt's runWorkerJob for why this is recorded only here,
+                // after the Worker confirms the destination actually routes, rather than
+                // eagerly when buildEnrichments extracts the destination text.
+                if (convKey != null) {
+                    result?.resolvedDestination?.let { (destinationText, label) ->
+                        ContactMemory.recordDestination(this@BubbleSuggestionActivity, convKey, label, destinationText)
+                    }
+                }
                 val rateLimited = result?.rateLimited == true
                 val newCasual = result?.replies?.optString("casual")?.takeIf { it.isNotEmpty() }
                 val newFormal = result?.replies?.optString("formal")?.takeIf { it.isNotEmpty() }

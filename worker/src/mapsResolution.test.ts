@@ -76,8 +76,9 @@ describe('resolveMapsEnrichments', () => {
       mapsRequest: { destination: 'the office', label: 'the office', originLat: 51.5, originLon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, undefined);
+    const resolved = await resolveMapsEnrichments(enrichments, undefined);
 
+    expect(resolved).toBeNull();
     expect(enrichments.maps).toBeUndefined();
     expect(enrichments.mapsRequest).toBeDefined(); // left untouched, not even cleaned up
   });
@@ -85,39 +86,42 @@ describe('resolveMapsEnrichments', () => {
   it('is a no-op when neither mapsRequest nor mapsRequests is present', async () => {
     const enrichments: EnrichmentDataWithMapsRequest = { calendar: { events: [], windowStart: '', windowEnd: '' } };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
+    expect(resolved).toBeNull();
     expect(enrichments.maps).toBeUndefined();
   });
 
-  it('resolves a single mapsRequest into enrichments.maps and removes the request field', async () => {
+  it('resolves a single mapsRequest into enrichments.maps, removes the request field, and reports what resolved', async () => {
     (global.fetch as any).mockResolvedValue({ json: async () => mockDirectionsResponse() });
     const enrichments: EnrichmentDataWithMapsRequest = {
       mapsRequest: { destination: 'the office', label: 'the office', originLat: 51.5, originLon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps).toEqual({
       duration: '12 mins', distance: '4.3 mi', routeSummary: 'A10',
       destinationLabel: 'the office', userLat: 51.5, userLon: -0.1,
     });
     expect(enrichments.mapsRequest).toBeUndefined();
+    expect(resolved).toEqual({ destinationText: 'the office', label: 'the office' });
   });
 
-  it('leaves maps unset (but still removes the request field) when the single request fails to resolve', async () => {
+  it('leaves maps unset (but still removes the request field) and reports null when the single request fails to resolve', async () => {
     (global.fetch as any).mockResolvedValue({ json: async () => mockDirectionsResponse({ status: 'ZERO_RESULTS', routes: [] }) });
     const enrichments: EnrichmentDataWithMapsRequest = {
       mapsRequest: { destination: 'nowhere', label: 'nowhere', originLat: 51.5, originLon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps).toBeUndefined();
     expect(enrichments.mapsRequest).toBeUndefined();
+    expect(resolved).toBeNull(); // critical: a failed/unvalidated destination must never be reported as resolved
   });
 
-  it('resolves exactly one successful candidate into enrichments.maps, not mapsCandidates', async () => {
+  it('resolves exactly one successful candidate into enrichments.maps, not mapsCandidates, and reports it', async () => {
     (global.fetch as any)
       .mockResolvedValueOnce({ json: async () => mockDirectionsResponse({ status: 'ZERO_RESULTS', routes: [] }) })
       .mockResolvedValueOnce({ json: async () => mockDirectionsResponse() });
@@ -129,15 +133,16 @@ describe('resolveMapsEnrichments', () => {
       mapsOrigin: { lat: 51.5, lon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps?.destinationLabel).toBe('the office');
     expect(enrichments.mapsCandidates).toBeUndefined();
     expect(enrichments.mapsRequests).toBeUndefined();
     expect(enrichments.mapsOrigin).toBeUndefined();
+    expect(resolved).toEqual({ destinationText: 'the office', label: 'the office' });
   });
 
-  it('resolves multiple successful candidates into mapsCandidates, preserving mentionedMinutesAgo', async () => {
+  it('resolves multiple successful candidates into mapsCandidates, preserving mentionedMinutesAgo, and reports null (ambiguous — nothing to record)', async () => {
     (global.fetch as any).mockResolvedValue({ json: async () => mockDirectionsResponse() });
     const enrichments: EnrichmentDataWithMapsRequest = {
       mapsRequests: [
@@ -147,14 +152,15 @@ describe('resolveMapsEnrichments', () => {
       mapsOrigin: { lat: 51.5, lon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps).toBeUndefined();
     expect(enrichments.mapsCandidates).toHaveLength(2);
     expect(enrichments.mapsCandidates?.map((c) => c.mentionedMinutesAgo)).toEqual([5, 20]);
+    expect(resolved).toBeNull(); // matches old behavior: ambiguous candidates were never recorded either
   });
 
-  it('falls back to mapsFallbackLocation when none of the candidates resolve', async () => {
+  it('falls back to mapsFallbackLocation when none of the candidates resolve, and reports null', async () => {
     (global.fetch as any).mockResolvedValue({ json: async () => mockDirectionsResponse({ status: 'ZERO_RESULTS', routes: [] }) });
     const enrichments: EnrichmentDataWithMapsRequest = {
       mapsRequests: [{ destination: 'nowhere', label: 'nowhere', mentionedMinutesAgo: 5 }],
@@ -162,10 +168,11 @@ describe('resolveMapsEnrichments', () => {
       mapsFallbackLocation: 'Shoreditch',
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps).toEqual({ currentLocation: 'Shoreditch' });
     expect(enrichments.mapsFallbackLocation).toBeUndefined();
+    expect(resolved).toBeNull();
   });
 
   it('does nothing when none resolve and there is no fallback location', async () => {
@@ -175,10 +182,11 @@ describe('resolveMapsEnrichments', () => {
       mapsOrigin: { lat: 51.5, lon: -0.1, mode: 'driving' },
     };
 
-    await resolveMapsEnrichments(enrichments, 'key123');
+    const resolved = await resolveMapsEnrichments(enrichments, 'key123');
 
     expect(enrichments.maps).toBeUndefined();
     expect(enrichments.mapsRequests).toBeUndefined();
     expect(enrichments.mapsOrigin).toBeUndefined();
+    expect(resolved).toBeNull();
   });
 });
