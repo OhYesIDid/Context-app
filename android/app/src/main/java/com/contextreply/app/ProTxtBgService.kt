@@ -133,30 +133,6 @@ class ProTxtBgService : NotificationListenerService() {
             "com.oneplus.dialer",
         )
 
-        private val NO_REPLY_TEXT_PATTERNS = listOf(
-            Regex("^(WhatsApp |Telegram )?(audio |video )?call$", RegexOption.IGNORE_CASE),
-            Regex("^missed (voice |video )?call", RegexOption.IGNORE_CASE),
-            Regex("\\bmissed call\\b", RegexOption.IGNORE_CASE),
-            Regex("^(voice|video) message$", RegexOption.IGNORE_CASE),
-            // Reactions — "reacted to your message", "reacted ❤️ to", "reacted with ❤️"
-            Regex("reacted to your (message|story|photo|reel|post)", RegexOption.IGNORE_CASE),
-            Regex("reacted .{0,6} to (your|a|the)", RegexOption.IGNORE_CASE),
-            Regex("reacted with", RegexOption.IGNORE_CASE),
-            Regex("^message react$", RegexOption.IGNORE_CASE),
-            Regex("liked your (message|photo|reel|story|post)", RegexOption.IGNORE_CASE),
-            Regex("commented on your (photo|reel|post|story)", RegexOption.IGNORE_CASE),
-            Regex("(started following|accepted your follow request|sent you a follow request)", RegexOption.IGNORE_CASE),
-            Regex("mentioned you in (a comment|their story|a post)", RegexOption.IGNORE_CASE),
-            Regex("^(offer|deal|sale|discount|promo|limited time)", RegexOption.IGNORE_CASE),
-            Regex("^\\d+ (new )?messages?$", RegexOption.IGNORE_CASE),
-            Regex("^\\d+ (new )?notifications?$", RegexOption.IGNORE_CASE),
-        )
-
-        private val INSTAGRAM_NON_DM_TITLE_PATTERNS = listOf(
-            Regex("^Instagram$", RegexOption.IGNORE_CASE),
-            Regex("^(activity|your post|your reel|your story|your photo)", RegexOption.IGNORE_CASE),
-        )
-
         // Logic lives in IntentAndSignals (pure, JUnit-testable) — these stay as thin
         // delegates so the several other files calling ProTxtBgService.stripAppPrefix(...)
         // etc. don't need to change.
@@ -463,7 +439,7 @@ class ProTxtBgService : NotificationListenerService() {
             ?: return
 
         // Gate 3: no-reply content patterns
-        if (NO_REPLY_TEXT_PATTERNS.any { it.containsMatchIn(text) || it.containsMatchIn(title) }) return
+        if (NotificationGating.isNoReplyText(title, text)) return
 
         // Gate 4: Instagram engagement vs DM
         // Matched against the stripped title (drops any "Instagram: " prefix Instagram may
@@ -471,7 +447,7 @@ class ProTxtBgService : NotificationListenerService() {
         // on the raw title let a bare "\bInstagram\b" pattern swallow every real DM whose title
         // contains the app name anywhere.
         if (sbn.packageName == "com.instagram.android") {
-            if (INSTAGRAM_NON_DM_TITLE_PATTERNS.any { it.containsMatchIn(stripAppPrefix(title)) }) return
+            if (NotificationGating.isInstagramNonDmTitle(stripAppPrefix(title))) return
         }
 
         // Gate 5: group messages — configurable
