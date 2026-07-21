@@ -1398,13 +1398,7 @@ class ProTxtBgService : NotificationListenerService() {
             this, notifId + 1, dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val contactLabel = convKey.substringAfter(":").let { key ->
-            when {
-                key.startsWith("group:") -> "Group chat"
-                key.startsWith("id:") -> null
-                else -> stripAppPrefix(key).take(30)
-            }
-        }
+        val contactLabel = NotificationPresenter.contactLabel(convKey)
         val priority = if (repost) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH
         val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -1469,13 +1463,7 @@ class ProTxtBgService : NotificationListenerService() {
             this, notifId + 3, retryIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val contactLabel = convKey.substringAfter(":").let { key ->
-            when {
-                key.startsWith("group:") -> "Group chat"
-                key.startsWith("id:") -> null
-                else -> stripAppPrefix(key).take(30)
-            }
-        }
+        val contactLabel = NotificationPresenter.contactLabel(convKey)
         val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (contactLabel != null) "↩ $contactLabel" else "Couldn't generate a reply")
@@ -1603,25 +1591,13 @@ class ProTxtBgService : NotificationListenerService() {
             .putString("last_suggestion_conv_$packageName", convKey)
             .apply()
 
-        val contactLabel = convKey.substringAfter(":").let { key ->
-            when {
-                key.startsWith("group:") -> "Group chat"
-                key.startsWith("id:") -> null
-                else -> stripAppPrefix(key).take(30)
-            }
-        }
+        val contactLabel = NotificationPresenter.contactLabel(convKey)
 
-        // Build expanded text: each tone on its own line so the user can read all
-        // variants from the shade and pick the one they want to send.
-        val availableTones = buildList {
-            add(Triple("Casual", replyText, notifId))
-            if (!formalText.isNullOrEmpty()) add(Triple("Formal", formalText!!, notifId + 3))
-            if (!briefText.isNullOrEmpty())  add(Triple("Brief",  briefText!!,  notifId + 4))
-        }
+        val availableTones = NotificationPresenter.availableTones(replyText, formalText, briefText)
         // Quick-reply choices for Android Auto — one CharSequence per available tone.
         // Shown as tappable chips in the car dashboard reply screen.
         val autoChoices: Array<CharSequence> = availableTones
-            .map { (_, text, _) -> text as CharSequence }
+            .map { it.text as CharSequence }
             .toTypedArray()
 
         val builder = NotificationCompat.Builder(this, if (repost) CHANNEL_SILENT_ID else CHANNEL_ID)
@@ -1656,19 +1632,19 @@ class ProTxtBgService : NotificationListenerService() {
         if (availableTones.size == 1) {
             builder.addAction(android.R.drawable.ic_menu_share, "Copy", copyPi)
         } else {
-            availableTones.take(3).forEach { (label, text, reqCode) ->
+            availableTones.take(3).forEach { tone ->
                 val toneIntent = Intent(this, ReplySendReceiver::class.java).apply {
                     action = ACTION_SEND
-                    putExtra(EXTRA_REPLY_TEXT, text)
+                    putExtra(EXTRA_REPLY_TEXT, tone.text)
                     putExtra(EXTRA_REMOTE_INPUT_KEY, remoteInputKey)
                     putExtra(EXTRA_NOTIF_ID, notifId)
                     putExtra(EXTRA_CONV_KEY, convKey)
                     if (intent != null) putExtra(EXTRA_INTENT, intent)
-                    putExtra(EXTRA_TONE_SELECTED, label.lowercase())
+                    putExtra(EXTRA_TONE_SELECTED, tone.label.lowercase())
                 }
-                val tonePi = PendingIntent.getBroadcast(this, reqCode, toneIntent, flags)
+                val tonePi = PendingIntent.getBroadcast(this, notifId + tone.requestCodeOffset, toneIntent, flags)
                 builder.addAction(NotificationCompat.Action.Builder(
-                    android.R.drawable.ic_menu_send, "$label ↩", tonePi
+                    android.R.drawable.ic_menu_send, "${tone.label} ↩", tonePi
                 ).build())
             }
         }
@@ -1677,11 +1653,7 @@ class ProTxtBgService : NotificationListenerService() {
         if (suggestedAction != null) {
             val actionType  = suggestedAction.optString("type")
             val actionLabel = suggestedAction.optString("label").ifEmpty { null }
-            val actionBroadcast = when (actionType) {
-                "calendar_add" -> ActionReceiver.ACTION_CALENDAR_ADD
-                "maps_open"    -> ActionReceiver.ACTION_MAPS_OPEN
-                else           -> null
-            }
+            val actionBroadcast = NotificationPresenter.actionBroadcastFor(actionType)
             if (actionBroadcast != null && actionLabel != null) {
                 val actionIntent = Intent(this, ActionReceiver::class.java).apply {
                     this.action = actionBroadcast
