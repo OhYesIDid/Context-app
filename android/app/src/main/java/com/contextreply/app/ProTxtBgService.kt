@@ -1065,13 +1065,6 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private data class EtaData(val duration: String, val distance: String, val routeSummary: String, val destinationLabel: String, val userLat: Double, val userLon: Double)
-
-    // destinationText is exactly what gets passed to fetchEtaToDestination() — either the raw
-    // extracted address/place text, or a "lat,lon" string — so it can be persisted and re-used
-    // later without needing to re-extract it from a thread that may since have been cleared.
-    private data class DestinationResolution(val destinationText: String, val label: String, val eta: EtaData)
-
     // ── Intent / enrichment registry ──────────────────────────────────────────
     // Classification patterns are the single source of truth at
     // <repo root>/assets/intent_patterns.json — copied into this app's assets by
@@ -1098,17 +1091,6 @@ class ProTxtBgService : NotificationListenerService() {
         }
     }
 
-    private fun putMapsEnrichment(enrichments: JSONObject, eta: EtaData) {
-        enrichments.put("maps", JSONObject().apply {
-            put("duration", eta.duration)
-            put("distance", eta.distance)
-            put("routeSummary", eta.routeSummary)
-            put("destinationLabel", eta.destinationLabel)
-            put("userLat", eta.userLat)
-            put("userLon", eta.userLon)
-        })
-    }
-
     // Not private — BubbleSuggestionActivity.triggerRegen() calls this via getInstance()
     // to rebuild live Maps/Calendar data on refresh instead of sending a stale/empty
     // enrichments payload (regen previously skipped this entirely, so a refreshed
@@ -1118,6 +1100,14 @@ class ProTxtBgService : NotificationListenerService() {
         for (key in IntentAndSignals.requiredEnrichments(intentPatterns, message, intentsStr)) {
             when (key) {
                 "maps" -> {
+                    // Directions/ETA resolution itself now happens server-side (the Worker calls
+                    // Google Directions using a key it holds) — this client only picks WHICH
+                    // destination(s) to ask about and supplies its own current location, since
+                    // GPS access can't move server-side. See worker/src/index.ts's mapsRequest/
+                    // mapsRequests handling, which mirrors this file's old resolution logic.
+                    val origin = getCurrentLocation()
+                    val mode = getEnrichmentPref("maps", "transportMode", "driving")
+
                     // Prefer coords from the incoming_location enrichment (already resolved,
                     // including short URLs the worker followed). Fall back to direct extraction.
                     val incomingCoords: Pair<Double, Double>? = run {
@@ -1131,13 +1121,15 @@ class ProTxtBgService : NotificationListenerService() {
                         val searchText = listOf(message) + thread.map { it.second }
                         searchText.firstNotNullOfOrNull { IntentAndSignals.extractMapsCoordinates(it) }
                     }
-                    val liveResolution: DestinationResolution? = if (incomingCoords != null) {
+                    // (destinationText, label) of the single best candidate, or null if none —
+                    // resolution (does it actually route?) happens server-side, so unlike before
+                    // this can no longer distinguish "invalid destination" from "not yet tried".
+                    val directCandidate: Pair<String, String>? = if (incomingCoords != null) {
                         val label = enrichments.optJSONObject("incoming_location")
                             ?.optString("placeLabel")?.ifEmpty { null }
                             ?: reverseGeocode(incomingCoords.first, incomingCoords.second)
                             ?: "their location"
-                        fetchEtaToCoords(incomingCoords.first, incomingCoords.second, label)
-                            ?.let { DestinationResolution("${incomingCoords.first},${incomingCoords.second}", label, it) }
+                        "${incomingCoords.first},${incomingCoords.second}" to label
                     } else {
                         // Search latest message first, then fall back to recent thread history
                         // (last 10 messages, within 48 h) so stale destinations from old
@@ -1146,21 +1138,29 @@ class ProTxtBgService : NotificationListenerService() {
                         val etaThread = convKey?.let {
                             store.getEtaSearchThread(it, maxCount = 10)
                         } ?: thread.takeLast(10).asReversed()
-                        fetchEtaData(message) ?: etaThread
-                            .firstNotNullOfOrNull { (_, text) -> fetchEtaData(text) }
+                        extractDestinationCandidate(message) ?: etaThread
+                            .firstNotNullOfOrNull { (_, text) -> extractDestinationCandidate(text) }
                     }
                     // Tracks whichever destination text actually got used below, regardless of
                     // which branch resolved it — used after the if/else to separately check for
                     // a matching booking's return date (see the tripReturn note further down).
-                    var bestDestinationHint: String? = liveResolution?.label
+                    var bestDestinationHint: String? = directCandidate?.second
 
-                    if (liveResolution != null) {
-                        putMapsEnrichment(enrichments, liveResolution.eta)
+                    if (directCandidate != null) {
+                        if (origin != null) {
+                            enrichments.put("mapsRequest", JSONObject().apply {
+                                put("destination", directCandidate.first)
+                                put("label", directCandidate.second)
+                                put("originLat", origin.latitude)
+                                put("originLon", origin.longitude)
+                                put("mode", mode)
+                            })
+                        }
                         // Remember this destination for follow-ups later in the same conversation
                         // — NotificationStore.markReplied() wipes the thread on every reply, which
                         // otherwise loses a destination mentioned earlier the moment you reply once.
                         if (convKey != null) {
-                            ContactMemory.recordDestination(this, convKey, liveResolution.label, liveResolution.destinationText)
+                            ContactMemory.recordDestination(this, convKey, directCandidate.second, directCandidate.first)
                         }
                     } else {
                         // No live destination in this message/thread — check whether one was
@@ -1177,37 +1177,35 @@ class ProTxtBgService : NotificationListenerService() {
                         val bookingCandidates = BookingDestinations.candidates(this)
                         val candidates = (memoryCandidates + bookingCandidates)
                             .distinctBy { it.destinationText.trim().lowercase() }
-                        val resolved = candidates.mapNotNull { c ->
-                            fetchEtaToDestination(c.destinationText, c.label)?.let { eta -> c to eta }
-                        }
-                        when {
-                            resolved.size == 1 -> {
-                                putMapsEnrichment(enrichments, resolved[0].second)
-                                bestDestinationHint = resolved[0].first.destinationText
+                        if (candidates.isNotEmpty() && origin != null) {
+                            val nowMs = System.currentTimeMillis()
+                            enrichments.put("mapsRequests", JSONArray().also { arr ->
+                                candidates.forEach { c ->
+                                    arr.put(JSONObject().apply {
+                                        put("destination", c.destinationText)
+                                        put("label", c.label)
+                                        put("mentionedMinutesAgo", ((nowMs - c.mentionedAt) / 60_000L).toInt())
+                                    })
+                                }
+                            })
+                            enrichments.put("mapsOrigin", JSONObject().apply {
+                                put("lat", origin.latitude); put("lon", origin.longitude); put("mode", mode)
+                            })
+                            // Whether any of the above candidates actually route can only be known
+                            // once the Worker tries them — precompute this fallback now (client-only
+                            // capability, Android's Geocoder) so the Worker can fall back to it if
+                            // none of the candidates resolve, without needing its own geocoding.
+                            reverseGeocode(origin.latitude, origin.longitude)?.let { area ->
+                                enrichments.put("mapsFallbackLocation", area)
                             }
-                            resolved.size > 1 -> {
-                                val nowMs = System.currentTimeMillis()
-                                enrichments.put("mapsCandidates", JSONArray().also { arr ->
-                                    resolved.forEach { (c, eta) ->
-                                        arr.put(JSONObject().apply {
-                                            put("label", c.label)
-                                            put("duration", eta.duration)
-                                            put("distance", eta.distance)
-                                            put("routeSummary", eta.routeSummary)
-                                            put("mentionedMinutesAgo", ((nowMs - c.mentionedAt) / 60_000L).toInt())
-                                        })
-                                    }
-                                })
-                            }
-                            else -> {
-                                // No extractable or remembered destination — pass current location
-                                // name so Claude can at least say where the user is rather than guessing.
-                                getCurrentLocation()?.let { loc ->
-                                    reverseGeocode(loc.latitude, loc.longitude)?.let { area ->
-                                        enrichments.put("maps", JSONObject().apply {
-                                            put("currentLocation", area)
-                                        })
-                                    }
+                        } else if (candidates.isEmpty()) {
+                            // No extractable or remembered destination at all — pass current
+                            // location name so Claude can at least say where the user is.
+                            origin?.let { loc ->
+                                reverseGeocode(loc.latitude, loc.longitude)?.let { area ->
+                                    enrichments.put("maps", JSONObject().apply {
+                                        put("currentLocation", area)
+                                    })
                                 }
                             }
                         }
@@ -1392,66 +1390,21 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) { default }
     }
 
-    private fun fetchEtaData(message: String): DestinationResolution? {
+    // Returns (destinationText, label) extracted from the message, or the saved home
+    // address if the message names "home" — no network call. Resolution (does this
+    // actually route, what's the ETA) now happens server-side; see the Worker's
+    // mapsRequest/mapsRequests handling, which mirrors what this used to do locally.
+    private fun extractDestinationCandidate(message: String): Pair<String, String>? {
         val raw = IntentAndSignals.extractDestination(message) ?: return null
         if (raw.lowercase().trim() in IntentAndSignals.HOME_KEYWORDS) {
             val prefs = Prefs.main(this)
             if (!prefs.contains("home_lat")) return null
             val lat = prefs.getFloat("home_lat", 0f).toDouble()
             val lon = prefs.getFloat("home_lon", 0f).toDouble()
-            return fetchEtaToCoords(lat, lon, "home")?.let { DestinationResolution("$lat,$lon", "home", it) }
+            return "$lat,$lon" to "home"
         }
-        return fetchEtaToDestination(raw, raw)?.let { DestinationResolution(raw, raw, it) }
+        return raw to raw
     }
-
-    private fun fetchEtaToCoords(lat: Double, lon: Double, label: String): EtaData? =
-        fetchEtaToDestination("$lat,$lon", label)
-
-    private fun fetchEtaToDestination(destination: String, label: String): EtaData? {
-        val apiKey = BuildConfig.GOOGLE_MAPS_API_KEY.ifEmpty {
-            android.util.Log.e("ProTxt", "ETA: no Maps API key")
-            return null
-        }
-        val location = getCurrentLocation()
-        if (location == null) {
-            android.util.Log.e("ProTxt", "ETA: no GPS location available")
-            return null
-        }
-        val origin = "${location.latitude},${location.longitude}"
-        val mode = getEnrichmentPref("maps", "transportMode", "driving")
-        val params = buildString {
-            append("origin=${encode(origin)}&destination=${encode(destination)}&mode=$mode")
-            if (mode == "driving") append("&departure_time=now")
-            append("&key=$apiKey")
-        }
-        return try {
-            val conn = URL("https://maps.googleapis.com/maps/api/directions/json?$params")
-                .openConnection() as HttpURLConnection
-            conn.connectTimeout = 8_000
-            conn.readTimeout = 8_000
-            val json = conn.inputStream.bufferedReader().use { it.readText() }
-            conn.disconnect()
-            val obj = JSONObject(json)
-            val status = obj.optString("status")
-            if (status != "OK") {
-                android.util.Log.e("ProTxt", "ETA: Directions API status=$status dest=\"$destination\"")
-                return null
-            }
-            val leg = obj.getJSONArray("routes").getJSONObject(0).getJSONArray("legs").getJSONObject(0)
-            val duration = (leg.optJSONObject("duration_in_traffic") ?: leg.getJSONObject("duration"))
-                .getString("text")
-            val distance = leg.getJSONObject("distance").getString("text")
-            val route = obj.getJSONArray("routes").getJSONObject(0).optString("summary", "")
-            android.util.Log.d("ProTxt", "ETA: $duration to \"$label\" via $route")
-            EtaData(duration, distance, route, label, location.latitude, location.longitude)
-        } catch (e: Exception) {
-            android.util.Log.e("ProTxt", "ETA: exception for dest=\"$destination\": ${e.message}")
-            FirebaseCrashlytics.getInstance().recordException(e)
-            null
-        }
-    }
-
-    private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
     private fun isAccessibilityEnabled(): Boolean {
         val enabled = android.provider.Settings.Secure.getString(

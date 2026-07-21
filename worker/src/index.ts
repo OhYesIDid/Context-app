@@ -13,6 +13,9 @@ export interface Env {
   DEBUG_KEY: string | undefined; // separate key for /debug/recent endpoint
   RATE_LIMIT_KV: KVNamespace | undefined; // optional — omit binding to disable rate limiting
   REVENUECAT_SECRET_KEY: string | undefined; // RC server-side API key — see verifyProEntitlement
+  GOOGLE_MAPS_API_KEY: string | undefined; // Directions API — see resolveDirections. Use a key
+  // with no Android app restriction (calls originate from Cloudflare's IPs, not a device) —
+  // do not reuse the client's own restricted key.
 }
 
 // Independently verifies Pro entitlement against RevenueCat's own servers, rather than
@@ -278,6 +281,17 @@ async function handleClassifyBookings(rawBody: string, env: Env): Promise<Respon
   });
 }
 
+// Kotlin→Worker wire format only for unresolved Directions lookups — not part of the
+// shared EnrichmentData type since the JS/RN app's own enrichment-building path
+// (src/utils/intentDetector.ts) never produces these; it resolves Maps client-side itself.
+// See ProTxtBgService.kt's buildEnrichments "maps" case and resolveDirections below.
+export interface EnrichmentDataWithMapsRequest extends EnrichmentData {
+  mapsRequest?: { destination: string; label: string; originLat: number; originLon: number; mode: string };
+  mapsRequests?: Array<{ destination: string; label: string; mentionedMinutesAgo: number }>;
+  mapsOrigin?: { lat: number; lon: number; mode: string };
+  mapsFallbackLocation?: string;
+}
+
 interface SuggestRequest {
   message: string;
   intents?: string[];
@@ -292,7 +306,7 @@ interface SuggestRequest {
   // everything the other person just said. Background only, not part of what
   // needs a new reply — see buildPrompt's earlier_context rendering.
   earlierContext?: ConversationMessage[];
-  enrichments?: EnrichmentData;
+  enrichments?: EnrichmentDataWithMapsRequest;
   styleContext?: string;
   contactMemory?: string;
   lastSentReply?: string;
@@ -393,6 +407,116 @@ async function resolveShortMapsUrl(
   } catch {
     clearTimeout(timer);
     return null;
+  }
+}
+
+// Resolves a single Directions request via the Google Directions API — the piece of ETA
+// resolution that used to happen directly on the Android client (see ProTxtBgService.kt's
+// buildEnrichments "maps" case, which now sends origin/destination/mode instead of calling
+// this API itself). 8s timeout, matching the client's old connect+read timeout.
+export async function resolveDirections(
+  origin: { lat: number; lon: number },
+  destination: string,
+  mode: string,
+  apiKey: string,
+): Promise<{ duration: string; distance: string; routeSummary: string } | null> {
+  const params = new URLSearchParams({
+    origin: `${origin.lat},${origin.lon}`,
+    destination,
+    mode,
+    key: apiKey,
+  });
+  if (mode === 'driving') params.set('departure_time', 'now');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params}`, {
+      signal: controller.signal,
+    });
+    const data = (await res.json()) as {
+      status?: string;
+      routes?: Array<{
+        summary?: string;
+        legs?: Array<{
+          duration?: { text?: string };
+          duration_in_traffic?: { text?: string };
+          distance?: { text?: string };
+        }>;
+      }>;
+    };
+    if (data.status !== 'OK') return null;
+    const leg = data.routes?.[0]?.legs?.[0];
+    const durationText = leg?.duration_in_traffic?.text ?? leg?.duration?.text;
+    const distanceText = leg?.distance?.text;
+    if (!durationText || !distanceText) return null;
+    return { duration: durationText, distance: distanceText, routeSummary: data.routes?.[0]?.summary ?? '' };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Mutates `enrichments` in place: resolves mapsRequest/mapsRequests (if present) via
+// resolveDirections and populates maps/mapsCandidates, then removes the request-only
+// fields regardless of outcome. No-op if apiKey is unset (inert until configured) or
+// neither request field is present. Exported as its own function (mirroring
+// resolveShortMapsUrl) so it's testable without constructing a full Request/HMAC flow.
+export async function resolveMapsEnrichments(
+  enrichments: EnrichmentDataWithMapsRequest | undefined,
+  apiKey: string | undefined,
+): Promise<void> {
+  if (!apiKey || !enrichments) return;
+
+  if (enrichments.mapsRequest) {
+    const req = enrichments.mapsRequest;
+    const result = await resolveDirections(
+      { lat: req.originLat, lon: req.originLon }, req.destination, req.mode, apiKey
+    );
+    if (result) {
+      enrichments.maps = {
+        duration: result.duration, distance: result.distance, routeSummary: result.routeSummary,
+        destinationLabel: req.label, userLat: req.originLat, userLon: req.originLon,
+      };
+    }
+    delete enrichments.mapsRequest;
+    return;
+  }
+
+  if (enrichments.mapsRequests && enrichments.mapsOrigin) {
+    const origin = enrichments.mapsOrigin;
+    const resolvedCandidates = (
+      await Promise.all(
+        enrichments.mapsRequests.map(async (c) => {
+          const result = await resolveDirections({ lat: origin.lat, lon: origin.lon }, c.destination, origin.mode, apiKey);
+          return result ? { ...c, ...result } : null;
+        })
+      )
+    ).filter((r): r is NonNullable<typeof r> => r !== null);
+
+    if (resolvedCandidates.length === 1) {
+      const c = resolvedCandidates[0];
+      enrichments.maps = {
+        duration: c.duration, distance: c.distance, routeSummary: c.routeSummary,
+        destinationLabel: c.label, userLat: origin.lat, userLon: origin.lon,
+      };
+    } else if (resolvedCandidates.length > 1) {
+      enrichments.mapsCandidates = resolvedCandidates.map((c) => ({
+        label: c.label, duration: c.duration, distance: c.distance,
+        routeSummary: c.routeSummary, mentionedMinutesAgo: c.mentionedMinutesAgo,
+      }));
+    } else if (enrichments.mapsFallbackLocation) {
+      // None of the candidates routed — fall back to the current-location label the client
+      // precomputed (Android's on-device Geocoder; the Worker has no equivalent), matching
+      // what the old client-side code did when it had candidates but none resolved.
+      // Technically missing EtaData's other required fields, same loose convention already
+      // used by the JS app's own "currentLocation only" fallback — see ENRICHMENT_FORMATTERS.maps.
+      enrichments.maps = { currentLocation: enrichments.mapsFallbackLocation } as typeof enrichments.maps;
+    }
+    delete enrichments.mapsRequests;
+    delete enrichments.mapsOrigin;
+    delete enrichments.mapsFallbackLocation;
   }
 }
 
@@ -752,6 +876,12 @@ export default {
         if (resolved.placeLabel) incomingLoc.placeLabel = resolved.placeLabel;
       }
     }
+
+    // Directions/ETA resolution — the Android client sends origin/destination/mode instead
+    // of calling Google Directions itself (see ProTxtBgService.kt's buildEnrichments "maps"
+    // case). Mirrors the shortUrl-resolution block above: resolved within this same request,
+    // then the request-only fields are dropped so ENRICHMENT_FORMATTERS never sees them.
+    await resolveMapsEnrichments(body.enrichments, env.GOOGLE_MAPS_API_KEY);
 
     const builtPrompt = buildPrompt(body, intents);
 

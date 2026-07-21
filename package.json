@@ -10,7 +10,8 @@
     "postinstall": "patch-package",
     "deploy": "npx expo export -p web && wrangler deploy",
     "preview": "npx expo export -p web && wrangler dev",
-    "test": "jest"
+    "test": "jest",
+    "test:worker": "vitest run --config worker/vitest.config.ts"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
@@ -53,6 +54,7 @@
     "jest-expo": "~54.0.17",
     "patch-package": "^8.0.1",
     "typescript": "~5.9.2",
+    "vitest": "^2.1.9",
     "wrangler": "^4.105.0"
   },
   "private": true,
