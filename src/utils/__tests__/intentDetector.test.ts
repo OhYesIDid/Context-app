@@ -68,6 +68,30 @@ describe('detectIntents', () => {
     expect(detectIntents('my 25th year at the company')).toEqual(['other']);
   });
 
+  it('detects task from explicit follow-up/reminder/calendar-add phrasing', () => {
+    // Regression: these previously fell through to 'other', which silently skips the
+    // whole worker call for non-Pro/non-suggest_all users — see the event/reminder
+    // recognition research (recommendation #1). Some examples legitimately also match
+    // an existing category (e.g. "calendar", "next week", "Friday afternoon" are already
+    // availability keywords) — asserting containment, not exclusivity.
+    expect(detectIntents('Can you send me the venue address by tomorrow?')).toContain('task');
+    expect(detectIntents("Don't forget to bring the tickets")).toEqual(['task']);
+    expect(detectIntents('remember to pick up the dry cleaning')).toEqual(['task']);
+    expect(detectIntents('add this to your calendar')).toContain('task');
+    expect(detectIntents('set a reminder for 6pm')).toEqual(['task']);
+    expect(detectIntents('remind me to call mum')).toEqual(['task']);
+    expect(detectIntents("let's schedule a call next week")).toContain('task');
+    expect(detectIntents('block off Friday afternoon')).toContain('task');
+    expect(detectIntents('make sure you bring your passport')).toEqual(['task']);
+  });
+
+  it('does not treat a reminiscence or rhetorical "should" as a task', () => {
+    expect(detectIntents('that reminds me of a great story')).toEqual(['other']);
+    // "catch up" alone already matches the existing availability pattern — not a task
+    // regression, just confirms the new task patterns don't ALSO fire here.
+    expect(detectIntents('we really should hang out more')).toEqual(['other']);
+  });
+
   it('falls back to other when nothing matches at all', () => {
     expect(detectIntents('lol nice')).toEqual(['other']);
   });
@@ -87,6 +111,10 @@ describe('requiredEnrichments', () => {
   it('dedupes enrichments shared across multiple intents', () => {
     // both 'availability' and 'general' require 'calendar'
     expect(requiredEnrichments(['availability', 'general'])).toEqual(['calendar']);
+  });
+
+  it('maps task to calendar so a proposed event can be deduped against existing ones', () => {
+    expect(requiredEnrichments(['task'])).toEqual(['calendar']);
   });
 
   it('unions enrichments across distinct intents in first-seen order', () => {

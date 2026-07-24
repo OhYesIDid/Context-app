@@ -95,6 +95,7 @@ object IntentAndSignals {
         if (patternsFor(patterns, "booking").any { it.containsMatchIn(message) }) intents.add("booking")
         if (patternsFor(patterns, "location_share").any { it.containsMatchIn(message) }) intents.add("location_share")
         if (patternsFor(patterns, "incoming_location").any { it.containsMatchIn(message) }) intents.add("incoming_location")
+        if (patternsFor(patterns, "task").any { it.containsMatchIn(message) }) intents.add("task")
         // general is a fallback signal only — anything more specific above takes priority.
         if (intents.isEmpty() && patternsFor(patterns, "general").any { it.containsMatchIn(message) }) intents.add("general")
         return intents.ifEmpty { listOf("other") }
@@ -111,6 +112,10 @@ object IntentAndSignals {
         "booking"           to listOf("bookings"), // label only — no native Gmail fetch wired up yet, unlike the TS/share-sheet path
         "location_share"    to listOf("location_coords"),
         "incoming_location" to listOf("incoming_location", "maps"),
+        // No dedicated data source — calendar_add/follow_up come from the model's generic
+        // action field, not a task-specific enrichment. 'calendar' lets Claude dedupe a
+        // proposed event against what's already on the calendar, same as availability/general.
+        "task"              to listOf("calendar"),
         "general"           to listOf("calendar"),
         "other"             to listOf<String>(),
     )

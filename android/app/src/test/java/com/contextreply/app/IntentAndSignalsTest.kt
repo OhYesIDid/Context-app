@@ -23,6 +23,7 @@ class IntentAndSignalsTest {
         "booking" to listOf(Regex("""\bhotel\b""", RegexOption.IGNORE_CASE)),
         "location_share" to listOf(Regex("""\bwhere are you\b""", RegexOption.IGNORE_CASE)),
         "incoming_location" to listOf(Regex("""maps\.google\.com""")),
+        "task" to listOf(Regex("""\bremind me\b""", RegexOption.IGNORE_CASE)),
         "general" to listOf(Regex("""\bbirthday\b""", RegexOption.IGNORE_CASE)),
     )
 
@@ -81,6 +82,12 @@ class IntentAndSignalsTest {
         assertEquals(listOf("other"), IntentAndSignals.detectIntents(fixturePatterns, "lol nice"))
     }
 
+    @Test fun `detects task alongside other specific intents`() {
+        val intents = IntentAndSignals.detectIntents(fixturePatterns, "remind me, how long till you're here")
+        assertTrue(intents.contains("task"))
+        assertTrue(intents.contains("eta"))
+    }
+
     @Test fun `isEtaIntent mirrors the eta pattern check`() {
         assertTrue(IntentAndSignals.isEtaIntent(fixturePatterns, "how long till you arrive"))
         assertFalse(IntentAndSignals.isEtaIntent(fixturePatterns, "are you free"))
@@ -96,6 +103,11 @@ class IntentAndSignalsTest {
     @Test fun `falls back to detecting intents from the message when none are pre-resolved`() {
         val result = IntentAndSignals.requiredEnrichments(fixturePatterns, "how long till you're here")
         assertEquals(listOf("maps"), result)
+    }
+
+    @Test fun `task maps to calendar so a proposed event can be deduped against existing ones`() {
+        val result = IntentAndSignals.requiredEnrichments(fixturePatterns, "ignored", "task")
+        assertEquals(listOf("calendar"), result)
     }
 
     // ── computeUrgencyScore ──────────────────────────────────────────────────────

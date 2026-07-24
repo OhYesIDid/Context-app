@@ -59,6 +59,7 @@ const AVAILABILITY_PATTERNS = compilePatterns('availability');
 const BOOKING_PATTERNS = compilePatterns('booking');
 const LOCATION_SHARE_PATTERNS = compilePatterns('location_share');
 const INCOMING_LOCATION_PATTERNS = compilePatterns('incoming_location');
+const TASK_PATTERNS = compilePatterns('task');
 const GENERAL_PATTERNS = compilePatterns('general');
 
 // Which enrichments each intent requires. Add new intents and their data
@@ -71,6 +72,11 @@ export const INTENT_ENRICHMENTS: Record<Intent, Enrichment[]> = {
   // notification-listener path resolves this via native LocationManager instead.
   location_share:    [],
   incoming_location: ['incoming_location'],
+  // No dedicated data source — the calendar_add/follow_up action itself comes from the
+  // model's generic action field, not a task-specific enrichment. 'calendar' is fetched so
+  // Claude can dedupe a proposed event against what's already on the calendar (the same
+  // reason 'availability'/'general' already pull it in).
+  task:              ['calendar'],
   general:           ['calendar'],
   other:             [],
 };
@@ -193,6 +199,7 @@ export function detectIntents(message: string): Intent[] {
   if (BOOKING_PATTERNS.some((re) => re.test(message))) intents.push('booking');
   if (LOCATION_SHARE_PATTERNS.some((re) => re.test(message))) intents.push('location_share');
   if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
+  if (TASK_PATTERNS.some((re) => re.test(message))) intents.push('task');
   // general is a fallback signal only — anything more specific above takes priority.
   if (intents.length === 0 && GENERAL_PATTERNS.some((re) => re.test(message))) intents.push('general');
   return intents.length > 0 ? intents : ['other'];

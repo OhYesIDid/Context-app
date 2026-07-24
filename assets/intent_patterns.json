@@ -64,6 +64,17 @@
     "📍",
     "(-?\\d{1,3}\\.\\d{5,})\\s*,\\s*(-?\\d{1,3}\\.\\d{5,})"
   ],
+  "task": [
+    "\\b(don'?t forget|remember) to\\b",
+    "\\bmake sure (you|to)\\b",
+    "\\b(can|could|would) you (send|check|call|text|email|bring|grab|pick up|drop off|book|confirm|pay|order)\\b(?!.{0,20}\\b(location|pin|coordinates)\\b)",
+    "\\bplease (send|check|call|text|email|bring|grab|pick up|drop off|book|confirm|pay|order)\\b(?!.{0,20}\\b(location|pin|coordinates)\\b)",
+    "\\badd (it |this |that )?to (the |your )?calendar\\b",
+    "\\bset a reminder\\b",
+    "\\bremind me\\b",
+    "\\bblock off\\b",
+    "\\blet'?s schedule\\b"
+  ],
   "general": [
     "\\b(birthday|bday|b-day)\\b",
     "\\banniversary\\b",

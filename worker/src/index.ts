@@ -375,6 +375,7 @@ const AVAILABILITY_PATTERNS = compilePatterns('availability');
 const BOOKING_PATTERNS = compilePatterns('booking');
 const LOCATION_SHARE_PATTERNS = compilePatterns('location_share');
 const INCOMING_LOCATION_PATTERNS = compilePatterns('incoming_location');
+const TASK_PATTERNS = compilePatterns('task');
 const GENERAL_PATTERNS = compilePatterns('general');
 
 function detectIntents(message: string): string[] {
@@ -384,6 +385,7 @@ function detectIntents(message: string): string[] {
   if (BOOKING_PATTERNS.some((re) => re.test(message))) intents.push('booking');
   if (LOCATION_SHARE_PATTERNS.some((re) => re.test(message))) intents.push('location_share');
   if (INCOMING_LOCATION_PATTERNS.some((re) => re.test(message))) intents.push('incoming_location');
+  if (TASK_PATTERNS.some((re) => re.test(message))) intents.push('task');
   if (intents.length === 0 && GENERAL_PATTERNS.some((re) => re.test(message))) intents.push('general');
   return intents.length > 0 ? intents : ['other'];
 }
