@@ -106,8 +106,8 @@ android {
         applicationId 'com.contxt.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 107
-        versionName "1.0.105"
+        versionCode 108
+        versionName "1.0.106"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "WORKER_URL", "\"https://contextreply-suggest.tommy-garnell.workers.dev\""
