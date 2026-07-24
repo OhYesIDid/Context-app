@@ -30,7 +30,7 @@ import HomeLocationConfirmModal from './src/screens/HomeLocationConfirmModal';
 import type { HomeCandidate } from './src/screens/HomeLocationConfirmModal';
 import { loadUpcomingEvents, PLATFORM_ICONS, UPCOMING_EMPTY } from './src/services/upcomingEvents';
 import type { UpcomingData } from './src/services/upcomingEvents';
-import { loadFollowUps, addFollowUp } from './src/services/followUps';
+import { loadFollowUps, addFollowUp, parseDueAt } from './src/services/followUps';
 import type { FollowUp } from './src/services/followUps';
 import { loadPendingCalendarActions } from './src/services/pendingCalendarActions';
 import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
@@ -244,7 +244,7 @@ export default function App() {
     loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
     drainConfirmedFollowUps().then(confirmed => {
       if (confirmed.length === 0) return;
-      Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined })))
+      Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined, dueAt: parseDueAt(c.dueAt) })))
         .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
         .catch(() => {});
     }).catch(() => {});
@@ -278,7 +278,7 @@ export default function App() {
       loadPendingFollowUps().then(setPendingFollowUps).catch(() => {});
       drainConfirmedFollowUps().then(confirmed => {
         if (confirmed.length === 0) return;
-        Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined })))
+        Promise.all(confirmed.map(c => addFollowUp({ text: c.task, contactName: c.contactName ?? undefined, dueAt: parseDueAt(c.dueAt) })))
           .then(results => { if (results.length) setFollowUps(results[results.length - 1]); })
           .catch(() => {});
       }).catch(() => {});
@@ -480,7 +480,7 @@ export default function App() {
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
           onFollowUpAdd={(item) => {
             setPendingFollowUps(prev => prev.filter(f => f.id !== item.id));
-            addFollowUp({ text: item.task, contactName: item.contactName ?? undefined })
+            addFollowUp({ text: item.task, contactName: item.contactName ?? undefined, dueAt: parseDueAt(item.dueAt) })
               .then(setFollowUps).catch(() => {});
           }}
           onFollowUpDismiss={(id) => setPendingFollowUps(prev => prev.filter(f => f.id !== id))}

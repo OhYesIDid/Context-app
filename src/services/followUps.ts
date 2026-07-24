@@ -12,6 +12,16 @@ export interface FollowUp {
 
 const KEY = 'contxt_follow_ups_v1';
 
+// Converts the model's ISO 8601 local datetime (or null/invalid) into a ms timestamp for
+// FollowUp.dueAt. Was previously discarded entirely at every addFollowUp() call site, so an
+// AI-created follow-up always lost its extracted deadline and sorted as urgency 'none'
+// regardless of what was actually said (e.g. "by tomorrow").
+export function parseDueAt(iso: string | null | undefined): number | undefined {
+  if (!iso) return undefined;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 export async function loadFollowUps(): Promise<FollowUp[]> {
   try {
     const raw = await AsyncStorage.getItem(KEY);

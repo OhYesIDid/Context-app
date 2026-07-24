@@ -1686,21 +1686,25 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) {}
     }
 
-    // Upserts a calendar action into the pending_calendar_actions SharedPrefs list.
-    // Keyed by convKey so re-processing the same conversation updates rather than duplicates.
+    // Upserts a calendar action into the pending_calendar_actions SharedPrefs list. Id is
+    // derived from convKey + title (see IntentAndSignals.computeActionId) so a genuinely
+    // distinct second event proposed in the same still-open conversation gets its own entry
+    // instead of silently overwriting the first, while a message merely refining the same
+    // event (title unchanged) still updates it in place.
     private fun upsertPendingCalendarAction(action: JSONObject, convKey: String, contactName: String) {
         val prefs = Prefs.main(this)
         try {
+            val title = action.optString("title").ifEmpty { "Event" }
             val existing = JSONArray(prefs.getString("pending_calendar_actions", "[]") ?: "[]")
             val next = JSONArray()
-            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            val id = IntentAndSignals.computeActionId(convKey, title)
             for (i in 0 until existing.length()) {
                 val item = existing.optJSONObject(i) ?: continue
                 if (item.optString("id") != id) next.put(item)
             }
             next.put(JSONObject().apply {
                 put("id", id)
-                put("title", action.optString("title").ifEmpty { "Event" })
+                put("title", title)
                 put("datetime", action.optString("datetime").ifEmpty { null } ?: JSONObject.NULL)
                 put("durationMinutes", action.optInt("durationMinutes", 60))
                 put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
@@ -1711,21 +1715,27 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) {}
     }
 
-    // Upserts a follow-up task into the pending_follow_ups SharedPrefs list.
+    // Upserts a follow-up task into the pending_follow_ups SharedPrefs list. Id derived from
+    // convKey + task (see IntentAndSignals.computeActionId) — same reasoning as the calendar
+    // action above.
     private fun upsertPendingFollowUp(action: JSONObject, convKey: String, contactName: String) {
         val prefs = Prefs.main(this)
         try {
+            val task = action.optString("task").ifEmpty { action.optString("label") }
             val existing = JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
             val next = JSONArray()
-            val id = convKey.hashCode().and(0x7FFFFFFF).toString()
+            val id = IntentAndSignals.computeActionId(convKey, task)
             for (i in 0 until existing.length()) {
                 val item = existing.optJSONObject(i) ?: continue
                 if (item.optString("id") != id) next.put(item)
             }
             next.put(JSONObject().apply {
                 put("id", id)
-                put("task", action.optString("task").ifEmpty { action.optString("label") })
+                put("task", task)
                 put("dueHint", action.optString("dueHint").ifEmpty { null } ?: JSONObject.NULL)
+                // ISO 8601 local datetime resolved by the model from dueHint — lets the JS
+                // side store a real due timestamp instead of losing the deadline entirely.
+                put("dueAt", action.optString("dueAt").ifEmpty { null } ?: JSONObject.NULL)
                 put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
                 put("convKey", convKey)
                 put("createdAt", System.currentTimeMillis())
@@ -1750,7 +1760,7 @@ class ProTxtBgService : NotificationListenerService() {
 
     // Called when user confirms a follow-up from the bubble CTA.
     // Clears from pending and adds to confirmed_follow_ups so JS can drain it into AsyncStorage.
-    fun confirmFollowUp(id: String, task: String, contactName: String, dueHint: String?) {
+    fun confirmFollowUp(id: String, task: String, contactName: String, dueHint: String?, dueAt: String? = null) {
         val prefs = Prefs.main(this)
         clearPendingFollowUp(id)
         try {
@@ -1760,6 +1770,7 @@ class ProTxtBgService : NotificationListenerService() {
                 put("task", task)
                 put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
                 put("dueHint", dueHint?.ifEmpty { null } ?: JSONObject.NULL)
+                put("dueAt", dueAt?.ifEmpty { null } ?: JSONObject.NULL)
                 put("createdAt", System.currentTimeMillis())
             })
             prefs.edit().putString("confirmed_follow_ups", arr.toString()).apply()

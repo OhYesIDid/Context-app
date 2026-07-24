@@ -106,6 +106,22 @@ object IntentAndSignals {
     fun isEtaIntent(patterns: Map<String, List<Regex>>, message: String): Boolean =
         patternsFor(patterns, "eta").any { it.containsMatchIn(message) }
 
+    // ── Pending action ids ───────────────────────────────────────────────────────
+
+    // Stable id for a pending calendar_add/follow_up action, combining the conversation with
+    // the action's own content (title/task) rather than convKey alone. Two DISTINCT proposals
+    // in the same still-open conversation (e.g. two different calendar events, or two
+    // different follow-up tasks) now get separate pending entries instead of the second
+    // silently overwriting the first — the previous convKey-only id meant every new action in
+    // a conversation collided with whatever was already pending there. A message merely
+    // refining the same event/task (title/task text stays the same) still resolves to the
+    // same id, so debounce/multi-message negotiation keeps updating one draft in place rather
+    // than piling up near-duplicates. Called identically from both the write side
+    // (upsertPendingCalendarAction/upsertPendingFollowUp) and the read side
+    // (BubbleSuggestionActivity's CTA handlers) so neither needs to transmit the id separately.
+    fun computeActionId(convKey: String, signature: String): String =
+        "$convKey|${signature.trim().lowercase()}".hashCode().and(0x7FFFFFFF).toString()
+
     private val INTENT_ENRICHMENTS = mapOf(
         "eta"               to listOf("maps"),
         "availability"      to listOf("calendar"),

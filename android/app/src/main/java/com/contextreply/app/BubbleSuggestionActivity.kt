@@ -1097,7 +1097,7 @@ class BubbleSuggestionActivity : Activity() {
                             }
                             // Clear from homescreen pending list now that it's been acted on
                             convKey?.let { key ->
-                                val id = key.hashCode().and(0x7FFFFFFF).toString()
+                                val id = IntentAndSignals.computeActionId(key, title)
                                 ProTxtBgService.getInstance()?.clearPendingCalendarAction(id)
                             }
                             try { startActivity(calIntent) } catch (_: Exception) {}
@@ -1109,10 +1109,11 @@ class BubbleSuggestionActivity : Activity() {
                         "follow_up" -> {
                             val task    = action.optString("task").ifEmpty { actionLabel }
                             val dueHint = action.optString("dueHint").ifEmpty { null }
-                            val id      = convKey?.hashCode()?.and(0x7FFFFFFF)?.toString()
+                            val dueAt   = action.optString("dueAt").ifEmpty { null }
+                            val id      = convKey?.let { IntentAndSignals.computeActionId(it, task) }
                             if (id != null) {
                                 val contact = contactMatch?.optString("displayName")?.ifEmpty { null } ?: ""
-                                ProTxtBgService.getInstance()?.confirmFollowUp(id, task, contact, dueHint)
+                                ProTxtBgService.getInstance()?.confirmFollowUp(id, task, contact, dueHint, dueAt)
                             }
                             text = "✓ Added to follow-ups"
                             setTextColor(GREEN)

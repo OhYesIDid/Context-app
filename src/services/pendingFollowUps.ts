@@ -6,6 +6,7 @@ export interface PendingFollowUp {
   id: string;
   task: string;
   dueHint: string | null;
+  dueAt: string | null;
   contactName: string | null;
   convKey: string;
   createdAt: number;
@@ -29,6 +30,7 @@ export interface ConfirmedFollowUp {
   task: string;
   contactName: string | null;
   dueHint: string | null;
+  dueAt: string | null;
   createdAt: number;
 }
 

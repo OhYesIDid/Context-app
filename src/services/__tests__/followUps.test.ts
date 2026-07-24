@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadFollowUps, addFollowUp, markDone, deleteFollowUp, urgency, formatDueLabel, type FollowUp } from '../followUps';
+import { loadFollowUps, addFollowUp, markDone, deleteFollowUp, urgency, formatDueLabel, parseDueAt, type FollowUp } from '../followUps';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -7,6 +7,23 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+});
+
+describe('parseDueAt', () => {
+  it('returns undefined for null, undefined, or empty input', () => {
+    expect(parseDueAt(null)).toBeUndefined();
+    expect(parseDueAt(undefined)).toBeUndefined();
+    expect(parseDueAt('')).toBeUndefined();
+  });
+
+  it('returns undefined for an unparseable string instead of NaN', () => {
+    expect(parseDueAt('not a date')).toBeUndefined();
+  });
+
+  it('converts a valid ISO 8601 local datetime to a ms timestamp', () => {
+    const ms = parseDueAt('2026-08-01T18:00:00');
+    expect(ms).toBe(new Date('2026-08-01T18:00:00').getTime());
+  });
 });
 
 describe('loadFollowUps', () => {

@@ -2,6 +2,7 @@ package com.contextreply.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -108,6 +109,32 @@ class IntentAndSignalsTest {
     @Test fun `task maps to calendar so a proposed event can be deduped against existing ones`() {
         val result = IntentAndSignals.requiredEnrichments(fixturePatterns, "ignored", "task")
         assertEquals(listOf("calendar"), result)
+    }
+
+    // ── computeActionId ──────────────────────────────────────────────────────────
+
+    @Test fun `same convKey and signature always produce the same id`() {
+        val a = IntentAndSignals.computeActionId("whatsapp:Maya", "Dinner Friday")
+        val b = IntentAndSignals.computeActionId("whatsapp:Maya", "Dinner Friday")
+        assertEquals(a, b)
+    }
+
+    @Test fun `a distinct second proposal in the same conversation gets a different id`() {
+        val dinner = IntentAndSignals.computeActionId("whatsapp:Maya", "Dinner Friday")
+        val brunch = IntentAndSignals.computeActionId("whatsapp:Maya", "Brunch Sunday")
+        assertNotEquals(dinner, brunch)
+    }
+
+    @Test fun `the same signature in a different conversation gets a different id`() {
+        val withMaya = IntentAndSignals.computeActionId("whatsapp:Maya", "Dinner Friday")
+        val withSam  = IntentAndSignals.computeActionId("whatsapp:Sam", "Dinner Friday")
+        assertNotEquals(withMaya, withSam)
+    }
+
+    @Test fun `signature comparison ignores case and surrounding whitespace`() {
+        val a = IntentAndSignals.computeActionId("whatsapp:Maya", "Dinner Friday")
+        val b = IntentAndSignals.computeActionId("whatsapp:Maya", "  DINNER FRIDAY  ")
+        assertEquals(a, b)
     }
 
     // ── computeUrgencyScore ──────────────────────────────────────────────────────
