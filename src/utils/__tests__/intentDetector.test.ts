@@ -51,6 +51,23 @@ describe('detectIntents', () => {
     expect(intents).toContain('eta');
   });
 
+  it('detects availability from a bare calendar date with no day-of-week or "free/busy" wording', () => {
+    // Regression: "How about the 25th?" was falling through to 'other', so no reply was
+    // ever suggested for a message that only proposes a date this way.
+    expect(detectIntents('How about the 25th?')).toEqual(['availability']);
+    expect(detectIntents('lets do July 25th')).toEqual(['availability']);
+    expect(detectIntents('are you free on the 25th')).toEqual(['availability']);
+    expect(detectIntents('lets meet on the 3rd of august')).toEqual(['availability']);
+    expect(detectIntents('how about 3rd August')).toEqual(['availability']);
+    expect(detectIntents('whats on the 1st')).toEqual(['availability']);
+  });
+
+  it('does not treat an ordinal number alone as a calendar-date reference', () => {
+    expect(detectIntents('I came 2nd in the race')).toEqual(['other']);
+    expect(detectIntents('he came 1st place')).toEqual(['other']);
+    expect(detectIntents('my 25th year at the company')).toEqual(['other']);
+  });
+
   it('falls back to other when nothing matches at all', () => {
     expect(detectIntents('lol nice')).toEqual(['other']);
   });

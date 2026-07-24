@@ -30,7 +30,10 @@
     "\\b(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\\s+(?:on\\s+|for\\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
     "\\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\s+(dinner|lunch|coffee|drinks|brunch|breakfast|supper)\\b",
     "\\b(move|push|shift|bump|reschedule|change)\\b.{0,30}\\b(to|until|till)\\b.{0,20}(\\d{1,2}(:\\d{2})?\\s?(am|pm)?|o'?clock|earlier|later)",
-    "\\bcan we (move|push|change|shift|do|make it)\\b"
+    "\\bcan we (move|push|change|shift|do|make it)\\b",
+    "\\b(?:on |the )\\d{1,2}(?:st|nd|rd|th)\\b",
+    "\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\b",
+    "\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2}(?:st|nd|rd|th)?\\b"
   ],
   "booking": [
     "\\b(flight|plane|airport|boarding|depart|land|airline)\\b",
