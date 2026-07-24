@@ -83,4 +83,13 @@ describe('parseReplies', () => {
     expect(result.formal).toBe('not json at all');
     expect(result.extractedMemories).toBeUndefined();
   });
+
+  it('passes the action confident flag through untouched (gates the second-pass date resolution)', () => {
+    const result = parseReplies(claudeJson({
+      formal: 'Sure.', casual: 'Yep!', brief: 'Yes.',
+      action: { type: 'follow_up', label: 'Add to Follow-ups', task: 'Call mum', dueHint: 'sometime', dueAt: null, confident: false },
+    }));
+    expect(result.action?.confident).toBe(false);
+    expect(result.action?.dueAt).toBeNull();
+  });
 });

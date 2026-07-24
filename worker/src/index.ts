@@ -564,6 +564,12 @@ interface ActionSuggestion {
   task?: string;
   dueHint?: string | null;
   dueAt?: string | null;
+  // calendar_add/follow_up only — whether the model resolved datetime/dueAt with real
+  // certainty vs. a guess at vague phrasing ("next week sometime", "before I leave"). false
+  // triggers a focused second-pass Claude call (see resolveAmbiguousDateTime) to re-resolve
+  // just the date/time with more explicit reasoning; stripped from the response either way —
+  // internal to the Worker, never sent to the client.
+  confident?: boolean;
 }
 
 const MODEL = 'claude-sonnet-4-6';
@@ -581,7 +587,7 @@ const SYSTEM_PROMPT = `You draft short, natural replies to messages on behalf of
 - contextUpdate: optional — a single sentence (max 20 words) summarising the overall relationship/topic update. Only include when the exchange reveals something notable. Omit entirely if nothing new.
 - snippets: optional — array of 0–3 specific facts worth storing long-term (plans, dates, places, personal details the user should remember) that are NOT a commitment or a preference (those go in extractedMemories instead). Max 12 words each. Be selective. Omit the field entirely if nothing qualifies.
 - extractedMemories: optional — array of 0–2 items for two specific cases only: (1) type "commitment" — an unresolved promise or plan either person made that will need following up ("I'll call you Tuesday", "let's confirm by Friday"); include "expiresAt" as an ISO date if a deadline is stated or clearly implied, omit it otherwise. (2) type "preference" — a durable, generally-true fact about the contact (an allergy, a recurring address, a birthday, a standing preference) — never include "expiresAt" for these. Each "text" max 12 words. Omit the field entirely if nothing qualifies — most messages have nothing worth extracting here.
-- action: optional — include for four cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}; (4) message asks the user to DO something specific that requires follow-up action (send a file, make a call, check something, bring something, book something, complete a task — i.e. a concrete actionable request directed at the user): {"type":"follow_up","label":"Add to Follow-ups","task":"[what the user needs to do — action-first, max 12 words, e.g. 'Send the contract to John']","dueHint":"[relative deadline if mentioned, e.g. 'by tomorrow', 'this week', or null]","dueAt":"[ISO 8601 local, e.g. 2026-06-20T18:00:00, resolved from dueHint using today's date, or null if no real deadline was stated]"}. Use today's date to resolve relative days. Omit action entirely if none of these cases apply.`;
+- action: optional — include for four cases: (1) message proposes a meeting/event: {"type":"calendar_add","label":"Add to Calendar","title":"[event name]","datetime":"[ISO 8601 local, e.g. 2026-06-20T19:00:00, or null if no time given]","durationMinutes":60,"confident":true|false}; (2) message shares a specific address/place to visit: {"type":"maps_open","label":"Open in Maps","address":"[full address or place name]"}; (3) message explicitly asks the user to share their current location (e.g. "share your location", "drop a pin", "send me your location"): {"type":"share_location","label":"Share Location"}; (4) message asks the user to DO something specific that requires follow-up action (send a file, make a call, check something, bring something, book something, complete a task — i.e. a concrete actionable request directed at the user): {"type":"follow_up","label":"Add to Follow-ups","task":"[what the user needs to do — action-first, max 12 words, e.g. 'Send the contract to John']","dueHint":"[relative deadline if mentioned, e.g. 'by tomorrow', 'this week', or null]","dueAt":"[ISO 8601 local, e.g. 2026-06-20T18:00:00, resolved from dueHint using today's date, or null if no real deadline was stated]","confident":true|false}. Use today's date to resolve relative days. "confident" (calendar_add/follow_up only): true if datetime/dueAt was stated with real certainty (an explicit day/time was given); false if you had to guess at vague phrasing ("next week sometime", "before I leave", "when I'm free") — still give your best-guess datetime/dueAt even when false. Omit action entirely if none of these cases apply.`;
 
 // Formats "today" for the prompt, including the current time when the client supplied its
 // own local wall-clock time. Without a client-provided time, the Worker's own clock is UTC
@@ -682,6 +688,60 @@ function buildPrompt(body: SuggestRequest, intents: string[]): string {
     `\nToday is ${formatNow(body.localDateTime)}.`,
     '\nWrite the reply JSON for the user.',
   ].filter(Boolean).join('');
+}
+
+// Second-pass call used only when the main reply-generation call flagged its own
+// calendar_add/follow_up date/time as low-confidence (vague phrasing like "next week
+// sometime" or "before I leave"). A focused, single-purpose prompt whose only job is
+// resolving one ISO datetime from the full conversation + today's date — more reliable than
+// asking one call to handle both natural reply wording AND precise date math at once, and
+// only paid for the minority of ambiguous cases. Mirrors the existing tier1/tier2 escalation
+// already used for Gmail booking classification (handleClassifyBookings). Returns undefined
+// (not null) on any failure so the caller keeps the original, already-present guess rather
+// than blanking it out.
+export async function resolveAmbiguousDateTime(
+  body: SuggestRequest,
+  actionLabel: string,
+  env: Env,
+): Promise<string | null | undefined> {
+  const thread = body.conversationThread;
+  const messageBlock = thread && thread.length > 1
+    ? `<conversation>\n${thread.map((m) => `${m.sender ?? 'Me'}: ${m.text}`).join('\n')}\n</conversation>`
+    : `<message>${body.message}</message>`;
+
+  const prompt = [
+    messageBlock,
+    `\nToday is ${formatNow(body.localDateTime)}.`,
+    `\nResolve the exact date/time for: "${actionLabel}". Use the whole conversation to infer an implied time even if not explicitly stated for this specific item (e.g. "before I leave for the airport Tuesday" should resolve using whatever time was mentioned for leaving, elsewhere in the conversation, if any). If genuinely no date/time can be inferred from anything said, respond with null.`,
+    '\nRespond ONLY with JSON, no markdown, no explanation: {"datetime":"[ISO 8601 local, e.g. 2026-06-20T18:00:00]"} or {"datetime":null}',
+  ].join('');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 150,
+      temperature: 0,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!res.ok) return undefined;
+
+  const data = await res.json() as { content?: { text: string }[] };
+  const raw = data.content?.[0]?.text?.trim() ?? '';
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try {
+    const parsed = JSON.parse(cleaned) as { datetime?: string | null };
+    if (parsed.datetime === null) return null;
+    return typeof parsed.datetime === 'string' && parsed.datetime.trim() ? parsed.datetime.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseReplies(raw: string): ReplyOptions {
@@ -993,6 +1053,23 @@ export default {
         }
       }
     }
+
+    // Low-confidence datetime/dueAt gets a focused second-pass call to re-resolve just the
+    // date/time with more explicit reasoning — see resolveAmbiguousDateTime's doc comment.
+    // Confident (or absent) actions skip this entirely, so the extra Claude call is only
+    // paid for the minority of genuinely ambiguous messages.
+    if (action?.confident === false && (action.type === 'calendar_add' || action.type === 'follow_up')) {
+      const label = action.type === 'calendar_add' ? action.title : action.task;
+      if (label) {
+        const resolved = await resolveAmbiguousDateTime(body, label, env);
+        if (resolved !== undefined) {
+          if (action.type === 'calendar_add') action.datetime = resolved;
+          else action.dueAt = resolved;
+        }
+      }
+    }
+    // Internal-only signal, never sent to the client.
+    if (action) delete action.confident;
 
     const responseBody: Record<string, unknown> = { replies: replyTones, intents };
     if (contextUpdate) responseBody.contextUpdate = contextUpdate;
