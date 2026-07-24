@@ -10,6 +10,11 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+// type is always "commitment" or "preference" — validated Worker-side before this ever
+// reaches the client. expiresAt is null for preferences (durable, no lifecycle) and for
+// commitments the Worker didn't give a deadline for (ContactMemory applies a default).
+data class TypedMemory(val type: String, val text: String, val expiresAt: String?)
+
 data class WorkerResult(
     val replies: JSONObject,
     val intent: String?,
@@ -23,6 +28,7 @@ data class WorkerResult(
     // eagerly at enrichment-build time, so an unvalidated candidate (e.g. a false-positive
     // extraction like "10pm" from "...at 10pm") never poisons future ambiguous-candidate lookups.
     val resolvedDestination: Pair<String, String>? = null,
+    val extractedMemories: List<TypedMemory> = emptyList(),
 ) {
     companion object {
         val RATE_LIMITED = WorkerResult(JSONObject(), null, null, rateLimited = true)
@@ -185,7 +191,20 @@ object WorkerClient {
                 val label = it.optString("label").ifEmpty { null }
                 if (text != null && label != null) text to label else null
             }
-            WorkerResult(replies, intent, contextUpdate, action, snippets, resolvedDestination = resolvedDestination)
+            val extractedMemoriesArr = obj.optJSONArray("extractedMemories")
+            val extractedMemories = if (extractedMemoriesArr != null) {
+                (0 until extractedMemoriesArr.length()).mapNotNull { i ->
+                    val m = extractedMemoriesArr.optJSONObject(i) ?: return@mapNotNull null
+                    val type = m.optString("type").ifEmpty { null } ?: return@mapNotNull null
+                    val text = m.optString("text").ifEmpty { null } ?: return@mapNotNull null
+                    TypedMemory(type, text, m.optString("expiresAt").ifEmpty { null })
+                }
+            } else emptyList()
+            WorkerResult(
+                replies, intent, contextUpdate, action, snippets,
+                resolvedDestination = resolvedDestination,
+                extractedMemories = extractedMemories,
+            )
         } finally {
             conn.disconnect()
         }

@@ -742,6 +742,11 @@ class ProTxtBgService : NotificationListenerService() {
                 if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "worker call returned")
                 // Persist context update + snippets, keyed by contactId where available
                 ContactMemory.save(this, convKey, result.contextUpdate, result.snippets)
+                // Typed, lifecycle-aware memories (open commitments / durable preferences) —
+                // separate store from the rolling snippets above, see ContactMemory.saveTyped.
+                if (result.extractedMemories.isNotEmpty()) {
+                    ContactMemory.saveTyped(this, convKey, result.extractedMemories)
+                }
                 // Remember this destination for follow-ups later in the same conversation
                 // — NotificationStore.markReplied() wipes the thread on every reply, which
                 // otherwise loses a destination mentioned earlier the moment you reply once.

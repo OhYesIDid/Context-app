@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 
@@ -36,6 +38,12 @@ object ContactMemory {
     private const val MAX_AGE_DAYS = 90
     private const val MIN_KEEP     = 10
 
+    // Typed memories (commitments/preferences) are far lower volume than rolling entries
+    // (0-2 per worker call, only when genuinely relevant) so a flat cap is enough — no
+    // age-based floor like MIN_KEEP is needed.
+    private const val MAX_TYPED_ENTRIES = 20
+    private const val DEFAULT_COMMITMENT_EXPIRY_DAYS = 14
+
     // Destinations are conversation-specific ("what place did this chat mention"), not a
     // contact-wide fact, so they're keyed by convKey directly rather than going through
     // resolveKey()'s contactId fallback. A "trip" is a same-day thing, not permanent — 6h
@@ -53,29 +61,11 @@ object ContactMemory {
     fun buildMemoryBlock(context: Context, convKey: String): String? {
         val key = resolveKey(context, convKey)
         val obj = load(context, key) ?: return null
-        val summary = obj.optString("summary").ifEmpty { null }
-        val entries = obj.optJSONArray("entries")
-
-        val lines = mutableListOf<String>()
-        if (entries != null && entries.length() > 0) {
-            val fmt = SimpleDateFormat("d MMM", Locale.getDefault())
-            for (i in 0 until entries.length()) {
-                val e = entries.optJSONObject(i) ?: continue
-                val ts   = e.optLong("ts", 0L)
-                val text = e.optString("text").ifEmpty { null } ?: continue
-                val date = if (ts > 0) fmt.format(Date(ts)) else null
-                lines.add(if (date != null) "[$date] $text" else text)
-            }
-        }
-
-        return when {
-            lines.isNotEmpty() -> {
-                val header = "Past context about this contact (most recent first):"
-                (listOf(header) + lines.asReversed()).joinToString("\n")
-            }
-            summary != null -> "Past context about this contact: $summary"
-            else -> null
-        }
+        return formatMemoryBlock(
+            summary = obj.optString("summary").ifEmpty { null },
+            entries = obj.optJSONArray("entries"),
+            typed = obj.optJSONArray("typed"),
+        )
     }
 
     fun getLastSent(context: Context, convKey: String): String? =
@@ -155,6 +145,22 @@ object ContactMemory {
         prefs(context).edit().putString(memKey(key), obj.toString()).apply()
     }
 
+    /**
+     * Saves typed, lifecycle-aware memories (commitments and preferences) extracted by the
+     * Worker — separate from the generic rolling `entries` [save] writes. Commitments without
+     * an explicit expiresAt default to [DEFAULT_COMMITMENT_EXPIRY_DAYS] out so a stale one
+     * eventually stops surfacing even without ever being explicitly resolved; preferences
+     * never expire.
+     */
+    fun saveTyped(context: Context, convKey: String, memories: List<TypedMemory>) {
+        if (memories.isEmpty()) return
+        val key = resolveKey(context, convKey)
+        val obj = load(context, key) ?: JSONObject()
+        val existingTyped = obj.optJSONArray("typed") ?: JSONArray()
+        obj.put("typed", mergeTypedEntries(existingTyped, memories, System.currentTimeMillis()))
+        prefs(context).edit().putString(memKey(key), obj.toString()).apply()
+    }
+
     fun saveLastSent(context: Context, convKey: String, replyText: String) {
         prefs(context).edit().putString(sentKey(convKey), replyText).apply()
     }
@@ -204,8 +210,115 @@ object ContactMemory {
         return try {
             val obj = JSONObject(raw)
             // Migrate legacy plain-string entries written before this schema
-            if (!obj.has("summary") && !obj.has("entries")) null else obj
+            if (!obj.has("summary") && !obj.has("entries") && !obj.has("typed")) null else obj
         } catch (_: Exception) { null }
+    }
+
+    // ── Pure helpers (Context-free, unit-testable) ───────────────────────────────
+
+    /**
+     * Parses a Worker-supplied ISO date (YYYY-MM-DD, tolerant of a longer ISO string) into
+     * epoch millis at local midnight. Returns null for anything blank or unparseable so the
+     * default expiry applies instead of a wrong deadline.
+     */
+    fun parseExpiryMillis(iso: String?): Long? {
+        if (iso.isNullOrBlank()) return null
+        return try {
+            LocalDate.parse(iso.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } catch (_: Exception) { null }
+    }
+
+    /**
+     * Appends [memories] to [existingTyped] with computed expiry, then prunes resolved/expired
+     * entries and caps the total count. [now] is passed in explicitly so this stays pure.
+     */
+    fun mergeTypedEntries(existingTyped: JSONArray, memories: List<TypedMemory>, now: Long): JSONArray {
+        val merged = JSONArray()
+        for (i in 0 until existingTyped.length()) {
+            existingTyped.optJSONObject(i)?.let { merged.put(it) }
+        }
+        for (m in memories) {
+            if (m.text.isBlank()) continue
+            val expiresAt = if (m.type == "commitment") {
+                parseExpiryMillis(m.expiresAt) ?: (now + DEFAULT_COMMITMENT_EXPIRY_DAYS * 86_400_000L)
+            } else null // preferences are durable — never expire, regardless of what was sent
+            merged.put(JSONObject().apply {
+                put("type", m.type)
+                put("text", m.text.trim())
+                put("createdAt", now)
+                if (expiresAt != null) put("expiresAt", expiresAt)
+                put("status", "open")
+            })
+        }
+        return pruneTyped(merged, now)
+    }
+
+    /** Drops resolved and expired entries, then keeps only the most recent [MAX_TYPED_ENTRIES]. */
+    fun pruneTyped(typed: JSONArray, now: Long): JSONArray {
+        val all = (0 until typed.length()).mapNotNull { typed.optJSONObject(it) }
+        val active = all.filter { entry ->
+            if (entry.optString("status", "open") == "resolved") return@filter false
+            val expiresAt = if (entry.has("expiresAt")) entry.optLong("expiresAt") else null
+            expiresAt == null || expiresAt > now
+        }
+        val kept = active.takeLast(MAX_TYPED_ENTRIES)
+        return JSONArray().also { arr -> kept.forEach { arr.put(it) } }
+    }
+
+    /**
+     * Builds the full context-block text from stored summary/rolling-entries/typed data, or
+     * null if there's nothing worth saying. Context-free — [buildMemoryBlock] does the I/O.
+     */
+    fun formatMemoryBlock(
+        summary: String?,
+        entries: JSONArray?,
+        typed: JSONArray?,
+        now: Long = System.currentTimeMillis(),
+    ): String? {
+        val lines = mutableListOf<String>()
+        if (entries != null && entries.length() > 0) {
+            val fmt = SimpleDateFormat("d MMM", Locale.getDefault())
+            for (i in 0 until entries.length()) {
+                val e = entries.optJSONObject(i) ?: continue
+                val ts   = e.optLong("ts", 0L)
+                val text = e.optString("text").ifEmpty { null } ?: continue
+                val date = if (ts > 0) fmt.format(Date(ts)) else null
+                lines.add(if (date != null) "[$date] $text" else text)
+            }
+        }
+
+        val sections = mutableListOf<String>()
+        when {
+            lines.isNotEmpty() -> sections.add(
+                (listOf("Past context about this contact (most recent first):") + lines.asReversed())
+                    .joinToString("\n")
+            )
+            summary != null -> sections.add("Past context about this contact: $summary")
+        }
+
+        if (typed != null && typed.length() > 0) {
+            val commitmentLines = mutableListOf<String>()
+            val preferenceLines = mutableListOf<String>()
+            for (i in 0 until typed.length()) {
+                val e = typed.optJSONObject(i) ?: continue
+                if (e.optString("status", "open") == "resolved") continue
+                val expiresAt = if (e.has("expiresAt")) e.optLong("expiresAt") else null
+                if (expiresAt != null && expiresAt <= now) continue
+                val text = e.optString("text").ifEmpty { null } ?: continue
+                when (e.optString("type")) {
+                    "commitment" -> commitmentLines.add("- $text")
+                    "preference" -> preferenceLines.add("- $text")
+                }
+            }
+            if (commitmentLines.isNotEmpty()) {
+                sections.add((listOf("Open commitments with this contact:") + commitmentLines).joinToString("\n"))
+            }
+            if (preferenceLines.isNotEmpty()) {
+                sections.add((listOf("Known facts about this contact:") + preferenceLines).joinToString("\n"))
+            }
+        }
+
+        return if (sections.isNotEmpty()) sections.joinToString("\n\n") else null
     }
 
     private fun prune(entries: JSONArray): JSONArray {
