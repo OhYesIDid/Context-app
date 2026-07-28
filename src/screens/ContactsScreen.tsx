@@ -94,9 +94,15 @@ export default function ContactsScreen({
     ? contacts.filter((c) => c.displayName.toLowerCase().includes(contactSearch.toLowerCase()))
     : contacts.slice(0, 10);
 
-  const pickerContacts = pickerSearch
-    ? contacts.filter((c) => c.displayName.toLowerCase().includes(pickerSearch.trim().toLowerCase()))
+  // A "suggestion" target already has a declined/primary guess (link.contactId) — leaving
+  // it in the list would let "Not them" loop right back to the same contact it was just
+  // declined for, so it's excluded here rather than only from the search-filtered view.
+  const pickerBase = linkPickerTarget?.kind === 'suggestion'
+    ? contacts.filter((c) => c.id !== linkPickerTarget.link.contactId)
     : contacts;
+  const pickerContacts = pickerSearch
+    ? pickerBase.filter((c) => c.displayName.toLowerCase().includes(pickerSearch.trim().toLowerCase()))
+    : pickerBase;
 
   const openPicker = (t: LinkPickerTarget) => { setPickerSearch(''); setLinkPickerTarget(t); };
 
@@ -158,6 +164,7 @@ export default function ContactsScreen({
             <View style={styles.divider} />
             {pendingContactLinks.map((link) => (
               <View key={link.convKey} style={styles.suggestionRow}>
+                <Text style={styles.platformIcon}>{PLATFORM_ICONS[link.platform ?? ''] ?? '📱'}</Text>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.suggestionTitle} numberOfLines={1}>{bannerText(link)}</Text>
                   <Text style={styles.senderMeta} numberOfLines={1}>
@@ -335,6 +342,13 @@ export default function ContactsScreen({
               {pickerContacts.map((c) => (
                 <Pressable key={c.id} style={styles.pickerRow} onPress={() => handlePickerSelect(c.id)}>
                   <Text style={styles.pickerRowName} numberOfLines={1}>{c.displayName}</Text>
+                  {(contactPlatforms[c.id]?.length ?? 0) > 0 && (
+                    <View style={{ flexDirection: 'row', gap: 3 }}>
+                      {contactPlatforms[c.id].map((p) => (
+                        <Text key={p} style={{ fontSize: 13 }}>{PLATFORM_ICONS[p] ?? '📱'}</Text>
+                      ))}
+                    </View>
+                  )}
                   <Text style={styles.pickerRowAction}>Link</Text>
                 </Pressable>
               ))}
