@@ -648,6 +648,12 @@ class BubbleSuggestionActivity : Activity() {
             banner.addView(headerRow)
 
             headerRow.addView(TextView(this).apply {
+                text = ProTxtBgService.platformIcon(packageName)
+                textSize = 12f
+                setPadding(0, 0, dp(4), 0)
+            })
+
+            headerRow.addView(TextView(this).apply {
                 text = bannerText
                 setTextColor(accentColor)
                 textSize = 12f

@@ -63,6 +63,19 @@ object IntentAndSignals {
         else -> null
     }
 
+    // Mirrors src/services/upcomingEvents.ts's PLATFORM_ICONS exactly, so a platform reads
+    // identically whether it's shown from JS (ContactsScreen/ContactDetailModal) or here in
+    // the native bubble's own contact-match banner.
+    fun platformIcon(pkg: String): String = when (packageToPlatform(pkg)) {
+        "whatsapp"  -> "💬"
+        "telegram"  -> "📨"
+        "instagram" -> "📸"
+        "sms"       -> "💬"
+        "messenger" -> "💭"
+        "signal"    -> "🔒"
+        else        -> "📱"
+    }
+
     fun appLabel(pkg: String): String = when {
         pkg.contains("whatsapp")                          -> "WhatsApp"
         pkg.contains("telegram")                          -> "Telegram"

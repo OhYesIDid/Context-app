@@ -140,6 +140,7 @@ class ProTxtBgService : NotificationListenerService() {
         fun stripAppPrefix(key: String): String = IntentAndSignals.stripAppPrefix(key)
         fun packageToPlatform(pkg: String): String? = IntentAndSignals.packageToPlatform(pkg)
         fun appLabel(pkg: String): String = IntentAndSignals.appLabel(pkg)
+        fun platformIcon(pkg: String): String = IntentAndSignals.platformIcon(pkg)
     }
 
     private val pendingJobs   = ConcurrentHashMap<String, ScheduledFuture<*>>()
