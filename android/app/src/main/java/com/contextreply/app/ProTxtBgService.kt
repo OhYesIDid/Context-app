@@ -1502,7 +1502,13 @@ class ProTxtBgService : NotificationListenerService() {
         val confirmed = try {
             JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
         } catch (_: Exception) { JSONObject() }
-        if (confirmed.has(convKey)) return null  // already confirmed, no banner needed
+        if (confirmed.has(convKey)) {
+            // Already resolved — by a prior bubble action, an auto-registration, or a
+            // decision made from the "Suggested links" tab. Whichever it was, any
+            // pending-suggestion record for this convKey is stale now.
+            ContactLinkStore.clear(this, convKey)
+            return null
+        }
         val senderName = stripAppPrefix(convKey.substringAfter(":"))
 
         // Phone anchor: resolve raw numbers via PhoneLookup before fuzzy name matching.
@@ -1513,6 +1519,11 @@ class ProTxtBgService : NotificationListenerService() {
         decision.confirmIdentity?.let { contactId ->
             confirmed.put(convKey, contactId)
             prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            ContactLinkStore.clear(this, convKey)
+        }
+        decision.json?.let { json ->
+            val platform = packageToPlatform(convKey.substringBefore(":", ""))
+            ContactLinkStore.upsert(this, convKey, senderName, platform, json)
         }
         return decision.json
     }

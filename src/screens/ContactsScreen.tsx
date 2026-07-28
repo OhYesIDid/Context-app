@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Contact, Relationship, Tone } from '../types';
-import type { UnmatchedSender } from '../services/contactLinking';
+import type { PendingContactLink, UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
-import { PURPLE, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CONTEXT, FONTS } from '../theme';
+import { PURPLE, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CONTEXT, AMBER, FONTS } from '../theme';
 
 const TONE_LABEL: Record<Tone, string> = { casual: 'Casual', formal: 'Formal', brief: 'Brief' };
 
@@ -22,12 +22,47 @@ function SetupRow({ label, status, done, loading, onPress }: { label: string; st
   );
 }
 
+// Mirrors BubbleSuggestionActivity's own bannerText logic exactly, so the same
+// suggestion reads identically whether it's answered in the bubble or here later.
+function bannerText(link: PendingContactLink): string {
+  if (link.crossApp) return `Same person as ${link.displayName}?`;
+  if (link.confidence >= 0.88) return `Is this ${link.displayName}?`;
+  return `Possibly ${link.displayName}?`;
+}
+
+// The link picker serves two related-but-distinct flows off one contact list + search
+// + "create new" UI: linking a sender that matched NOBODY (no guess to confirm/decline,
+// just "pick who this is"), and answering "not them" on a suggestion that already had a
+// guess (adds a "None of these" decline option the unmatched-sender flow doesn't need,
+// since there's nothing to decline there).
+type LinkPickerTarget =
+  | { kind: 'unmatched'; sender: UnmatchedSender }
+  | { kind: 'suggestion'; link: PendingContactLink };
+
+function targetConvKey(t: LinkPickerTarget): string {
+  return t.kind === 'unmatched' ? t.sender.convKey : t.link.convKey;
+}
+function targetDisplayName(t: LinkPickerTarget): string {
+  return t.kind === 'unmatched' ? t.sender.displayName : t.link.senderName;
+}
+function targetPlatformLabel(t: LinkPickerTarget): string {
+  return t.kind === 'unmatched' ? t.sender.platformLabel : (t.link.platform ?? 'another app');
+}
+// Both onLinkSenderToContact/onCreateContactFromSender take an UnmatchedSender shape —
+// a PendingContactLink carries the same senderName/convKey/platform, so it converts
+// directly rather than needing its own pair of App.tsx handlers.
+function targetAsSender(t: LinkPickerTarget): UnmatchedSender {
+  if (t.kind === 'unmatched') return t.sender;
+  return { convKey: t.link.convKey, displayName: t.link.senderName, platform: t.link.platform ?? 'other', platformLabel: t.link.platform ?? 'another app' };
+}
+
 interface Props {
   contacts: Contact[];
   contactPlatforms: Record<string, string[]>;
   contactSearch: string;
   onSearchChange: (s: string) => void;
   unmatchedSenders: UnmatchedSender[];
+  pendingContactLinks: PendingContactLink[];
   linkingSenderKey: string | null;
   googleContactsCount: number | null;
   deviceContactsCount: number | null;
@@ -41,16 +76,18 @@ interface Props {
   onUpdatePref: (id: string, field: 'relationship' | 'preferredTone', value: string | undefined) => void;
   onLinkSenderToContact: (sender: UnmatchedSender, contactId: string) => void;
   onCreateContactFromSender: (sender: UnmatchedSender) => void;
+  onResolvePendingLink: (link: PendingContactLink, contactId: string) => void;
+  onDeclinePendingLink: (link: PendingContactLink) => void;
   onGoToSettings: () => void;
 }
 
 export default function ContactsScreen({
-  contacts, contactPlatforms, contactSearch, onSearchChange, unmatchedSenders, linkingSenderKey,
+  contacts, contactPlatforms, contactSearch, onSearchChange, unmatchedSenders, pendingContactLinks, linkingSenderKey,
   googleContactsCount, deviceContactsCount, whatsappMessages, setupLoading,
   onImportGoogle, onImportDevice, onImportWhatsApp, onNewContact, onSelectContact, onUpdatePref,
-  onLinkSenderToContact, onCreateContactFromSender, onGoToSettings,
+  onLinkSenderToContact, onCreateContactFromSender, onResolvePendingLink, onDeclinePendingLink, onGoToSettings,
 }: Props) {
-  const [linkPickerSender, setLinkPickerSender] = useState<UnmatchedSender | null>(null);
+  const [linkPickerTarget, setLinkPickerTarget] = useState<LinkPickerTarget | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
 
   const shown = contactSearch
@@ -60,6 +97,21 @@ export default function ContactsScreen({
   const pickerContacts = pickerSearch
     ? contacts.filter((c) => c.displayName.toLowerCase().includes(pickerSearch.trim().toLowerCase()))
     : contacts;
+
+  const openPicker = (t: LinkPickerTarget) => { setPickerSearch(''); setLinkPickerTarget(t); };
+
+  const handlePickerSelect = (contactId: string) => {
+    if (!linkPickerTarget) return;
+    if (linkPickerTarget.kind === 'unmatched') onLinkSenderToContact(linkPickerTarget.sender, contactId);
+    else onResolvePendingLink(linkPickerTarget.link, contactId);
+    setLinkPickerTarget(null);
+  };
+
+  const handlePickerCreate = () => {
+    if (!linkPickerTarget) return;
+    onCreateContactFromSender(targetAsSender(linkPickerTarget));
+    setLinkPickerTarget(null);
+  };
 
   return (
     <View style={styles.root}>
@@ -84,6 +136,46 @@ export default function ContactsScreen({
           onChangeText={onSearchChange}
           autoCorrect={false}
         />
+
+        {/* Suggested links — a fuzzy-match banner the bubble posed but the user never
+            answered. Previously these evaporated the moment the bubble was dismissed;
+            now they're queued (ContactLinkStore.kt) until answered here or the next
+            message resolves them another way. */}
+        {pendingContactLinks.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardIcon, { backgroundColor: AMBER + '20' }]}>
+                  <Text style={styles.cardIconText}>💡</Text>
+                </View>
+                <Text style={styles.cardTitle}>Suggested links</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{pendingContactLinks.length}</Text>
+                </View>
+              </View>
+            </View>
+            <Text style={styles.cardHint}>ConTxt noticed a possible match — confirm or decline.</Text>
+            <View style={styles.divider} />
+            {pendingContactLinks.map((link) => (
+              <View key={link.convKey} style={styles.suggestionRow}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.suggestionTitle} numberOfLines={1}>{bannerText(link)}</Text>
+                  <Text style={styles.senderMeta} numberOfLines={1}>
+                    {link.senderName}{link.platform ? ` · ${link.platform}` : ''}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 14 }}>
+                  <Pressable onPress={() => onResolvePendingLink(link, link.contactId)}>
+                    <Text style={styles.suggestionYes}>Yes</Text>
+                  </Pressable>
+                  <Pressable onPress={() => openPicker({ kind: 'suggestion', link })}>
+                    <Text style={styles.suggestionNo}>Not them</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Unlinked senders — every sender ConTxt has seen across every app that's
             never been matched to a contact (native getUnmatchedSenders(), the same
@@ -110,7 +202,7 @@ export default function ContactsScreen({
                 key={sender.convKey}
                 style={styles.senderRow}
                 disabled={linkingSenderKey === sender.convKey}
-                onPress={() => { setPickerSearch(''); setLinkPickerSender(sender); }}
+                onPress={() => openPicker({ kind: 'unmatched', sender })}
               >
                 <Text style={styles.platformIcon}>{PLATFORM_ICONS[sender.platform] ?? '📱'}</Text>
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -204,24 +296,32 @@ export default function ContactsScreen({
         )}
       </ScrollView>
 
-      {/* Link picker — pick an existing contact for this unmatched sender, or create
-          a new one from it. Inverse of ContactDetailModal's own picker (that one
-          picks a sender for a known contact; this picks a contact for a known sender). */}
-      <Modal visible={!!linkPickerSender} transparent animationType="slide" onRequestClose={() => setLinkPickerSender(null)}>
-        <Pressable style={styles.overlay} onPress={() => setLinkPickerSender(null)}>
+      {/* Link picker — pick an existing contact for this sender, decline (suggestions
+          only), or create a new one. Inverse of ContactDetailModal's own picker (that
+          one picks a sender for a known contact; this picks a contact for a known
+          sender). */}
+      <Modal visible={!!linkPickerTarget} transparent animationType="slide" onRequestClose={() => setLinkPickerTarget(null)}>
+        <Pressable style={styles.overlay} onPress={() => setLinkPickerTarget(null)}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.handle} />
-            <Text style={styles.pickerTitle}>Link {linkPickerSender?.displayName}</Text>
-            <Text style={styles.pickerHint}>
-              Seen on {linkPickerSender?.platformLabel}. Pick who this is, or create a new contact.
-            </Text>
-            {linkPickerSender && (
-              <Pressable
-                style={styles.createRow}
-                onPress={() => { onCreateContactFromSender(linkPickerSender); setLinkPickerSender(null); }}
-              >
-                <Text style={styles.createRowText}>+ Create "{linkPickerSender.displayName}" as a new contact</Text>
-              </Pressable>
+            {linkPickerTarget && (
+              <>
+                <Text style={styles.pickerTitle}>Link {targetDisplayName(linkPickerTarget)}</Text>
+                <Text style={styles.pickerHint}>
+                  Seen on {targetPlatformLabel(linkPickerTarget)}. Pick who this is, or create a new contact.
+                </Text>
+                {linkPickerTarget.kind === 'suggestion' && (
+                  <Pressable
+                    style={styles.declineRow}
+                    onPress={() => { onDeclinePendingLink(linkPickerTarget.link); setLinkPickerTarget(null); }}
+                  >
+                    <Text style={styles.declineRowText}>None of these — don't suggest again</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.createRow} onPress={handlePickerCreate}>
+                  <Text style={styles.createRowText}>+ Create "{targetDisplayName(linkPickerTarget)}" as a new contact</Text>
+                </Pressable>
+              </>
             )}
             <TextInput
               style={styles.pickerSearch}
@@ -233,17 +333,13 @@ export default function ContactsScreen({
             <ScrollView style={styles.pickerList} contentContainerStyle={{ paddingBottom: 8 }}>
               {pickerContacts.length === 0 && <Text style={styles.emptyHint}>No matches.</Text>}
               {pickerContacts.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={styles.pickerRow}
-                  onPress={() => { if (linkPickerSender) onLinkSenderToContact(linkPickerSender, c.id); setLinkPickerSender(null); }}
-                >
+                <Pressable key={c.id} style={styles.pickerRow} onPress={() => handlePickerSelect(c.id)}>
                   <Text style={styles.pickerRowName} numberOfLines={1}>{c.displayName}</Text>
                   <Text style={styles.pickerRowAction}>Link</Text>
                 </Pressable>
               ))}
             </ScrollView>
-            <Pressable style={styles.closeBtn} onPress={() => setLinkPickerSender(null)}>
+            <Pressable style={styles.closeBtn} onPress={() => setLinkPickerTarget(null)}>
               <Text style={styles.closeBtnText}>Cancel</Text>
             </Pressable>
           </Pressable>
@@ -279,6 +375,11 @@ const styles = StyleSheet.create({
   countBadgeText: { fontSize: 11, fontFamily: FONTS.monoSemibold, fontWeight: '600', color: MUTED },
   divider:     { height: 1, backgroundColor: BORDER, marginHorizontal: 14 },
 
+  suggestionRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
+  suggestionTitle: { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
+  suggestionYes:   { fontSize: 13, color: AMBER, fontFamily: FONTS.semibold, fontWeight: '600' },
+  suggestionNo:    { fontSize: 13, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
+
   senderRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
   platformIcon: { fontSize: 16 },
   senderName:   { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
@@ -312,6 +413,8 @@ const styles = StyleSheet.create({
   handle:  { width: 36, height: 4, backgroundColor: BORDER, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
   pickerTitle: { fontSize: 17, fontFamily: FONTS.bold, fontWeight: '700', color: TEXT, paddingHorizontal: 20, marginTop: 8 },
   pickerHint:  { fontSize: 12, color: MUTED, paddingHorizontal: 20, marginTop: 6, marginBottom: 14, lineHeight: 17 },
+  declineRow: { marginHorizontal: 20, marginBottom: 10, backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  declineRowText: { fontSize: 13, color: MUTED, fontFamily: FONTS.semibold, fontWeight: '600' },
   createRow: { marginHorizontal: 20, marginBottom: 10, backgroundColor: CONTEXT + '15', borderWidth: 1, borderColor: CONTEXT + '40', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
   createRowText: { fontSize: 13, color: CONTEXT, fontFamily: FONTS.semibold, fontWeight: '600' },
   pickerSearch: { marginHorizontal: 20, backgroundColor: SURFACE2, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: TEXT, fontFamily: FONTS.regular, fontSize: 14, marginBottom: 10 },

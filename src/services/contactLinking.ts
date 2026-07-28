@@ -34,3 +34,44 @@ export function linkSenderToContact(convKey: string, contactId: string): Promise
 export function unlinkPlatform(contactId: string, platform: string): Promise<boolean> {
   return ProTxtSettings?.unlinkPlatformFromContact?.(contactId, platform) ?? Promise.resolve(false);
 }
+
+/** One candidate contact for a pending suggestion — the primary guess or an alternative. */
+export interface ContactLinkCandidate {
+  contactId: string;
+  displayName: string;
+  preferredTone: string;
+  confidence: number;
+}
+
+// A fuzzy-match "Is this X?" suggestion the bubble banner posed but the user never
+// answered — see ContactLinkStore.kt for what writes/clears these. Distinct from
+// UnmatchedSender: an unmatched sender has NO guess at all (matched nobody), a pending
+// link has a specific guess (and often alternatives) still awaiting yes/no.
+export interface PendingContactLink extends ContactLinkCandidate {
+  convKey: string;
+  senderName: string;
+  platform: string | null;
+  crossApp?: boolean;
+  crossAppSourceLabel?: string;
+  candidates: ContactLinkCandidate[];
+  updatedAt: number;
+}
+
+export async function getPendingContactLinks(): Promise<PendingContactLink[]> {
+  try {
+    const json: string = await ProTxtSettings?.getPendingContactLinks?.();
+    return json ? (JSON.parse(json) as PendingContactLink[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** "Yes, this is them" — confirms `contactId` (the primary guess or a chosen alternative) for this suggestion. */
+export function resolvePendingContactLink(convKey: string, contactId: string): Promise<boolean> {
+  return ProTxtSettings?.resolvePendingContactLink?.(convKey, contactId) ?? Promise.resolve(false);
+}
+
+/** "Not them" — permanently declines this suggestion; the sender won't be re-suggested. */
+export function declinePendingContactLink(convKey: string, senderName: string): Promise<boolean> {
+  return ProTxtSettings?.declinePendingContactLink?.(convKey, senderName) ?? Promise.resolve(false);
+}

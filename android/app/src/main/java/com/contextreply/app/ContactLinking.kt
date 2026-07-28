@@ -10,6 +10,13 @@ import org.json.JSONObject
 // once it already has a phone match and/or name matches in hand — no I/O happens here.
 object ContactLinking {
 
+    // Synthetic confirmed_identities value meaning "resolved as not-a-known-contact" —
+    // written both when no fuzzy match exists at all (below) and when the user
+    // explicitly declines a persisted suggestion (ContactLinkStore/ProTxtSettingsModule
+    // .declinePendingContactLink) so a repeat sender doesn't keep re-prompting either way.
+    fun autoId(senderName: String): String =
+        "auto:${senderName.lowercase().replace(Regex("[^a-z0-9]"), "_").take(40)}"
+
     // What contactMatchJson should do once a match decision has been made:
     //  - json: the banner payload to return to the caller, or null if no banner is needed
     //  - confirmIdentity: the contactId to silently persist as confirmed under this convKey,

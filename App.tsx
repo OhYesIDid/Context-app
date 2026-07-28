@@ -36,8 +36,8 @@ import { loadPendingCalendarActions } from './src/services/pendingCalendarAction
 import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
 import { loadPendingFollowUps, drainConfirmedFollowUps } from './src/services/pendingFollowUps';
 import type { PendingFollowUp } from './src/services/pendingFollowUps';
-import { getUnmatchedSenders, linkSenderToContact } from './src/services/contactLinking';
-import type { UnmatchedSender } from './src/services/contactLinking';
+import { declinePendingContactLink, getPendingContactLinks, getUnmatchedSenders, linkSenderToContact, resolvePendingContactLink } from './src/services/contactLinking';
+import type { PendingContactLink, UnmatchedSender } from './src/services/contactLinking';
 import ContactsScreen from './src/screens/ContactsScreen';
 
 const { ProTxtSettings } = NativeModules;
@@ -106,6 +106,7 @@ export default function App() {
   const [contactPlatforms, setContactPlatforms] = useState<Record<string, string[]>>({});
   const [contactSearch, setContactSearch] = useState('');
   const [unmatchedSenders, setUnmatchedSenders] = useState<UnmatchedSender[]>([]);
+  const [pendingContactLinks, setPendingContactLinks] = useState<PendingContactLink[]>([]);
   const [linkingSenderKey, setLinkingSenderKey] = useState<string | null>(null);
   const [newContactVisible, setNewContactVisible] = useState(false);
   const [newContactName, setNewContactName] = useState('');
@@ -138,6 +139,7 @@ export default function App() {
     if (activeTab === 'contacts') {
       getAllContacts().then(setContacts).catch(() => {});
       getUnmatchedSenders().then(setUnmatchedSenders);
+      getPendingContactLinks().then(setPendingContactLinks);
       // One bulk query grouped client-side, rather than one platform-identities
       // lookup per row — the list can show dozens of contacts at once. Merges
       // in native confirmed_identities links too — the much more common
@@ -363,6 +365,24 @@ export default function App() {
     }
   };
 
+  // "Yes, this is them" on a Suggested-links entry — same confirmed_identities write
+  // as the bubble's own "Yes" (see BubbleSuggestionActivity.confirmMatch), just also
+  // upserts platform_identities directly (via handleLinkSenderToContact) instead of
+  // waiting on ContactDetailModal's backfill to notice it on next open.
+  const handleResolvePendingLink = async (link: PendingContactLink, contactId: string) => {
+    setPendingContactLinks((prev) => prev.filter((l) => l.convKey !== link.convKey));
+    await resolvePendingContactLink(link.convKey, contactId);
+    await handleLinkSenderToContact(
+      { convKey: link.convKey, displayName: link.senderName, platform: link.platform ?? 'other', platformLabel: link.platform ?? 'another app' },
+      contactId,
+    );
+  };
+
+  const handleDeclinePendingLink = async (link: PendingContactLink) => {
+    setPendingContactLinks((prev) => prev.filter((l) => l.convKey !== link.convKey));
+    await declinePendingContactLink(link.convKey, link.senderName);
+  };
+
   const saveDefaultTone = async (t: Tone) => {
     setDefaultToneState(t);
     await AsyncStorage.setItem(DEFAULT_TONE_KEY, t);
@@ -530,6 +550,7 @@ export default function App() {
           contactSearch={contactSearch}
           onSearchChange={setContactSearch}
           unmatchedSenders={unmatchedSenders}
+          pendingContactLinks={pendingContactLinks}
           linkingSenderKey={linkingSenderKey}
           googleContactsCount={googleContactsCount}
           deviceContactsCount={deviceContactsCount}
@@ -548,6 +569,8 @@ export default function App() {
           onUpdatePref={updateContactPref}
           onLinkSenderToContact={handleLinkSenderToContact}
           onCreateContactFromSender={handleCreateContactFromSender}
+          onResolvePendingLink={handleResolvePendingLink}
+          onDeclinePendingLink={handleDeclinePendingLink}
           onGoToSettings={() => setActiveTab('settings')}
         />
       )}

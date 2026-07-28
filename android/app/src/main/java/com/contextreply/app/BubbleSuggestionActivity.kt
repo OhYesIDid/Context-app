@@ -660,7 +660,10 @@ class BubbleSuggestionActivity : Activity() {
                 val confirmed = try {
                     JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
                 } catch (_: Exception) { JSONObject() }
-                if (convKey != null) confirmed.put(convKey, matchContactId)
+                if (convKey != null) {
+                    confirmed.put(convKey, matchContactId)
+                    ContactLinkStore.clear(this@BubbleSuggestionActivity, convKey)
+                }
                 prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
                 if (matchTone != null && !isLoading) {
                     val toneIdx = available.indexOf(matchTone)
@@ -701,7 +704,10 @@ class BubbleSuggestionActivity : Activity() {
                         val prefs = Prefs.main(this@BubbleSuggestionActivity)
                         val conf = try { JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
                         val sepId = "sep:${contact.lowercase().replace(Regex("[^a-z0-9]"), "_").take(36)}_${packageName.substringAfterLast(".").take(16)}"
-                        if (convKey != null) conf.put(convKey, sepId)
+                        if (convKey != null) {
+                            conf.put(convKey, sepId)
+                            ContactLinkStore.clear(this@BubbleSuggestionActivity, convKey)
+                        }
                         prefs.edit().putString("confirmed_identities", conf.toString()).apply()
                         banner.visibility = View.GONE
                     }
@@ -769,7 +775,10 @@ class BubbleSuggestionActivity : Activity() {
                                 val conf = try {
                                     JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
                                 } catch (_: Exception) { JSONObject() }
-                                if (convKey != null) conf.put(convKey, cId)
+                                if (convKey != null) {
+                                    conf.put(convKey, cId)
+                                    ContactLinkStore.clear(this@BubbleSuggestionActivity, convKey)
+                                }
                                 prefs.edit().putString("confirmed_identities", conf.toString()).apply()
                                 if (cTone != null && !isLoading) {
                                     val toneIdx = available.indexOf(cTone)

@@ -231,6 +231,60 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // Suggestions posed via the bubble's "Is this X?" banner but never answered — see
+    // ContactLinkStore for what's stored and why. Read by ContactsScreen's "Suggested
+    // links" section.
+    @ReactMethod
+    fun getPendingContactLinks(promise: Promise) {
+        try {
+            promise.resolve(ContactLinkStore.getAll(reactApplicationContext))
+        } catch (e: Exception) {
+            promise.reject("GET_PENDING_LINKS_FAILED", e)
+        }
+    }
+
+    // "Yes, this is them" from the tab — same confirmed_identities write the bubble's own
+    // "Yes" does (see BubbleSuggestionActivity.confirmMatch), just reached later instead
+    // of in the moment. Clearing the pending record happens as a side effect of the write
+    // via contactMatchJson's own confirmed.has(convKey) check on the next message, but
+    // clear it here too so it disappears from the tab immediately rather than after a
+    // message round-trip.
+    @ReactMethod
+    fun resolvePendingContactLink(convKey: String, contactId: String, promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            confirmed.put(convKey, contactId)
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            ContactLinkStore.clear(reactApplicationContext, convKey)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("RESOLVE_PENDING_LINK_FAILED", e)
+        }
+    }
+
+    // "Not them" from the tab — the bubble's own plain "No" (no alternative candidates)
+    // never persisted anything, so the same banner just reappeared on the sender's next
+    // message. This writes the same auto: sentinel the "no match found at all" path uses,
+    // so a repeat sender is treated as resolved-to-nobody instead of re-prompting forever.
+    @ReactMethod
+    fun declinePendingContactLink(convKey: String, senderName: String, promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            confirmed.put(convKey, ContactLinking.autoId(senderName))
+            prefs.edit().putString("confirmed_identities", confirmed.toString()).apply()
+            ContactLinkStore.clear(reactApplicationContext, convKey)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DECLINE_PENDING_LINK_FAILED", e)
+        }
+    }
+
     @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
         Prefs.main(reactApplicationContext)
