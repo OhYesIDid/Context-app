@@ -109,7 +109,7 @@ describe('loadUpcomingEvents — sync gating', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2);
     expect(onUpdate.mock.calls[0][0].isSyncing).toBe(true);
     expect(result.bookingItems.some((b) => b.destination === 'Rome')).toBe(true);
-    expect(await AsyncStorage.getItem('bookings_sync_logic_version')).toBe('11');
+    expect(await AsyncStorage.getItem('bookings_sync_logic_version')).toBe('12');
   });
 
   it('forces a full resync when the stored logic version is stale, even if recently synced', async () => {
@@ -226,6 +226,71 @@ describe('loadUpcomingEvents — trip grouping', () => {
     const result = await loadUpcomingEvents(true);
 
     expect(result.trips).toHaveLength(2);
+  });
+
+  it('builds a multi-city, single-country destination from one email\'s outbound + return segments', async () => {
+    (getBookingsContext as jest.Mock).mockResolvedValue({
+      items: [
+        booking({
+          id: 'gol-loop', type: 'flight', destination: 'São Luís',
+          travelDate: '2026-07-10', travelDateEnd: '2026-07-20',
+          segments: [
+            { from: 'São Paulo', fromCountry: 'Brazil', to: 'São Luís', toCountry: 'Brazil', date: '2026-07-10' },
+            { from: 'Jericoacoara', fromCountry: 'Brazil', to: 'São Paulo', toCountry: 'Brazil', date: '2026-07-20' },
+          ],
+        }),
+      ],
+      windowStart: '', windowEnd: '',
+    } as BookingContext);
+
+    const result = await loadUpcomingEvents(true);
+
+    expect(result.trips[0].destination).toBe('São Paulo → São Luís → Jericoacoara → São Paulo, Brazil');
+    expect(result.trips[0].segments).toHaveLength(2);
+  });
+
+  it('chains directional legs across separate bookings and lists distinct countries when the trip crosses borders', async () => {
+    (getBookingsContext as jest.Mock).mockResolvedValue({
+      items: [
+        booking({
+          id: 'flight-lon-par', type: 'flight', destination: 'Paris',
+          travelDate: '2026-07-01', travelDateEnd: '2026-07-01',
+          segments: [{ from: 'London', fromCountry: 'UK', to: 'Paris', toCountry: 'France', date: '2026-07-01' }],
+        }),
+        booking({
+          id: 'car-par-lyon', type: 'car', destination: 'Lyon',
+          travelDate: '2026-07-02', travelDateEnd: '2026-07-03',
+          segments: [{ from: 'Paris', fromCountry: 'France', to: 'Lyon', toCountry: 'France', date: '2026-07-02', endDate: '2026-07-03' }],
+        }),
+      ],
+      windowStart: '', windowEnd: '',
+    } as BookingContext);
+
+    const result = await loadUpcomingEvents(true);
+
+    expect(result.trips).toHaveLength(1);
+    expect(result.trips[0].destination).toBe('London → Paris → Lyon (UK, France)');
+    expect(result.trips[0].segments).toHaveLength(2);
+  });
+
+  it('does not chain destination-only segments (hotel/car with no `from`) against each other by raw text match', async () => {
+    (getBookingsContext as jest.Mock).mockResolvedValue({
+      items: [
+        booking({
+          id: 'hotel-only', type: 'hotel', destination: 'Rome hotel district',
+          travelDate: '2026-07-05', travelDateEnd: '2026-07-08',
+          segments: [{ to: 'Rome hotel district', toCountry: 'Italy', date: '2026-07-05', endDate: '2026-07-08' }],
+        }),
+      ],
+      windowStart: '', windowEnd: '',
+    } as BookingContext);
+
+    const result = await loadUpcomingEvents(true);
+
+    // No directional (from+to) leg exists, so buildMultiCityDestination bails
+    // out and groupIntoTrips falls back to the item's own destination string
+    // rather than fabricating a route out of a single anchor point.
+    expect(result.trips[0].destination).toBe('Rome hotel district');
   });
 });
 

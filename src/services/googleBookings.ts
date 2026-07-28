@@ -1,6 +1,7 @@
 import { NativeModules } from 'react-native';
-import type { BookingContext, BookingItem, BookingType } from '../types';
+import type { BookingContext, BookingItem, BookingSegment, BookingType } from '../types';
 import { getAccessToken, invalidateToken } from './googleAuth';
+import { deriveTravelSummary } from '../utils/bookingSegments';
 
 // 35s (was 25s): paginating through up to MAX_MESSAGES results (see below)
 // adds a handful of sequential list-page round-trips on top of the
@@ -47,9 +48,7 @@ interface ClassifiedBooking {
   id: string;
   type: BookingType | null;
   confident: boolean;
-  travelDate?: string;
-  travelDateEnd?: string;
-  destination?: string;
+  segments?: BookingSegment[];
 }
 
 async function classifyBookingsBatch(candidates: ClassifyCandidate[]): Promise<ClassifiedBooking[]> {
@@ -309,6 +308,12 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
     const mapped: (BookingItem | null)[] = metas.map((m) => {
       const resolved = tier2ById.get(m.id) ?? tier1ById.get(m.id);
       if (!resolved || resolved.type === null) return null;
+      // travelDate/travelDateEnd/destination are derived from segments (not
+      // sent by the classifier directly) so every existing consumer of the
+      // single-window shape — native bubble matching, trip date clustering,
+      // "Confirmed 3d ago" subtitles — keeps working unchanged; segments are
+      // the richer source new UI (per-leg trip breakdown) reads from directly.
+      const summary = deriveTravelSummary(resolved.segments);
       return {
         id: m.id,
         type: resolved.type,
@@ -316,9 +321,10 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
         snippet: m.snippet,
         from: m.from,
         date: parseEmailDate(m.date),
-        travelDate: resolved.travelDate,
-        travelDateEnd: resolved.travelDateEnd,
-        destination: resolved.destination,
+        segments: resolved.segments,
+        travelDate: summary.travelDate,
+        travelDateEnd: summary.travelDateEnd,
+        destination: summary.destination,
       };
     });
     const items = mapped.filter((item): item is BookingItem => item !== null);

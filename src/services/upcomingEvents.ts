@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules } from 'react-native';
-import type { BookingType, CalendarEvent, BookingItem } from '../types';
+import type { BookingType, CalendarEvent, BookingItem, BookingSegment } from '../types';
 import { getUpcomingCalendarEvents } from './googleCalendar';
 import { getBookingsContext } from './googleBookings';
 import { getCachedBookings, getLastBookingsSyncAt, pruneBookingsNotIn, upsertBookings } from './database';
+import { buildMultiCityDestination } from '../utils/bookingSegments';
 
 // Feeds the native bubble flow (ProTxtBgService, Kotlin) a compact read-only cache of
 // imminent bookings, so an ETA question can be matched against "I have a train to
@@ -86,21 +87,32 @@ export interface UpcomingBookingItem {
   isUpcomingTravel: boolean;
   /** End of the resolved date range (e.g. a return-flight date), if the email mentioned one. Falls back to `date` when grouping into a trip. */
   travelDateEnd?: Date;
-  /** Best-effort destination name, e.g. parsed from a flight confirmation's route mention. */
+  /** Best-effort destination name, e.g. parsed from a flight confirmation's route mention. Derived from `segments`. */
   destination?: string;
+  /** Per-leg/stay detail (route, dates, times) extracted by the classifier — the source `destination`/`travelDateEnd` were derived from. */
+  segments?: BookingSegment[];
   /** Gmail message ID — used to link back to the source email. */
   gmailId: string;
 }
 
 export type UpcomingItem = UpcomingCalendarItem | UpcomingBookingItem;
 
+/** One leg/stay flattened out of a trip's items for the itinerary breakdown, tagged with where it came from. */
+export interface TripSegment extends BookingSegment {
+  id: string;
+  gmailId: string;
+  bookingType: BookingType;
+}
+
 export interface Trip {
   id: string;
-  /** Best-effort destination name; falls back to a generic "Trip" label when nothing parsed. */
+  /** Multi-city headline built from every segment's route ("São Paulo → São Luís → Jericoacoara, Brazil"); falls back to a single best-effort name, then a generic "Trip" label when nothing parsed. */
   destination: string;
   startDate: Date;
   endDate: Date;
   items: UpcomingBookingItem[];
+  /** Every item's segments flattened into one chronological itinerary, for the per-leg breakdown UI. */
+  segments: TripSegment[];
   isToday: boolean;
   isTomorrow: boolean;
 }
@@ -150,8 +162,18 @@ function groupIntoTrips(items: UpcomingBookingItem[], todayMs: number): Trip[] {
   return clusters.map((clusterItems, idx) => {
     const startDate = new Date(Math.min(...clusterItems.map(i => i.date.getTime())));
     const endDate = new Date(Math.max(...clusterItems.map(i => (i.travelDateEnd ?? i.date).getTime())));
-    // Prefer a flight's destination (route text is the most reliable source), then any other item's.
-    const destination = clusterItems.find(i => i.bookingType === 'flight' && i.destination)?.destination
+    // Flatten every item's segments into one chronological itinerary — this is
+    // both the per-leg breakdown UI reads and what the multi-city headline
+    // below is built from, so a loop trip (fly in, ground transport to a
+    // second city, fly home from THAT city) shows every city it actually
+    // touched instead of whichever single flight's destination was found first.
+    const segments: TripSegment[] = clusterItems
+      .flatMap(i => (i.segments ?? []).map((s, si) => ({ ...s, id: `${i.gmailId}_${si}`, gmailId: i.gmailId, bookingType: i.bookingType })))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const destination = buildMultiCityDestination(segments)
+      // Pre-segment cached rows (or a segment-less classification) fall back
+      // to the old single-destination heuristic: prefer a flight's, then any.
+      ?? clusterItems.find(i => i.bookingType === 'flight' && i.destination)?.destination
       ?? clusterItems.find(i => i.destination)?.destination
       ?? null;
     const startMs = dayStart(startDate);
@@ -162,6 +184,7 @@ function groupIntoTrips(items: UpcomingBookingItem[], todayMs: number): Trip[] {
       startDate,
       endDate,
       items: clusterItems.sort((a, b) => a.date.getTime() - b.date.getTime()),
+      segments,
       // "Today" covers the whole trip window, not just its start — a trip on its final day
       // should still read as happening today, not just on whichever day it began.
       isToday: todayMs >= startMs && todayMs <= endMs,
@@ -256,7 +279,16 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // this file's logic version. The allowlist now applies regardless of
 // category (except promotions). Forces a full resync to pick up bookings
 // that were silently unreachable under the old category:updates scoping.
-const BOOKINGS_SYNC_LOGIC_VERSION = '11';
+// v12 (2026-07-28): classify-bookings now returns per-leg `segments` (route +
+// country + date/time per leg or stay) instead of one destination/date-range
+// per email — a round-trip or multi-city email previously collapsed to
+// whichever single leg was found first, e.g. a São Paulo → São Luís → car
+// rental → Jericoacoara → São Paulo loop showed only "São Luís". Cached rows
+// from before this change have no `segments` (database.ts synthesizes a
+// single-segment fallback so they still render), but only a full resync
+// against the rewritten worker prompt produces real per-leg data and the
+// multi-city/country trip headline (see buildMultiCityDestination).
+const BOOKINGS_SYNC_LOGIC_VERSION = '12';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function isBookingsSyncDue(): Promise<boolean> {
@@ -378,6 +410,7 @@ function buildUpcomingData(events: CalendarEvent[], bookings: BookingItem[], boo
         isUpcomingTravel,
         travelDateEnd: b.travelDateEnd ? new Date(b.travelDateEnd) : undefined,
         destination: b.destination,
+        segments: b.segments,
       };
     })
     // Upcoming travel first (soonest first), then recent confirmations (most recent first).

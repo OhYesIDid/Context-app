@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { decryptField, encryptField, hashIdentifier } from './dbCrypto';
 import type {
   BookingItem,
+  BookingSegment,
   BookingType,
   Contact,
   Memory,
@@ -815,11 +816,15 @@ export async function upsertBookings(items: BookingItem[]): Promise<void> {
   const db = await getDatabase();
   const now = new Date().toISOString();
   for (const item of items) {
-    // travelDate/travelDateEnd/destination live in raw_fields, not the
-    // relevance_from/relevance_until columns — those are reserved for a
+    // segments/travelDate/travelDateEnd/destination live in raw_fields, not
+    // the relevance_from/relevance_until columns — those are reserved for a
     // separate, not-yet-built feature (surfacing a booking only during its
     // active window), a different concept from the resolved travel dates.
+    // segments is the source of truth (per-leg detail); the flat fields are
+    // stored alongside it purely so old app builds reading this cache during
+    // a staged rollout still see a usable single window.
     const rawFields = JSON.stringify({
+      segments: item.segments,
       travelDate: item.travelDate,
       travelDateEnd: item.travelDateEnd,
       destination: item.destination,
@@ -849,7 +854,17 @@ export async function getCachedBookings(): Promise<BookingItem[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<BookingRow>('SELECT * FROM bookings WHERE deleted_at IS NULL');
   return Promise.all(rows.map(async (r) => {
-    const raw = r.raw_fields ? JSON.parse(r.raw_fields) as { travelDate?: string; travelDateEnd?: string; destination?: string } : {};
+    const raw = r.raw_fields
+      ? JSON.parse(r.raw_fields) as { segments?: BookingSegment[]; travelDate?: string; travelDateEnd?: string; destination?: string }
+      : {};
+    // Rows cached before the per-leg-segment migration have no `segments`
+    // key at all (only the old flat fields) — synthesize a single segment
+    // from them so trip UI reading `segments` still has something to show
+    // until the sync-logic-version bump's forced full resync replaces the
+    // row with real per-leg data.
+    const segments = raw.segments ?? (raw.destination || raw.travelDate
+      ? [{ to: raw.destination, date: raw.travelDate ?? raw.travelDateEnd ?? r.email_date, endDate: raw.travelDateEnd }]
+      : undefined);
     return {
       id: r.id,
       type: r.type as BookingType,
@@ -857,6 +872,7 @@ export async function getCachedBookings(): Promise<BookingItem[]> {
       snippet: (await decryptField(r.snippet)) ?? r.snippet,
       from: (await decryptField(r.from_address)) ?? r.from_address,
       date: r.email_date,
+      segments,
       travelDate: raw.travelDate,
       travelDateEnd: raw.travelDateEnd,
       destination: raw.destination,

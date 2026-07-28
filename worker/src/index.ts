@@ -155,33 +155,59 @@ interface ClassifyBookingsRequest {
   candidates: ClassifyCandidate[];
 }
 
+// A segment is one leg or stay, not one email — a single round-trip flight
+// confirmation produces TWO segments (outbound + return), each with its own
+// route and date, rather than one row spanning a date range. This is what
+// makes a multi-city itinerary (e.g. a flight in, a car rental to a second
+// city, a flight home from that second city) representable at all: the old
+// one-destination-per-email model could only ever describe the FIRST leg it
+// found, silently dropping every other city the trip actually touched.
+interface ClassifiedBookingSegment {
+  from?: string;        // origin city/place — omit for hotels/events, or if unclear
+  fromCountry?: string;
+  to?: string;           // destination city/place, hotel's city, car drop-off, or event location
+  toCountry?: string;
+  date: string;          // ISO 8601 — departure/check-in/pick-up/event date
+  endDate?: string;       // ISO 8601 — ONLY for a multi-day span with a distinct end (hotel checkout,
+  //                         car drop-off). A return flight is its OWN segment with its own `date`,
+  //                         never an endDate tacked onto the outbound segment.
+  time?: string;          // local 24h "HH:MM", if stated. Omit if not.
+}
+
 interface ClassifiedBooking {
   id: string;
   type: ClassifiedBookingType;
-  // false = type looks right but there isn't enough text here to resolve a
-  // date confidently — caller should retry this id with the full email body.
+  // false = type looks right but there isn't enough text here to resolve
+  // segments confidently — caller should retry this id with the full email body.
   confident: boolean;
-  travelDate?: string;
-  travelDateEnd?: string;
-  destination?: string;
+  segments?: ClassifiedBookingSegment[];
 }
 
-const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and extract key details. You will be given today's date and a batch of emails (id, subject, sender, the date each email was received, and either a short snippet or the full body text). For EACH one:
+const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and break each one into its individual segments (legs/stays) with structured route details. You will be given today's date and a batch of emails (id, subject, sender, the date each email was received, and either a short snippet or the full body text). For EACH one:
 
 1. Decide if it is a genuine booking CONFIRMATION for the recipient's own upcoming travel or event: flight, hotel, train, bus/coach, car rental, or ticketed event.
    - type = null (and skip the rest) if it is: a bill or receipt for something unrelated to travel, a delivery/shipping notice, a promotional/marketing email, a booking that is still PENDING/requested (not yet confirmed), a CANCELLED booking, a reply/forward of a thread (subject starts with "Re:" or "Fwd:"), or a notification about someone ELSE's booking (e.g. an Airbnb host being told a guest is arriving at their own listed property — that is not the recipient's own travel).
    - Named ticketing vendors only for type "event" (Eventbrite, Ticketmaster, etc.) — a bare mention of the word "ticket" or "event" in a promotional email is not a booking.
-2. If it is a genuine booking, extract:
-   - travelDate: the trip's start date (ISO 8601 date, e.g. "2026-08-06").
-   - travelDateEnd: the return/end date, ONLY if this is a round trip or multi-day stay with a distinct end date. Omit entirely otherwise (do not repeat travelDate).
-   - destination: best-effort city or place name, if determinable. Omit if unclear.
-3. Round-trip and multi-leg emails use inconsistent label pairs for outbound vs inbound legs across different vendors — e.g. "Departure:"/"Return:", "Departing:"/"Arrival:", "Outbound:"/"Inbound:". Read whichever pair is actually used; do not expect one specific pair.
-4. Airline "online check-in" window mentions (e.g. "online check-in opens 24 hours before departure", "check-in available from...") describe when self-service check-in opens, NOT the travel date — ignore any date attached specifically to that phrase.
-5. If the subject/sender clearly indicates a real booking type but there is not enough text here to confidently resolve a date (this will usually be true when given only a short snippet, not the full body), set confident: false and omit the date fields — the caller will retry with the full email body.
-6. Many bookings mention a date without an explicit year (e.g. "Friday 17 July"). Resolve the year using today's date and the email's own received date as anchors: prefer the interpretation nearest to, and normally on or after, the email's received date — a booking confirmation is essentially never sent more than a few months before the event, and never after it. Never pick a year just because it's "the current year" if that would place the event before the email was received, or so far in the future that it makes no sense next to the received date.
+2. If it is a genuine booking, break it into one segment per distinct leg or stay — do NOT collapse multiple legs into one date range:
+   - Flight/train/bus: one segment per one-way journey. A round-trip or multi-city email (outbound + return, or connecting legs on different dates) has MULTIPLE segments, each with its own from/to/date.
+   - Hotel: one segment for the stay — date = check-in, endDate = check-out (omit endDate for a single night or if not stated).
+   - Car rental: one segment — date = pick-up, endDate = drop-off, from = pick-up location, to = drop-off location (omit to if it's the same as pick-up).
+   - Ticketed event: one segment with date = the event's date.
+3. For each segment, extract:
+   - from: best-effort city/place name the segment departs FROM (flight/train/bus origin, car pick-up). Omit for hotels/events, or if unclear.
+   - fromCountry: the country of "from", if determinable. Omit if unclear.
+   - to: best-effort city/place name the segment arrives AT or takes place in (flight/train/bus destination, hotel's city, car drop-off, event location). Omit if unclear.
+   - toCountry: the country of "to", if determinable. Omit if unclear.
+   - date: ISO 8601 date (e.g. "2026-08-06") this segment starts.
+   - endDate: ISO 8601 date this segment ends — ONLY for a genuine multi-day span with a distinct end (hotel checkout, car drop-off). Omit entirely otherwise; never repeat the start date here.
+   - time: local 24h time ("HH:MM") of departure/check-in/pick-up, if explicitly stated. Omit if not.
+4. Round-trip and multi-leg emails use inconsistent label pairs for outbound vs inbound legs across different vendors — e.g. "Departure:"/"Return:", "Departing:"/"Arrival:", "Outbound:"/"Inbound:". Read whichever pair is actually used; do not expect one specific pair. Each half of the pair is its own segment.
+5. Airline "online check-in" window mentions (e.g. "online check-in opens 24 hours before departure", "check-in available from...") describe when self-service check-in opens, NOT a segment's travel date — ignore any date attached specifically to that phrase.
+6. If the subject/sender clearly indicates a real booking type but there is not enough text here to confidently resolve segments (this will usually be true when given only a short snippet, not the full body), set confident: false and omit segments entirely — the caller will retry with the full email body.
+7. Many bookings mention a date without an explicit year (e.g. "Friday 17 July"). Resolve the year using today's date and the email's own received date as anchors: prefer the interpretation nearest to, and normally on or after, the email's received date — a booking confirmation is essentially never sent more than a few months before the event, and never after it. Never pick a year just because it's "the current year" if that would place the event before the email was received, or so far in the future that it makes no sense next to the received date.
 
 Respond ONLY with valid JSON, no markdown, no explanation:
-{"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"car"|"event"|null,"confident":true|false,"travelDate":"...","travelDateEnd":"...","destination":"..."}]}`;
+{"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"car"|"event"|null,"confident":true|false,"segments":[{"from":"...","fromCountry":"...","to":"...","toCountry":"...","date":"...","endDate":"...","time":"..."}]}]}`;
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
 const CLASSIFY_MAX_TOKENS = 4096;
@@ -198,6 +224,22 @@ function parseClassifyResponse(raw: string, candidateIds: string[]): ClassifiedB
   }
   const idSet = new Set(candidateIds);
   const validTypes = new Set(['flight', 'hotel', 'train', 'bus', 'car', 'event']);
+  const parseSegments = (raw: unknown): ClassifiedBookingSegment[] | undefined => {
+    if (!Array.isArray(raw)) return undefined;
+    const segments = raw
+      .filter((s): s is Record<string, unknown> => typeof s === 'object' && s !== null)
+      .filter((s) => typeof s.date === 'string')
+      .map((s): ClassifiedBookingSegment => ({
+        from: typeof s.from === 'string' ? s.from : undefined,
+        fromCountry: typeof s.fromCountry === 'string' ? s.fromCountry : undefined,
+        to: typeof s.to === 'string' ? s.to : undefined,
+        toCountry: typeof s.toCountry === 'string' ? s.toCountry : undefined,
+        date: s.date as string,
+        endDate: typeof s.endDate === 'string' ? s.endDate : undefined,
+        time: typeof s.time === 'string' ? s.time : undefined,
+      }));
+    return segments.length > 0 ? segments : undefined;
+  };
   const results = (parsed.results ?? [])
     .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
     .filter((r) => typeof r.id === 'string' && idSet.has(r.id))
@@ -207,9 +249,7 @@ function parseClassifyResponse(raw: string, candidateIds: string[]): ClassifiedB
         id: r.id as string,
         type,
         confident: r.confident === true,
-        travelDate: typeof r.travelDate === 'string' ? r.travelDate : undefined,
-        travelDateEnd: typeof r.travelDateEnd === 'string' ? r.travelDateEnd : undefined,
-        destination: typeof r.destination === 'string' ? r.destination : undefined,
+        segments: parseSegments(r.segments),
       };
     });
   // Any candidate the model dropped entirely is treated as unresolved, not

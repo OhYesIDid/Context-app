@@ -48,6 +48,21 @@ export interface AvailabilityData {
   windowEnd: string;
 }
 
+// One leg or stay within a booking confirmation — a round-trip flight email
+// resolves to TWO segments (outbound + return), not one date range, so a
+// multi-city itinerary (flight in, ground transport to a second city, flight
+// home from THAT city) can be represented instead of collapsed to a single
+// "destination". See src/utils/bookingSegments.ts for the derivation this feeds.
+export interface BookingSegment {
+  from?: string;       // origin city/place — flight/train/bus origin, car pick-up. Omitted for hotels/events.
+  fromCountry?: string;
+  to?: string;          // destination city/place, hotel's city, car drop-off, or event location
+  toCountry?: string;
+  date: string;         // ISO string — departure/check-in/pick-up/event date
+  endDate?: string;      // ISO string — end of a multi-day span (hotel checkout, car drop-off) only
+  time?: string;         // local 24h "HH:MM", if the email stated one
+}
+
 export interface BookingItem {
   id: string;               // Gmail message ID — used as dedup key in Phase 2 local cache
   type: BookingType;
@@ -55,9 +70,10 @@ export interface BookingItem {
   snippet: string;
   from: string;
   date: string;             // ISO string parsed from email Date header (when the confirmation arrived)
-  travelDate?: string;      // ISO string parsed from the email body/subject (when the trip/event actually happens), if found
-  travelDateEnd?: string;   // ISO string — latest resolved date (e.g. return-leg date), for grouping into a trip's full span
-  destination?: string;     // best-effort city/place name, e.g. parsed from a flight confirmation's route mention
+  segments?: BookingSegment[]; // per-leg/stay detail extracted by the worker's classifier — source of truth
+  travelDate?: string;      // derived from segments (earliest date) — kept for callers that just need a single window
+  travelDateEnd?: string;   // derived from segments (latest date/endDate), if it differs from travelDate
+  destination?: string;     // derived from segments (first leg's `to`) — kept for callers that just need one place name
   relevanceFrom?: string;   // Phase 2: populated by local sync when booking activates
   relevanceUntil?: string;  // Phase 2: populated by local sync when booking expires
 }

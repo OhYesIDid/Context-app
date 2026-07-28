@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Linking, NativeModules, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Trip, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
-import { formatTripDateRange } from '../services/upcomingEvents';
+import type { Trip, TripSegment, UpcomingBookingItem, UpcomingCalendarItem, UpcomingData } from '../services/upcomingEvents';
+import { BOOKING_ICONS, formatTripDateRange } from '../services/upcomingEvents';
+import { formatSegmentRoute, formatSegmentSubtitle } from '../utils/bookingSegments';
 import { PURPLE, AMBER, RED, BG, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
 
 interface Props {
@@ -56,10 +57,34 @@ function BookingRow({ item, isLast }: { item: UpcomingBookingItem; isLast?: bool
   );
 }
 
+// One leg or stay within a trip's itinerary — distinct from BookingRow (one
+// row per Gmail confirmation), since a single round-trip email produces two
+// of these (outbound + return), each with its own route and tap-through.
+function SegmentRow({ segment, isLast }: { segment: TripSegment; isLast?: boolean }) {
+  return (
+    <Pressable style={[styles.item, isLast && styles.itemLast]} onPress={() => openInGmail(segment.gmailId)}>
+      <View style={[styles.itemIcon, { backgroundColor: AMBER + '15' }]}>
+        <Text style={styles.itemIconText}>{BOOKING_ICONS[segment.bookingType] ?? '📋'}</Text>
+      </View>
+      <View style={styles.itemBody}>
+        <Text style={styles.itemTitle} numberOfLines={1}>{formatSegmentRoute(segment)}</Text>
+        <Text style={styles.itemSub}>{formatSegmentSubtitle(segment)}</Text>
+      </View>
+      <View style={[styles.badge, { backgroundColor: AMBER + '15' }]}>
+        <Text style={[styles.badgeText, { color: AMBER }]}>Gmail</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function TripCard({ trip }: { trip: Trip }) {
   const [expanded, setExpanded] = useState(false);
   const dateRange = formatTripDateRange(trip.startDate, trip.endDate);
   const dayLabel = trip.isToday ? 'Today · ' : trip.isTomorrow ? 'Tomorrow · ' : '';
+  // Fall back to the raw confirmation-email list only for pre-migration cached
+  // rows with no per-leg data yet (see BOOKINGS_SYNC_LOGIC_VERSION v12) — every
+  // trip re-synced under the current classifier has `segments`.
+  const hasSegments = trip.segments.length > 0;
 
   return (
     <Pressable style={styles.tripCard} onPress={() => setExpanded(v => !v)}>
@@ -75,7 +100,9 @@ function TripCard({ trip }: { trip: Trip }) {
       </View>
       {expanded && (
         <View style={styles.tripItems}>
-          {trip.items.map((item, i) => <BookingRow key={item.id} item={item} isLast={i === trip.items.length - 1} />)}
+          {hasSegments
+            ? trip.segments.map((seg, i) => <SegmentRow key={seg.id} segment={seg} isLast={i === trip.segments.length - 1} />)
+            : trip.items.map((item, i) => <BookingRow key={item.id} item={item} isLast={i === trip.items.length - 1} />)}
         </View>
       )}
     </Pressable>
