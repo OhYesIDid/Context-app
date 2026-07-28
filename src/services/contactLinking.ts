@@ -27,3 +27,10 @@ export async function getUnmatchedSenders(): Promise<UnmatchedSender[]> {
 export function linkSenderToContact(convKey: string, contactId: string): Promise<boolean> {
   return ProTxtSettings?.linkSenderToContact?.(convKey, contactId) ?? Promise.resolve(false);
 }
+
+// Reverses linkSenderToContact for every sender on this platform linked to this
+// contact — the "undo" path native matching never had: without this, a mistaken or
+// no-longer-wanted link had no way back except editing the SQLite DB directly.
+export function unlinkPlatform(contactId: string, platform: string): Promise<boolean> {
+  return ProTxtSettings?.unlinkPlatformFromContact?.(contactId, platform) ?? Promise.resolve(false);
+}

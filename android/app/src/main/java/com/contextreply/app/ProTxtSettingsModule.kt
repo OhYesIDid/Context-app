@@ -198,6 +198,39 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // Reverses linkSenderToContact — removes every confirmed_identities entry that
+    // points at contactId on the given platform, so the next message from that sender
+    // goes back through ContactMatcher/ContactLinking fresh (fuzzy match or the "Is
+    // this X?" banner) instead of being silently treated as already-linked. Operates
+    // on (contactId, platform) rather than a single convKey because that's the
+    // granularity the "ON" chips in ContactDetailModal show — a contact can only have
+    // one WhatsApp link showing at a time, so undoing it should clear all of them,
+    // covering the edge case where a sender's display name changed and left two
+    // confirmed_identities entries (old name + new name) for what the UI shows as one
+    // chip. Mirrors getAllConfirmedLinks's own iterate + packageToPlatform filter.
+    @ReactMethod
+    fun unlinkPlatformFromContact(contactId: String, platform: String, promise: Promise) {
+        try {
+            val prefs = Prefs.main(reactApplicationContext)
+            val confirmed = try {
+                JSONObject(prefs.getString("confirmed_identities", "{}") ?: "{}")
+            } catch (_: Exception) { JSONObject() }
+            val next = JSONObject()
+            val keys = confirmed.keys()
+            while (keys.hasNext()) {
+                val convKey = keys.next()
+                val packageName = convKey.substringBefore(":", "")
+                val matches = confirmed.optString(convKey) == contactId
+                    && ProTxtBgService.packageToPlatform(packageName) == platform
+                if (!matches) next.put(convKey, confirmed.get(convKey))
+            }
+            prefs.edit().putString("confirmed_identities", next.toString()).apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("UNLINK_PLATFORM_FAILED", e)
+        }
+    }
+
     @ReactMethod
     fun setSkipGroupMessages(skip: Boolean) {
         Prefs.main(reactApplicationContext)

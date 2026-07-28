@@ -736,6 +736,17 @@ export async function getPlatformIdentitiesByContact(contactId: string): Promise
   })));
 }
 
+// Hard delete, not soft — platform_identities has no deleted_at column (unlike
+// contacts/bookings, nothing here needs sync-tombstone semantics) and there's no
+// existing history/audit use for a removed link. Deletes every row for this
+// contact+platform, matching the "undo" granularity the UI works at — one chip per
+// platform — and the native unlinkPlatformFromContact call this is paired with,
+// which clears every confirmed_identities entry for the same (contactId, platform).
+export async function deletePlatformIdentitiesByContactAndPlatform(contactId: string, platform: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM platform_identities WHERE contact_id = ? AND platform = ?', [contactId, platform]);
+}
+
 export async function getSemanticMemoriesByContact(contactId: string, limit = 20): Promise<Memory[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{

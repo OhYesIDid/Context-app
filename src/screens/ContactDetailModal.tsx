@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Modal,
   NativeModules,
   Pressable,
@@ -10,8 +11,8 @@ import {
   View,
 } from 'react-native';
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
-import { getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
-import { getUnmatchedSenders, linkSenderToContact } from '../services/contactLinking';
+import { deletePlatformIdentitiesByContactAndPlatform, getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
+import { getUnmatchedSenders, linkSenderToContact, unlinkPlatform } from '../services/contactLinking';
 import type { UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
 import { PURPLE, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
@@ -56,6 +57,7 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
   const [unmatchedSenders, setUnmatchedSenders] = useState<UnmatchedSender[]>([]);
   const [linkSearch, setLinkSearch] = useState('');
   const [linking, setLinking] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState<Platform | null>(null);
 
   const reloadIdentities = (id: string) => {
     getPlatformIdentitiesByContact(id)
@@ -147,6 +149,35 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
     !linkSearch.trim() || s.displayName.toLowerCase().includes(linkSearch.trim().toLowerCase())
   );
 
+  // Removes both halves of a link: the native confirmed_identities entries that
+  // actually drive matching (unlinkPlatform), and the platform_identities rows the
+  // "ON" chip reads from (deletePlatformIdentitiesByContactAndPlatform). Doing only
+  // the second would be cosmetic — backfillConfirmedLinks would silently re-add the
+  // chip next time this modal opens, since the native side would still consider the
+  // sender linked.
+  const confirmUnlink = (platform: Platform, label: string) => {
+    if (!contact) return;
+    Alert.alert(
+      `Unlink ${label}?`,
+      'ConTxt will treat future messages from this sender as unrecognised again, until you link them a second time.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unlink', style: 'destructive', onPress: async () => {
+            setUnlinking(platform);
+            try {
+              await unlinkPlatform(contact.id, platform);
+              await deletePlatformIdentitiesByContactAndPlatform(contact.id, platform);
+              reloadIdentities(contact.id);
+            } finally {
+              setUnlinking(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleRelationship = async (r: Relationship) => {
     if (!contact) return;
     const next = contact.relationship === r ? undefined : r;
@@ -223,6 +254,13 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
                               : id.identifier}
                         </Text>
                       )}
+                      <Pressable
+                        hitSlop={8}
+                        disabled={unlinking === id.platform}
+                        onPress={() => confirmUnlink(id.platform, PLATFORM_LABEL[id.platform] ?? id.platform)}
+                      >
+                        <Text style={styles.platformUnlink}>{unlinking === id.platform ? '…' : '✕'}</Text>
+                      </Pressable>
                     </View>
                   ))}
                   <Pressable style={styles.addPlatformChip} onPress={openLinkPicker}>
@@ -375,6 +413,7 @@ const styles = StyleSheet.create({
   platformIcon:       { fontSize: 13 },
   platformLabel:      { fontSize: 12, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
   platformIdentifier: { fontSize: 11, color: CONTEXT, fontFamily: FONTS.mono, maxWidth: 120 },
+  platformUnlink:     { fontSize: 12, color: MUTED, marginLeft: 2, paddingHorizontal: 2 },
 
   addPlatformChip:     { borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
   addPlatformChipText: { fontSize: 12, color: MUTED, fontFamily: FONTS.medium, fontWeight: '500' },
