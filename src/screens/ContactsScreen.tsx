@@ -48,6 +48,9 @@ function targetDisplayName(t: LinkPickerTarget): string {
 function targetPlatformLabel(t: LinkPickerTarget): string {
   return t.kind === 'unmatched' ? t.sender.platformLabel : (t.link.platform ?? 'another app');
 }
+function targetPlatform(t: LinkPickerTarget): string {
+  return t.kind === 'unmatched' ? t.sender.platform : (t.link.platform ?? 'other');
+}
 // Both onLinkSenderToContact/onCreateContactFromSender take an UnmatchedSender shape —
 // a PendingContactLink carries the same senderName/convKey/platform, so it converts
 // directly rather than needing its own pair of App.tsx handlers.
@@ -313,7 +316,10 @@ export default function ContactsScreen({
             <View style={styles.handle} />
             {linkPickerTarget && (
               <>
-                <Text style={styles.pickerTitle}>Link {targetDisplayName(linkPickerTarget)}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, marginTop: 8 }}>
+                  <Text style={styles.platformIcon}>{PLATFORM_ICONS[targetPlatform(linkPickerTarget)] ?? '📱'}</Text>
+                  <Text style={[styles.pickerTitle, { paddingHorizontal: 0, marginTop: 0 }]}>Link {targetDisplayName(linkPickerTarget)}</Text>
+                </View>
                 <Text style={styles.pickerHint}>
                   Seen on {targetPlatformLabel(linkPickerTarget)}. Pick who this is, or create a new contact.
                 </Text>
