@@ -194,11 +194,28 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 //   const MIGRATIONS: Record<number, ...> = {
 //     2: async (db) => { await db.execAsync('ALTER TABLE contacts ADD COLUMN foo TEXT'); },
 //   };
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> = {
   // 1 is reserved as the baseline for installs updating from before version
   // tracking existed — _migrate() above already applied everything "version 1"
   // would represent, so there's no SQL to run here, just a version to stamp.
+
+  // styleSync.ts's drainConfirmedIdentities() used to tag a real, user-confirmed
+  // messaging-platform link (from the bubble's own "Yes" banner) as
+  // identifier_type='display_name' — the same tag database.ts/deviceContacts.ts/
+  // googlePeople.ts use for unrelated device/google contact-cache bookkeeping rows,
+  // which the UI (ContactDetailModal, App.tsx's contactPlatforms grouping)
+  // deliberately filters out of platform chips/icons. That silently hid every
+  // platform confirmed via the bubble banner (the most common linking path) from
+  // both the "ON" chips and the link-picker's per-contact icons. The write itself
+  // is fixed going forward; this repairs rows written before the fix. Scoped to
+  // platform NOT IN ('device','google') so the actual bookkeeping rows are untouched.
+  2: async (db) => {
+    await db.runAsync(
+      `UPDATE platform_identities SET identifier_type = 'username'
+       WHERE identifier_type = 'display_name' AND platform NOT IN ('device', 'google')`
+    );
+  },
 };
 
 async function _runVersionedMigrations(db: SQLite.SQLiteDatabase): Promise<void> {

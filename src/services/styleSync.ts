@@ -154,7 +154,14 @@ async function drainConfirmedIdentities(confirmed: Record<string, string>): Prom
       contactId: sqliteContactId,
       platform,
       identifier: senderName,
-      identifierType: 'display_name',
+      // NOT 'display_name' — that tag is reserved for device/google contact-cache
+      // bookkeeping rows (see database.ts/deviceContacts.ts/googlePeople.ts), which the
+      // UI deliberately filters out of platform chips/icons (ContactDetailModal.tsx,
+      // App.tsx's contactPlatforms grouping). This row represents a real, user-confirmed
+      // messaging-platform link (the bubble's own "Yes" banner) — same as
+      // ContactDetailModal's own backfillConfirmedLinks does for the identical scenario —
+      // so it needs the same 'username' tag to actually show up.
+      identifierType: 'username',
       confidence: 1.0,
       userConfirmed: true,
     });
