@@ -40,6 +40,7 @@ export const BOOKING_ICONS: Record<BookingType, string> = {
   hotel:       '🏨',
   train:       '🚂',
   bus:         '🚌',
+  car:         '🚗',
   delivery:    '📦',
   restaurant:  '🍽️',
   event:       '🎟️',
@@ -239,7 +240,23 @@ const BOOKINGS_SYNC_INTERVAL_MS = 20 * 60 * 1000;
 // like "Friday 17 July" had no grounding and could resolve to a year that
 // made an already-past event look upcoming. Forcing a resync re-classifies
 // every cached booking under the fixed prompt.
-const BOOKINGS_SYNC_LOGIC_VERSION = '9';
+// v10 (2026-07-28): car rental confirmations were structurally unclassifiable
+// — CLASSIFY_SYSTEM_PROMPT's type enum only ever listed flight/hotel/train/
+// bus/event, so a car rental always resolved to type: null and was dropped
+// before ever reaching the cache (rejected candidates are never upserted, so
+// an incremental sync can't "rediscover" one — only a full resync re-scans
+// the Gmail window at all). Added 'car' as a first-class type; this bump
+// forces the full resync needed to pick up rentals that already silently
+// dropped out under the old prompt.
+// v11 (2026-07-28): getBookingsContext's Gmail query scoped the confirmation-
+// language allowlist to category:updates only — a real GOL flight
+// confirmation and a DiscoverCars rental confirmation both carried NO Gmail
+// category at all (plain Primary-tab INBOX mail), so neither ever matched
+// any category: clause and both were invisible to every sync regardless of
+// this file's logic version. The allowlist now applies regardless of
+// category (except promotions). Forces a full resync to pick up bookings
+// that were silently unreachable under the old category:updates scoping.
+const BOOKINGS_SYNC_LOGIC_VERSION = '11';
 const BOOKINGS_SYNC_LOGIC_VERSION_KEY = 'bookings_sync_logic_version';
 
 async function isBookingsSyncDue(): Promise<boolean> {

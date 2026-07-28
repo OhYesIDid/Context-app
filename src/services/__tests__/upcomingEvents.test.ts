@@ -109,7 +109,7 @@ describe('loadUpcomingEvents — sync gating', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2);
     expect(onUpdate.mock.calls[0][0].isSyncing).toBe(true);
     expect(result.bookingItems.some((b) => b.destination === 'Rome')).toBe(true);
-    expect(await AsyncStorage.getItem('bookings_sync_logic_version')).toBe('9');
+    expect(await AsyncStorage.getItem('bookings_sync_logic_version')).toBe('11');
   });
 
   it('forces a full resync when the stored logic version is stale, even if recently synced', async () => {

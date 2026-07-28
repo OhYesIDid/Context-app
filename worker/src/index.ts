@@ -136,7 +136,7 @@ async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: b
 // (category + vendor keywords) still does all the volume control upstream of
 // this call.
 
-type ClassifiedBookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'event' | null;
+type ClassifiedBookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'car' | 'event' | null;
 
 interface ClassifyCandidate {
   id: string;
@@ -168,7 +168,7 @@ interface ClassifiedBooking {
 
 const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for the recipient's own upcoming trip, and extract key details. You will be given today's date and a batch of emails (id, subject, sender, the date each email was received, and either a short snippet or the full body text). For EACH one:
 
-1. Decide if it is a genuine booking CONFIRMATION for the recipient's own upcoming travel or event: flight, hotel, train, bus/coach, or ticketed event.
+1. Decide if it is a genuine booking CONFIRMATION for the recipient's own upcoming travel or event: flight, hotel, train, bus/coach, car rental, or ticketed event.
    - type = null (and skip the rest) if it is: a bill or receipt for something unrelated to travel, a delivery/shipping notice, a promotional/marketing email, a booking that is still PENDING/requested (not yet confirmed), a CANCELLED booking, a reply/forward of a thread (subject starts with "Re:" or "Fwd:"), or a notification about someone ELSE's booking (e.g. an Airbnb host being told a guest is arriving at their own listed property — that is not the recipient's own travel).
    - Named ticketing vendors only for type "event" (Eventbrite, Ticketmaster, etc.) — a bare mention of the word "ticket" or "event" in a promotional email is not a booking.
 2. If it is a genuine booking, extract:
@@ -181,7 +181,7 @@ const CLASSIFY_SYSTEM_PROMPT = `You classify emails as travel/event bookings for
 6. Many bookings mention a date without an explicit year (e.g. "Friday 17 July"). Resolve the year using today's date and the email's own received date as anchors: prefer the interpretation nearest to, and normally on or after, the email's received date — a booking confirmation is essentially never sent more than a few months before the event, and never after it. Never pick a year just because it's "the current year" if that would place the event before the email was received, or so far in the future that it makes no sense next to the received date.
 
 Respond ONLY with valid JSON, no markdown, no explanation:
-{"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"event"|null,"confident":true|false,"travelDate":"...","travelDateEnd":"...","destination":"..."}]}`;
+{"results":[{"id":"...","type":"flight"|"hotel"|"train"|"bus"|"car"|"event"|null,"confident":true|false,"travelDate":"...","travelDateEnd":"...","destination":"..."}]}`;
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
 const CLASSIFY_MAX_TOKENS = 4096;
@@ -197,7 +197,7 @@ function parseClassifyResponse(raw: string, candidateIds: string[]): ClassifiedB
     return candidateIds.map((id) => ({ id, type: null, confident: false }));
   }
   const idSet = new Set(candidateIds);
-  const validTypes = new Set(['flight', 'hotel', 'train', 'bus', 'event']);
+  const validTypes = new Set(['flight', 'hotel', 'train', 'bus', 'car', 'event']);
   const results = (parsed.results ?? [])
     .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
     .filter((r) => typeof r.id === 'string' && idSet.has(r.id))

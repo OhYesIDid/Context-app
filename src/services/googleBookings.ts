@@ -175,6 +175,16 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   // of thousands of messages: bank alerts, shipping notices, etc.), so it
   // needs scoping down to just the relevant subset.
   //
+  // Confirmed live again: a GOL (voegol.com.br) flight confirmation and a
+  // DiscoverCars rental confirmation both carried NO category label at all
+  // (not travel/purchases/updates/promotions — just plain INBOX, i.e. the
+  // Primary tab) and so were invisible to every category: clause below,
+  // regardless of the category:updates keyword-scoping fix above. The
+  // confirmation-language allowlist is no longer scoped to category:updates
+  // — it now applies regardless of category (except promotions), so a real
+  // booking confirmation is found whether Gmail filed it under Updates or
+  // just left it in Primary with no category at all.
+  //
   // Originally scoped by a vendor-NAME allowlist (specific airlines, hotel
   // chains, train operators). That's fundamentally reactive — a genuine
   // TrainPal confirmation was later missed the same way Trip.com originally
@@ -192,7 +202,7 @@ export async function getBookingsContext(lookbackDays = 30, sinceDate?: Date, ma
   const dateFilter = sinceDate
     ? (() => { const d = new Date(sinceDate); d.setDate(d.getDate() - 1); return `after:${formatGmailDate(d)}`; })()
     : `newer_than:${lookbackDays}d`;
-  const query = `(category:travel OR category:purchases OR (category:updates (${UPDATES_CONFIRMATION_TERMS}))) -category:promotions ${dateFilter}`;
+  const query = `(category:travel OR category:purchases OR (${UPDATES_CONFIRMATION_TERMS})) -category:promotions ${dateFilter}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
