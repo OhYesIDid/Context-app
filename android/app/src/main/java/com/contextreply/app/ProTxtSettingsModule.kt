@@ -229,7 +229,10 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
     fun setRemindersEnabled(enabled: Boolean) {
         Prefs.main(reactApplicationContext)
             .edit().putBoolean("reminders_enabled", enabled).apply()
-        if (!enabled) ReminderWorker.cancelAll(reactApplicationContext)
+        if (!enabled) {
+            ReminderWorker.cancelAll(reactApplicationContext)
+            FollowUpReminderWorker.cancelAll(reactApplicationContext)
+        }
     }
 
     @ReactMethod
@@ -360,20 +363,9 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun clearPendingFollowUp(id: String) {
-        ProTxtBgService.getInstance()?.clearPendingFollowUp(id)
-            ?: run {
-                // Service not running — clear directly from prefs
-                val prefs = Prefs.main(reactApplicationContext)
-                try {
-                    val arr = org.json.JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
-                    val next = org.json.JSONArray()
-                    for (i in 0 until arr.length()) {
-                        val item = arr.optJSONObject(i) ?: continue
-                        if (item.optString("id") != id) next.put(item)
-                    }
-                    prefs.edit().putString("pending_follow_ups", next.toString()).apply()
-                } catch (_: Exception) {}
-            }
+        // FollowUpStore takes a plain Context, so this no longer needs a running-service
+        // fallback branch — it works the same whether or not ProTxtBgService is alive.
+        FollowUpStore.dismiss(reactApplicationContext, id)
     }
 
     // Atomically reads and clears follow-ups confirmed via the bubble CTA so JS can

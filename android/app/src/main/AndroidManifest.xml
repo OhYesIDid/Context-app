@@ -84,6 +84,15 @@
       </intent-filter>
     </receiver>
 
+    <receiver
+      android:name=".FollowUpActionReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.contxt.app.ACTION_FOLLOWUP_CONFIRM"/>
+        <action android:name="com.contxt.app.ACTION_FOLLOWUP_DISMISS"/>
+      </intent-filter>
+    </receiver>
+
     <service
       android:name="expo.modules.androidnotificationlistenerservice.ExpoNotificationListenerService"
       tools:node="remove"/>

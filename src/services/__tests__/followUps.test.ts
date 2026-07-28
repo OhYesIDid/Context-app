@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadFollowUps, addFollowUp, markDone, deleteFollowUp, urgency, formatDueLabel, parseDueAt, type FollowUp } from '../followUps';
+import { loadFollowUps, addFollowUp, markDone, deleteFollowUp, urgency, formatDueLabel, parseDueAt, taskTextSimilarity, type FollowUp } from '../followUps';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -72,6 +72,64 @@ describe('addFollowUp / markDone / deleteFollowUp', () => {
 
     const after = await deleteFollowUp(second.id);
     expect(after.map((f) => f.id)).toEqual([first.id]);
+  });
+});
+
+describe('taskTextSimilarity', () => {
+  it('scores 1 when one phrasing\'s content words are a subset of the other\'s', () => {
+    expect(taskTextSimilarity('Call the dentist', 'Remind me to call the dentist about the appointment')).toBe(1);
+  });
+
+  it('scores lower for a different object with the same verb', () => {
+    expect(taskTextSimilarity('Call the dentist', 'Call the vet')).toBeLessThan(0.7);
+  });
+
+  it('is order-independent', () => {
+    expect(taskTextSimilarity('Send Sarah the invoice', 'Send the invoice to Sarah')).toBe(1);
+  });
+
+  it('returns 0 when either side has no content words left after stripping filler', () => {
+    expect(taskTextSimilarity('to the a', 'Call the dentist')).toBe(0);
+  });
+});
+
+describe('addFollowUp — duplicate merging', () => {
+  it('merges a re-proposed pending follow-up with near-identical wording for the same contact instead of duplicating it', async () => {
+    await addFollowUp({ text: 'Call the dentist', contactName: 'Sam' });
+    const after = await addFollowUp({ text: 'Remind me to call the dentist about the appointment', contactName: 'Sam' });
+
+    expect(after).toHaveLength(1);
+  });
+
+  it('does not merge across different contacts even with identical wording', async () => {
+    await addFollowUp({ text: 'Call the dentist', contactName: 'Sam' });
+    const after = await addFollowUp({ text: 'Call the dentist', contactName: 'Alex' });
+
+    expect(after).toHaveLength(2);
+  });
+
+  it('does not merge against an already-done follow-up', async () => {
+    const first = (await addFollowUp({ text: 'Call the dentist', contactName: 'Sam' }))[0];
+    await markDone(first.id);
+    const after = await addFollowUp({ text: 'Call the dentist', contactName: 'Sam' });
+
+    expect(after).toHaveLength(2);
+  });
+
+  it('adopts the new due date on merge when it is sooner than the existing one', async () => {
+    await addFollowUp({ text: 'Call the dentist', contactName: 'Sam', dueAt: 2_000 });
+    const after = await addFollowUp({ text: 'Remind me to call the dentist', contactName: 'Sam', dueAt: 1_000 });
+
+    expect(after).toHaveLength(1);
+    expect(after[0].dueAt).toBe(1_000);
+  });
+
+  it('keeps the existing due date on merge when the new one is later or missing', async () => {
+    await addFollowUp({ text: 'Call the dentist', contactName: 'Sam', dueAt: 1_000 });
+    const after = await addFollowUp({ text: 'Remind me to call the dentist', contactName: 'Sam' });
+
+    expect(after).toHaveLength(1);
+    expect(after[0].dueAt).toBe(1_000);
   });
 });
 

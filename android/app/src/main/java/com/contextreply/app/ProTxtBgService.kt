@@ -46,6 +46,7 @@ class ProTxtBgService : NotificationListenerService() {
         const val CHANNEL_ID = "contextreply_suggestions"
         const val CHANNEL_SILENT_ID = "contextreply_silent"
         const val CHANNEL_REMINDER_ID = "contextreply_reminders"
+        const val CHANNEL_FOLLOWUP_ID = "contextreply_followup_reminders"
         const val ACTION_SEND = "com.contxt.app.ACTION_SEND_REPLY"
         const val ACTION_DISMISS = "com.contxt.app.ACTION_DISMISS_REPLY"
         const val ACTION_COPY = "com.contxt.app.ACTION_COPY_REPLY"
@@ -1715,67 +1716,30 @@ class ProTxtBgService : NotificationListenerService() {
         } catch (_: Exception) {}
     }
 
-    // Upserts a follow-up task into the pending_follow_ups SharedPrefs list. Id derived from
-    // convKey + task (see IntentAndSignals.computeActionId) — same reasoning as the calendar
-    // action above.
+    // Upserts a follow-up task into the pending_follow_ups SharedPrefs list (and schedules its
+    // confirm-reminder notification) via FollowUpStore. Id derived from convKey + task (see
+    // IntentAndSignals.computeActionId) — same reasoning as the calendar action above.
     private fun upsertPendingFollowUp(action: JSONObject, convKey: String, contactName: String) {
-        val prefs = Prefs.main(this)
-        try {
-            val task = action.optString("task").ifEmpty { action.optString("label") }
-            val existing = JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
-            val next = JSONArray()
-            val id = IntentAndSignals.computeActionId(convKey, task)
-            for (i in 0 until existing.length()) {
-                val item = existing.optJSONObject(i) ?: continue
-                if (item.optString("id") != id) next.put(item)
-            }
-            next.put(JSONObject().apply {
-                put("id", id)
-                put("task", task)
-                put("dueHint", action.optString("dueHint").ifEmpty { null } ?: JSONObject.NULL)
-                // ISO 8601 local datetime resolved by the model from dueHint — lets the JS
-                // side store a real due timestamp instead of losing the deadline entirely.
-                put("dueAt", action.optString("dueAt").ifEmpty { null } ?: JSONObject.NULL)
-                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
-                put("convKey", convKey)
-                put("createdAt", System.currentTimeMillis())
-            })
-            prefs.edit().putString("pending_follow_ups", next.toString()).apply()
-        } catch (_: Exception) {}
+        val task = action.optString("task").ifEmpty { action.optString("label") }
+        val id = IntentAndSignals.computeActionId(convKey, task)
+        FollowUpStore.upsertPending(
+            this, id, task,
+            dueHint = action.optString("dueHint").ifEmpty { null },
+            // ISO 8601 local datetime resolved by the model from dueHint — lets the JS side
+            // store a real due timestamp instead of losing the deadline entirely.
+            dueAt = action.optString("dueAt").ifEmpty { null },
+            contactName = contactName,
+            convKey = convKey,
+        )
     }
 
     // Removes a pending follow-up by id (called from BubbleSuggestionActivity or SettingsModule).
-    fun clearPendingFollowUp(id: String) {
-        val prefs = Prefs.main(this)
-        try {
-            val arr = JSONArray(prefs.getString("pending_follow_ups", "[]") ?: "[]")
-            val next = JSONArray()
-            for (i in 0 until arr.length()) {
-                val item = arr.optJSONObject(i) ?: continue
-                if (item.optString("id") != id) next.put(item)
-            }
-            prefs.edit().putString("pending_follow_ups", next.toString()).apply()
-        } catch (_: Exception) {}
-    }
+    fun clearPendingFollowUp(id: String) = FollowUpStore.dismiss(this, id)
 
     // Called when user confirms a follow-up from the bubble CTA.
     // Clears from pending and adds to confirmed_follow_ups so JS can drain it into AsyncStorage.
-    fun confirmFollowUp(id: String, task: String, contactName: String, dueHint: String?, dueAt: String? = null) {
-        val prefs = Prefs.main(this)
-        clearPendingFollowUp(id)
-        try {
-            val arr = JSONArray(prefs.getString("confirmed_follow_ups", "[]") ?: "[]")
-            arr.put(JSONObject().apply {
-                put("id", id)
-                put("task", task)
-                put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
-                put("dueHint", dueHint?.ifEmpty { null } ?: JSONObject.NULL)
-                put("dueAt", dueAt?.ifEmpty { null } ?: JSONObject.NULL)
-                put("createdAt", System.currentTimeMillis())
-            })
-            prefs.edit().putString("confirmed_follow_ups", arr.toString()).apply()
-        } catch (_: Exception) {}
-    }
+    fun confirmFollowUp(id: String, task: String, contactName: String, dueHint: String?, dueAt: String? = null) =
+        FollowUpStore.confirm(this, id, task, contactName, dueHint, dueAt)
 
     private fun cacheSuggestion(packageName: String, convKey: String, casual: String, formal: String?, brief: String?, actionJson: String? = null) {
         Prefs.main(this).edit()

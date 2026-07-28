@@ -1107,6 +1107,13 @@ class BubbleSuggestionActivity : Activity() {
                             try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(address)}"))) } catch (_: Exception) {}
                         }
                         "follow_up" -> {
+                            // Disable + relabel FIRST, before the confirm call — this is also
+                            // upsert-by-id in FollowUpStore now, so a stray double-tap can't
+                            // append a second confirmed_follow_ups entry either way, but closing
+                            // the click window here means the second tap never fires at all.
+                            isClickable = false
+                            text = "✓ Added to follow-ups"
+                            setTextColor(GREEN)
                             val task    = action.optString("task").ifEmpty { actionLabel }
                             val dueHint = action.optString("dueHint").ifEmpty { null }
                             val dueAt   = action.optString("dueAt").ifEmpty { null }
@@ -1115,9 +1122,6 @@ class BubbleSuggestionActivity : Activity() {
                                 val contact = contactMatch?.optString("displayName")?.ifEmpty { null } ?: ""
                                 ProTxtBgService.getInstance()?.confirmFollowUp(id, task, contact, dueHint, dueAt)
                             }
-                            text = "✓ Added to follow-ups"
-                            setTextColor(GREEN)
-                            isClickable = false
                         }
                         "share_location" -> {
                             var lat = action.optDouble("lat", Double.NaN)
