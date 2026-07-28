@@ -52,7 +52,7 @@ const PLATFORM_ICONS: Record<string, string> = {
   whatsapp:  '💬',
   telegram:  '📨',
   instagram: '📸',
-  sms:       '💬',
+  sms:       '📲',
   email:     '📧',
   messenger: '💭',
   signal:    '🔒',

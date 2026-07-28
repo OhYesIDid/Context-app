@@ -70,7 +70,7 @@ object IntentAndSignals {
         "whatsapp"  -> "💬"
         "telegram"  -> "📨"
         "instagram" -> "📸"
-        "sms"       -> "💬"
+        "sms"       -> "📲"
         "messenger" -> "💭"
         "signal"    -> "🔒"
         else        -> "📱"
