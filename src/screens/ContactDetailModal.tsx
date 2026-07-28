@@ -11,19 +11,14 @@ import {
 } from 'react-native';
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
+import { getUnmatchedSenders, linkSenderToContact } from '../services/contactLinking';
+import type { UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
 import { PURPLE, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
 
 const { ProTxtSettings } = NativeModules;
 
 const VALID_PLATFORMS: Platform[] = ['whatsapp', 'telegram', 'instagram', 'sms', 'email', 'messenger', 'signal', 'google', 'phone'];
-
-interface UnmatchedSender {
-  convKey: string;
-  displayName: string;
-  platformLabel: string;
-  platform: string;
-}
 
 const RELATIONSHIP_EMOJI: Record<Relationship, string> = {
   friend:    '👋',
@@ -120,16 +115,14 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
   const openLinkPicker = () => {
     setLinkSearch('');
     setLinkPickerVisible(true);
-    ProTxtSettings?.getUnmatchedSenders?.()
-      .then((json: string) => setUnmatchedSenders(JSON.parse(json)))
-      .catch(() => setUnmatchedSenders([]));
+    getUnmatchedSenders().then(setUnmatchedSenders);
   };
 
   const handleLinkSender = async (sender: UnmatchedSender) => {
     if (!contact) return;
     setLinking(sender.convKey);
     try {
-      await ProTxtSettings?.linkSenderToContact?.(sender.convKey, contact.id);
+      await linkSenderToContact(sender.convKey, contact.id);
       if (VALID_PLATFORMS.includes(sender.platform as Platform)) {
         await upsertPlatformIdentity({
           contactId: contact.id,

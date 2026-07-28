@@ -36,13 +36,16 @@ import { loadPendingCalendarActions } from './src/services/pendingCalendarAction
 import type { PendingCalendarAction } from './src/services/pendingCalendarActions';
 import { loadPendingFollowUps, drainConfirmedFollowUps } from './src/services/pendingFollowUps';
 import type { PendingFollowUp } from './src/services/pendingFollowUps';
+import { getUnmatchedSenders, linkSenderToContact } from './src/services/contactLinking';
+import type { UnmatchedSender } from './src/services/contactLinking';
+import ContactsScreen from './src/screens/ContactsScreen';
 
 const { ProTxtSettings } = NativeModules;
 
 import { suggestReply } from './src/services/claude';
 import { addEntitlementListener, checkProEntitlement, configurePurchases, fetchOfferings, presentCustomerCenter, purchasePkg, restorePurchases } from './src/services/purchases';
 import type { PurchasesOfferings, PurchasesPackage } from 'react-native-purchases';
-import { getAllContacts, getConfirmedPlatformIdentities, updateContactPreferences, upsertContact } from './src/services/database';
+import { getAllContacts, getConfirmedPlatformIdentities, updateContactPreferences, upsertContact, upsertPlatformIdentity } from './src/services/database';
 import { importDeviceContacts } from './src/services/deviceContacts';
 import { configureGoogleSignin, initAuth, isSignedIn, signOut } from './src/services/googleAuth';
 import { getCalendarData } from './src/services/googleCalendar';
@@ -51,7 +54,7 @@ import { getEtaData } from './src/services/googleMaps';
 import { importGoogleContacts } from './src/services/googlePeople';
 import { refreshContactListCache, syncStyleProfile } from './src/services/styleSync';
 import { pickAndParseWhatsAppExport } from './src/services/whatsappParser';
-import type { Contact, EnrichmentData, Intent, Relationship, SuggestReplyInput, Tone } from './src/types';
+import type { Contact, EnrichmentData, Intent, Platform as MessagingPlatform, Relationship, SuggestReplyInput, Tone } from './src/types';
 import { ENRICHMENT_PREFERENCES, ENRICHMENT_STATUS, detectIntents, requiredEnrichments } from './src/utils/intentDetector';
 import { logEvent } from './src/services/analytics';
 import SetupWizard, { type SetupResult } from './src/components/SetupWizard';
@@ -69,30 +72,13 @@ const TONE_COLOR: Record<Tone, string> = {
   brief: '#f59e0b',
 };
 
-function SetupRow({
-  label, status, done, loading, onPress,
-}: { label: string; status: string; done: boolean; loading: boolean; onPress: () => void }) {
-  return (
-    <Pressable style={styles.settingRow} onPress={onPress} disabled={loading}>
-      <View style={styles.settingLeft}>
-        <Text style={[styles.setupDot, done && styles.setupDotDone]}>{done ? '✓' : '·'}</Text>
-        <View>
-          <Text style={styles.settingText}>{label}</Text>
-          <Text style={styles.setupStatus}>{loading ? 'Importing…' : status}</Text>
-        </View>
-      </View>
-      {!loading && <Text style={styles.setupAction}>{done ? 'Update' : 'Import'}</Text>}
-    </Pressable>
-  );
-}
-
 const DEFAULT_TONE_KEY = 'default_tone';
 const GOOGLE_CONTACTS_COUNT_KEY = 'setup_google_contacts_count';
 const DEVICE_CONTACTS_COUNT_KEY = 'setup_device_contacts_count';
 const WHATSAPP_IMPORT_KEY = 'setup_whatsapp_messages';
 const SETUP_COMPLETE_KEY = 'setup_complete';
 
-type Tab = 'home' | 'followups' | 'upcoming' | 'settings';
+type Tab = 'home' | 'followups' | 'upcoming' | 'contacts' | 'settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -118,8 +104,9 @@ export default function App() {
   const [suggestAllMessages, setSuggestAllMessagesState] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactPlatforms, setContactPlatforms] = useState<Record<string, string[]>>({});
-  const [contactsVisible, setContactsVisible] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
+  const [unmatchedSenders, setUnmatchedSenders] = useState<UnmatchedSender[]>([]);
+  const [linkingSenderKey, setLinkingSenderKey] = useState<string | null>(null);
   const [newContactVisible, setNewContactVisible] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactRelationship, setNewContactRelationship] = useState<Relationship | undefined>(undefined);
@@ -148,8 +135,9 @@ export default function App() {
   const [homeCandidate, setHomeCandidate] = useState<HomeCandidate | null>(null);
 
   useEffect(() => {
-    if (contactsVisible) {
+    if (activeTab === 'contacts') {
       getAllContacts().then(setContacts).catch(() => {});
+      getUnmatchedSenders().then(setUnmatchedSenders);
       // One bulk query grouped client-side, rather than one platform-identities
       // lookup per row — the list can show dozens of contacts at once. Merges
       // in native confirmed_identities links too — the much more common
@@ -174,7 +162,7 @@ export default function App() {
         setContactPlatforms(grouped);
       }).catch(() => {});
     }
-  }, [contactsVisible]);
+  }, [activeTab]);
 
   useEffect(() => {
     AsyncStorage.multiGet([
@@ -338,6 +326,43 @@ export default function App() {
     refreshContactListCache().catch(() => {});
   };
 
+  const VALID_LINK_PLATFORMS: MessagingPlatform[] = ['whatsapp', 'telegram', 'instagram', 'sms', 'email', 'messenger', 'signal', 'google', 'phone'];
+
+  const handleLinkSenderToContact = async (sender: UnmatchedSender, contactId: string) => {
+    setLinkingSenderKey(sender.convKey);
+    try {
+      await linkSenderToContact(sender.convKey, contactId);
+      if (VALID_LINK_PLATFORMS.includes(sender.platform as MessagingPlatform)) {
+        await upsertPlatformIdentity({
+          contactId,
+          platform: sender.platform as MessagingPlatform,
+          identifier: sender.displayName,
+          identifierType: 'username',
+          confidence: 1,
+          userConfirmed: true,
+        });
+      }
+      setUnmatchedSenders((prev) => prev.filter((s) => s.convKey !== sender.convKey));
+      setContactPlatforms((prev) => {
+        const list = prev[contactId] ?? [];
+        return list.includes(sender.platform) ? prev : { ...prev, [contactId]: [...list, sender.platform] };
+      });
+    } finally {
+      setLinkingSenderKey(null);
+    }
+  };
+
+  const handleCreateContactFromSender = async (sender: UnmatchedSender) => {
+    setLinkingSenderKey(sender.convKey);
+    try {
+      const created = await upsertContact({ displayName: sender.displayName });
+      setContacts((prev) => [created, ...prev]);
+      await handleLinkSenderToContact(sender, created.id);
+    } finally {
+      setLinkingSenderKey(null);
+    }
+  };
+
   const saveDefaultTone = async (t: Tone) => {
     setDefaultToneState(t);
     await AsyncStorage.setItem(DEFAULT_TONE_KEY, t);
@@ -497,6 +522,34 @@ export default function App() {
       )}
       {activeTab === 'followups' && (
         <FollowUpsScreen followUps={followUps} setFollowUps={setFollowUps} onGoToSettings={() => setActiveTab('settings')} />
+      )}
+      {activeTab === 'contacts' && (
+        <ContactsScreen
+          contacts={contacts}
+          contactPlatforms={contactPlatforms}
+          contactSearch={contactSearch}
+          onSearchChange={setContactSearch}
+          unmatchedSenders={unmatchedSenders}
+          linkingSenderKey={linkingSenderKey}
+          googleContactsCount={googleContactsCount}
+          deviceContactsCount={deviceContactsCount}
+          whatsappMessages={whatsappMessages}
+          setupLoading={setupLoading}
+          onImportGoogle={handleImportGoogleContacts}
+          onImportDevice={handleImportDeviceContacts}
+          onImportWhatsApp={handleImportWhatsApp}
+          onNewContact={() => {
+            setNewContactName('');
+            setNewContactRelationship(undefined);
+            setNewContactTone(undefined);
+            setNewContactVisible(true);
+          }}
+          onSelectContact={setSelectedContactId}
+          onUpdatePref={updateContactPref}
+          onLinkSenderToContact={handleLinkSenderToContact}
+          onCreateContactFromSender={handleCreateContactFromSender}
+          onGoToSettings={() => setActiveTab('settings')}
+        />
       )}
       {activeTab === 'upcoming' && (
         <UpcomingScreen
@@ -856,7 +909,7 @@ export default function App() {
             <Text style={styles.sectionTitle}>Contacts</Text>
           </View>
           <View style={styles.sectionDivider} />
-          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setContactsVisible(true)}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 0 }]} onPress={() => setActiveTab('contacts')}>
             <View>
               <Text style={styles.settingText}>Manage contacts</Text>
               <Text style={styles.setupStatus}>
@@ -872,14 +925,15 @@ export default function App() {
       </ScrollView>
       )}
 
-      {/* Bottom navigation — three tabs for three content types. Settings is
-          chrome, not content: reachable via the gear icon on every screen's
-          header instead of taking a fourth tab slot. */}
+      {/* Bottom navigation — one tab per content type. Settings is chrome, not
+          content: reachable via the gear icon on every screen's header instead
+          of taking a tab slot of its own. */}
       <View style={styles.bottomNav}>
         {([
           { key: 'home',      icon: '⌂',  label: 'Home'      },
           { key: 'followups', icon: '☑',  label: 'Follow-ups' },
           { key: 'upcoming',  icon: '🗓',  label: 'Upcoming'  },
+          { key: 'contacts',  icon: '👥',  label: 'Contacts'  },
         ] as { key: Tab; icon: string; label: string }[]).map(tab => {
           const active = activeTab === tab.key;
           const overdueCount = tab.key === 'followups' ? followUps.filter(f => f.status === 'pending' && f.dueAt != null && f.dueAt < Date.now()).length : 0;
@@ -903,128 +957,6 @@ export default function App() {
           );
         })}
       </View>
-
-      {/* Contacts modal */}
-      <Modal
-        visible={contactsVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => { setContactsVisible(false); setContactSearch(''); }}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => { setContactsVisible(false); setContactSearch(''); }}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <View style={styles.modalHandle} />
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Contacts</Text>
-                <Pressable
-                  style={styles.smallButton}
-                  onPress={() => {
-                    setNewContactName('');
-                    setNewContactRelationship(undefined);
-                    setNewContactTone(undefined);
-                    setNewContactVisible(true);
-                  }}
-                >
-                  <Text style={styles.smallButtonText}>+ New</Text>
-                </Pressable>
-              </View>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search contacts…"
-                placeholderTextColor={MUTED}
-                value={contactSearch}
-                onChangeText={setContactSearch}
-                autoCorrect={false}
-              />
-              <Text style={styles.modalSection}>IMPORT</Text>
-              <SetupRow
-                label="Google Contacts"
-                status={googleContactsCount !== null ? `${googleContactsCount} imported` : 'Not imported'}
-                done={googleContactsCount !== null}
-                loading={setupLoading === 'google'}
-                onPress={handleImportGoogleContacts}
-              />
-              <SetupRow
-                label="Device Contacts"
-                status={deviceContactsCount !== null ? `${deviceContactsCount} imported` : 'Not imported'}
-                done={deviceContactsCount !== null}
-                loading={setupLoading === 'device'}
-                onPress={handleImportDeviceContacts}
-              />
-              <SetupRow
-                label="WhatsApp History"
-                status={whatsappMessages !== null ? `${whatsappMessages} messages` : 'Not imported'}
-                done={whatsappMessages !== null}
-                loading={setupLoading === 'whatsapp'}
-                onPress={handleImportWhatsApp}
-              />
-              {contacts.length > 0 && <Text style={[styles.modalSection, { marginTop: 16 }]}>PREFERENCES</Text>}
-              {contacts.length === 0 ? (
-                <Text style={styles.setupHint}>Import contacts above to configure preferences.</Text>
-              ) : (() => {
-                const shown = contactSearch
-                  ? contacts.filter((c) => c.displayName.toLowerCase().includes(contactSearch.toLowerCase()))
-                  : contacts.slice(0, 10);
-                return (
-                  <>
-                    {!contactSearch && <Text style={styles.setupHint}>Top 10 by interactions — search for others</Text>}
-                    {shown.map((c) => (
-                      <View key={c.id} style={styles.contactCard}>
-                        <Pressable onPress={() => setSelectedContactId(c.id)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 }}>
-                            <Text style={styles.contactName} numberOfLines={1}>{c.displayName}</Text>
-                            {(contactPlatforms[c.id]?.length ?? 0) > 0 && (
-                              <View style={{ flexDirection: 'row', marginLeft: 8, gap: 3 }}>
-                                {contactPlatforms[c.id].map((p) => (
-                                  <Text key={p} style={{ fontSize: 12 }}>{PLATFORM_ICONS[p] ?? '📱'}</Text>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                          <Text style={{ fontSize: 12, color: '#e2933c' }}>View profile</Text>
-                        </Pressable>
-                        <Text style={styles.chipLabel}>Relationship</Text>
-                        <View style={styles.chipRow}>
-                          {(['friend', 'colleague', 'family', 'partner', 'flatmate', 'other'] as Relationship[]).map((r) => (
-                            <Pressable
-                              key={r}
-                              style={[styles.chip, c.relationship === r && styles.chipActive]}
-                              onPress={() => updateContactPref(c.id, 'relationship', c.relationship === r ? undefined : r)}
-                            >
-                              <Text style={[styles.chipText, c.relationship === r && styles.chipTextActive]}>
-                                {r.charAt(0).toUpperCase() + r.slice(1)}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                        <Text style={styles.chipLabel}>Preferred tone</Text>
-                        <View style={styles.chipRow}>
-                          {(['casual', 'formal', 'brief'] as Tone[]).map((t) => (
-                            <Pressable
-                              key={t}
-                              style={[styles.chip, c.preferredTone === t && styles.chipActive]}
-                              onPress={() => updateContactPref(c.id, 'preferredTone', c.preferredTone === t ? undefined : t)}
-                            >
-                              <Text style={[styles.chipText, c.preferredTone === t && styles.chipTextActive]}>
-                                {TONE_LABEL[t]}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </View>
-                    ))}
-                    {shown.length === 0 && <Text style={styles.setupHint}>No contacts match "{contactSearch}"</Text>}
-                  </>
-                );
-              })()}
-            </ScrollView>
-            <Pressable style={styles.modalClose} onPress={() => { setContactsVisible(false); setContactSearch(''); }}>
-              <Text style={styles.modalCloseText}>Done</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* Contact detail modal */}
       <ContactDetailModal
