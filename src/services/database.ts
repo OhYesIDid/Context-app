@@ -1,6 +1,9 @@
 import { randomUUID } from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import { decryptField, encryptField, hashIdentifier } from './dbCrypto';
+import {
+  decryptField, encryptField, hashIdentifier,
+  decryptFieldOrPlaceholder, decryptFieldOrUndefined, decryptFieldSafe,
+} from './dbCrypto';
 import type {
   BookingItem,
   BookingSegment,
@@ -395,14 +398,18 @@ type SavedPlaceRow = {
 };
 
 async function rowToSavedPlace(row: SavedPlaceRow): Promise<SavedPlace> {
+  // lat/lng (plaintext) and lat_enc/lng_enc (encrypted) are always written together
+  // (see upsertSavedPlace and the lat_enc backfill migration), so the plaintext column
+  // is a safe fallback on decrypt failure — `||`, not `??`, since decryptField signals
+  // failure with '' and parseFloat('') is NaN, not a value ?? would ever catch.
   const lat = row.lat_enc
-    ? parseFloat((await decryptField(row.lat_enc)) ?? String(row.lat))
+    ? parseFloat((await decryptField(row.lat_enc)) || String(row.lat))
     : row.lat;
   const lng = row.lng_enc
-    ? parseFloat((await decryptField(row.lng_enc)) ?? String(row.lng))
+    ? parseFloat((await decryptField(row.lng_enc)) || String(row.lng))
     : row.lng;
   return {
-    id: row.id, name: row.name, address: (await decryptField(row.address)) ?? row.address,
+    id: row.id, name: row.name, address: await decryptFieldOrPlaceholder(row.address, 'Unknown location'),
     lat, lng, placeId: row.place_id ?? undefined,
     isHome: row.is_home === 1, isWork: row.is_work === 1,
     createdAt: row.created_at, updatedAt: row.updated_at,
@@ -441,8 +448,8 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
   return Promise.all(rows.map(async (r) => ({
     id: r.id,
     contactId: r.contact_id ?? undefined,
-    originalSuggestion: (await decryptField(r.original_suggestion)) ?? r.original_suggestion,
-    userEdit: (await decryptField(r.user_edit)) ?? r.user_edit,
+    originalSuggestion: await decryptFieldSafe(r.original_suggestion),
+    userEdit: await decryptFieldSafe(r.user_edit),
     platform: (r.platform as StyleEdit['platform']) ?? undefined,
     intent: (r.intent as StyleEdit['intent']) ?? undefined,
     toneSelected: r.tone_selected ?? undefined,
@@ -466,20 +473,13 @@ type ContactRow = {
 };
 
 async function rowToContact(r: ContactRow): Promise<Contact> {
-  const decryptedName = await decryptField(r.display_name);
-  // decryptField returns '' (not null) on a genuine decrypt failure specifically so
-  // callers' `?? raw` fallback doesn't leak the raw "enc1:...." ciphertext — but '' isn't
-  // nullish, so `decryptedName ?? r.display_name` silently produced a blank contact name
-  // instead, which is worse: an unreadable, unmanageable row instead of a visibly-wrong
-  // one. r.display_name is NOT NULL in the schema, so a genuinely blank name never gets
-  // created any other way — treat empty-after-decrypt as the failure signal it is.
-  const displayName = decryptedName === '' && r.display_name ? 'Unknown contact' : (decryptedName ?? r.display_name);
   return {
-    id: r.id, displayName,
+    id: r.id,
+    displayName: await decryptFieldOrPlaceholder(r.display_name, 'Unknown contact'),
     relationship: (r.relationship as Contact['relationship']) ?? undefined,
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
     interactionCount: r.interaction_count ?? 0,
-    notes: (await decryptField(r.notes)) ?? undefined,
+    notes: await decryptFieldOrUndefined(r.notes),
     createdAt: r.created_at, updatedAt: r.updated_at,
     syncedAt: r.synced_at ?? undefined, deletedAt: r.deleted_at ?? undefined,
   };
@@ -681,7 +681,7 @@ export async function getConfirmedPlatformIdentities(): Promise<PlatformIdentity
     id: r.id,
     contactId: r.contact_id,
     platform: r.platform as PlatformIdentity['platform'],
-    identifier: (await decryptField(r.identifier)) ?? r.identifier,
+    identifier: await decryptFieldOrPlaceholder(r.identifier, 'Unknown'),
     identifierType: r.identifier_type as PlatformIdentity['identifierType'],
     confidence: r.confidence,
     userConfirmed: r.user_confirmed === 1,
@@ -735,7 +735,7 @@ export async function getPlatformIdentitiesByContact(contactId: string): Promise
     id: r.id,
     contactId: r.contact_id,
     platform: r.platform as PlatformIdentity['platform'],
-    identifier: (await decryptField(r.identifier)) ?? r.identifier,
+    identifier: await decryptFieldOrPlaceholder(r.identifier, 'Unknown'),
     identifierType: r.identifier_type as PlatformIdentity['identifierType'],
     confidence: r.confidence,
     userConfirmed: r.user_confirmed === 1,
@@ -771,7 +771,7 @@ export async function getSemanticMemoriesByContact(contactId: string, limit = 20
     id: r.id,
     contactId: r.contact_id ?? undefined,
     type: r.type as Memory['type'],
-    content: (await decryptField(r.content)) ?? r.content,
+    content: await decryptFieldOrPlaceholder(r.content, 'Unknown'),
     relevanceScore: r.relevance_score,
     lastConfirmedAt: r.last_confirmed_at ?? undefined,
     createdAt: r.created_at,
@@ -795,8 +795,8 @@ export async function getPendingSyncItems(): Promise<{
     saved_places: await Promise.all(places.map(rowToSavedPlace)),
     style_edits: await Promise.all(edits.map(async (r) => ({
       id: r.id, contactId: r.contact_id ?? undefined,
-      originalSuggestion: (await decryptField(r.original_suggestion)) ?? r.original_suggestion,
-      userEdit: (await decryptField(r.user_edit)) ?? r.user_edit,
+      originalSuggestion: await decryptFieldSafe(r.original_suggestion),
+      userEdit: await decryptFieldSafe(r.user_edit),
       platform: (r.platform as StyleEdit['platform']) ?? undefined,
       intent: (r.intent as StyleEdit['intent']) ?? undefined,
       createdAt: r.created_at, syncedAt: r.synced_at ?? undefined,
@@ -887,9 +887,9 @@ export async function getCachedBookings(): Promise<BookingItem[]> {
     return {
       id: r.id,
       type: r.type as BookingType,
-      subject: (await decryptField(r.subject)) ?? r.subject,
-      snippet: (await decryptField(r.snippet)) ?? r.snippet,
-      from: (await decryptField(r.from_address)) ?? r.from_address,
+      subject: await decryptFieldOrPlaceholder(r.subject, 'Booking confirmation'),
+      snippet: await decryptFieldSafe(r.snippet),
+      from: await decryptFieldSafe(r.from_address),
       date: r.email_date,
       segments,
       travelDate: raw.travelDate,

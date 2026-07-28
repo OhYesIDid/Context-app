@@ -34,6 +34,42 @@ export async function decryptField(value: string | null | undefined): Promise<st
   }
 }
 
+// decryptField() returns '' — not null — specifically so callers' common
+// `(await decryptField(x)) ?? x` idiom can't fall back to the raw enc1:... ciphertext
+// on a genuine decrypt failure. But '' isn't nullish either, so that idiom actually
+// just silently keeps the ''  — fine for fields nobody shows raw, wrong for anything
+// displayed directly (a name, a handle, a memory bullet), where a blank row reads as
+// broken/missing rather than "this couldn't be decrypted". These wrap the check once
+// instead of hand-rolling `decrypted === '' && raw ? ... : ...` at every call site.
+
+// For fields shown directly to the user where blank would look broken — falls back to
+// a visible placeholder instead of an empty string on genuine decrypt failure.
+export async function decryptFieldOrPlaceholder(
+  value: string | null | undefined,
+  placeholder: string
+): Promise<string> {
+  const decrypted = await decryptField(value);
+  if (decrypted === '' && value) return placeholder; // '' + a raw value present = failure, not "genuinely blank"
+  return decrypted ?? value ?? '';
+}
+
+// For optional fields (e.g. notes) where omitting the value on failure is the right
+// UX — the field's own "empty" rendering already handles it gracefully.
+export async function decryptFieldOrUndefined(value: string | null | undefined): Promise<string | undefined> {
+  const decrypted = await decryptField(value);
+  if (decrypted === '' && value) return undefined;
+  return decrypted ?? undefined;
+}
+
+// For required-string fields that are never shown raw to the user (e.g. style-edit
+// text feeding tone-learning prompts) — '' on failure is already correct (downstream
+// consumers filter empty entries), this just replaces the misleading `?? raw` idiom
+// that reads as if it falls back to the ciphertext, when decryptField's own '' return
+// means it never actually does.
+export async function decryptFieldSafe(value: string): Promise<string> {
+  return (await decryptField(value)) ?? '';
+}
+
 // HMAC-SHA256 of (platform + ":" + identifier) using the Keystore-backed db key.
 // Stored alongside the encrypted identifier so equality lookups don't need decryption.
 // Falls back to a plain SHA-256 digest if the native bridge is unavailable.
