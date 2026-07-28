@@ -466,8 +466,16 @@ type ContactRow = {
 };
 
 async function rowToContact(r: ContactRow): Promise<Contact> {
+  const decryptedName = await decryptField(r.display_name);
+  // decryptField returns '' (not null) on a genuine decrypt failure specifically so
+  // callers' `?? raw` fallback doesn't leak the raw "enc1:...." ciphertext — but '' isn't
+  // nullish, so `decryptedName ?? r.display_name` silently produced a blank contact name
+  // instead, which is worse: an unreadable, unmanageable row instead of a visibly-wrong
+  // one. r.display_name is NOT NULL in the schema, so a genuinely blank name never gets
+  // created any other way — treat empty-after-decrypt as the failure signal it is.
+  const displayName = decryptedName === '' && r.display_name ? 'Unknown contact' : (decryptedName ?? r.display_name);
   return {
-    id: r.id, displayName: (await decryptField(r.display_name)) ?? r.display_name,
+    id: r.id, displayName,
     relationship: (r.relationship as Contact['relationship']) ?? undefined,
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
     interactionCount: r.interaction_count ?? 0,
