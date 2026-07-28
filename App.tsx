@@ -475,7 +475,6 @@ export default function App() {
           followUps={followUps}
           pendingCalendarActions={pendingCalendarActions}
           pendingFollowUps={pendingFollowUps}
-          upcomingData={upcomingData}
           styleStats={styleStats}
           onCalendarActionDismiss={(id) => setPendingCalendarActions(prev => prev.filter(a => a.id !== id))}
           onFollowUpAdd={(item) => {

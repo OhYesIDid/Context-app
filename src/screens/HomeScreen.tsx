@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Linking,
   Pressable,
@@ -13,7 +13,6 @@ import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pen
 import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
-import type { UpcomingData } from '../services/upcomingEvents';
 import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED, CONTEXT, FONTS } from '../theme';
 
 const URGENCY_DOT: Record<string, string> = {
@@ -42,7 +41,6 @@ interface Props {
   followUps: FollowUp[];
   pendingCalendarActions: PendingCalendarAction[];
   pendingFollowUps: PendingFollowUp[];
-  upcomingData: UpcomingData;
   styleStats: StyleStats | null;
   onCalendarActionDismiss: (id: string) => void;
   onFollowUpAdd: (item: PendingFollowUp) => void;
@@ -54,8 +52,7 @@ interface Props {
   missingPermissions: string[];
 }
 
-export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, upcomingData, styleStats, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro, missingPermissions }: Props) {
-  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
+export default function HomeScreen({ followUps, pendingCalendarActions, pendingFollowUps, styleStats, onCalendarActionDismiss, onFollowUpAdd, onFollowUpDismiss, onGoToFollowUps, onGoToSettings, onOpenPaywall, isPro, missingPermissions }: Props) {
   const pending = followUps.filter(f => f.status === 'pending');
   const sorted  = [...pending].sort((a, b) => {
     const ua = urgency(a); const ub = urgency(b);
@@ -190,104 +187,61 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         </View>
       )}
 
-      {/* Upcoming — suggested calendar events + confirmed calendar/bookings merged */}
-      {(pendingCalendarActions.length > 0 || upcomingData.calendarItems.length > 0 || upcomingData.bookingItems.length > 0) && (() => {
-        // Anything with a real date (calendar events + bookings with a resolved travel
-        // date) sorts chronologically first; confirmations with no known travel date
-        // (just "confirmed N days ago") are appended after.
-        const dated = [
-          ...upcomingData.calendarItems.map(i => ({ ...i, source: 'cal' as const })),
-          ...upcomingData.bookingItems.filter(b => b.isUpcomingTravel).map(i => ({ ...i, source: 'gmail' as const })),
-        ].sort((a, b) => a.date.getTime() - b.date.getTime());
-        const recent = upcomingData.bookingItems.filter(b => !b.isUpcomingTravel).map(i => ({ ...i, source: 'gmail' as const }));
-        const allItems = [...dated, ...recent];
-        const PREVIEW_COUNT = 5;
-        const shown = upcomingExpanded ? allItems : allItems.slice(0, PREVIEW_COUNT);
-        const hiddenCount = allItems.length - PREVIEW_COUNT;
-        const totalCount = allItems.length + pendingCalendarActions.length;
-        return (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleRow}>
-                <View style={[styles.cardIcon, { backgroundColor: '#f59e0b20' }]}>
-                  <Text style={styles.cardIconText}>🗓</Text>
-                </View>
-                <Text style={styles.cardTitle}>Upcoming</Text>
-                {totalCount > 0 && (
-                  <View style={[styles.badge, { backgroundColor: '#f59e0b1a', borderWidth: 1, borderColor: '#f59e0b33' }]}>
-                    <Text style={[styles.badgeText, { color: AMBER }]}>{totalCount}</Text>
-                  </View>
-                )}
+      {/* Suggested tasks — AI-suggested calendar events awaiting Add/Dismiss. Confirmed
+          calendar events and Gmail bookings/trips live on the dedicated Upcoming tab, not
+          here — this card is scoped to pending/suggested items only, same as Follow-ups above. */}
+      {pendingCalendarActions.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <View style={[styles.cardIcon, { backgroundColor: '#f59e0b20' }]}>
+                <Text style={styles.cardIconText}>🗓</Text>
+              </View>
+              <Text style={styles.cardTitle}>Suggested tasks</Text>
+              <View style={[styles.badge, { backgroundColor: '#f59e0b1a', borderWidth: 1, borderColor: '#f59e0b33' }]}>
+                <Text style={[styles.badgeText, { color: AMBER }]}>{pendingCalendarActions.length}</Text>
               </View>
             </View>
-            <View style={styles.divider} />
-
-            {pendingCalendarActions.map(action => (
-              <View key={action.id} style={styles.calendarItem}>
-                <View style={styles.calendarBody}>
-                  <View style={styles.suggestedRow}>
-                    <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
-                    <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
-                  </View>
-                  <Text style={styles.calendarSub}>
-                    {action.contactName ? `with ${action.contactName}` : ''}
-                    {action.contactName && action.datetime ? ' · ' : ''}
-                    {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
-                  </Text>
-                </View>
-                <View style={styles.calendarActions}>
-                  <Pressable
-                    style={styles.calendarAddBtn}
-                    onPress={() => {
-                      const title = encodeURIComponent(action.title);
-                      const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
-                      Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
-                      clearPendingCalendarAction(action.id);
-                      onCalendarActionDismiss(action.id);
-                    }}
-                  >
-                    <Text style={styles.calendarAddText}>Add</Text>
-                  </Pressable>
-                  <Pressable
-                    hitSlop={10}
-                    onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
-                  >
-                    <Text style={styles.calendarDismiss}>✕</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-
-            {shown.map(item => (
-              <View key={item.id} style={styles.upcomingItem}>
-                <View style={[styles.upcomingIcon, { backgroundColor: item.source === 'cal' ? CONTEXT + '15' : '#f59e0b15' }]}>
-                  <Text style={styles.upcomingIconText}>{item.icon}</Text>
-                </View>
-                <View style={styles.upcomingBody}>
-                  <Text style={styles.upcomingTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.upcomingSub}>{item.subtitle}</Text>
-                </View>
-                <View style={[styles.upcomingBadge, { backgroundColor: item.source === 'cal' ? CONTEXT + '15' : '#f59e0b15' }]}>
-                  <Text style={[styles.upcomingBadgeText, { color: item.source === 'cal' ? CONTEXT : AMBER }]}>
-                    {item.source === 'cal' ? 'Cal' : 'Gmail'}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {!upcomingExpanded && hiddenCount > 0 && (
-              <Pressable style={styles.showMoreBtn} onPress={() => setUpcomingExpanded(true)}>
-                <Text style={styles.showMoreText}>{hiddenCount} more…</Text>
-              </Pressable>
-            )}
-            {upcomingExpanded && allItems.length > PREVIEW_COUNT && (
-              <Pressable style={styles.showMoreBtn} onPress={() => setUpcomingExpanded(false)}>
-                <Text style={styles.showMoreText}>Show less</Text>
-              </Pressable>
-            )}
           </View>
-        );
-      })()}
+          <View style={styles.divider} />
+
+          {pendingCalendarActions.map(action => (
+            <View key={action.id} style={styles.calendarItem}>
+              <View style={styles.calendarBody}>
+                <View style={styles.suggestedRow}>
+                  <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
+                  <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
+                </View>
+                <Text style={styles.calendarSub}>
+                  {action.contactName ? `with ${action.contactName}` : ''}
+                  {action.contactName && action.datetime ? ' · ' : ''}
+                  {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
+                </Text>
+              </View>
+              <View style={styles.calendarActions}>
+                <Pressable
+                  style={styles.calendarAddBtn}
+                  onPress={() => {
+                    const title = encodeURIComponent(action.title);
+                    const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
+                    Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
+                    clearPendingCalendarAction(action.id);
+                    onCalendarActionDismiss(action.id);
+                  }}
+                >
+                  <Text style={styles.calendarAddText}>Add</Text>
+                </Pressable>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => { clearPendingCalendarAction(action.id); onCalendarActionDismiss(action.id); }}
+                >
+                  <Text style={styles.calendarDismiss}>✕</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
     </ScrollView>
   );
@@ -355,16 +309,5 @@ const styles = StyleSheet.create({
   calendarAddBtn:  { backgroundColor: '#e2933c22', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#e2933c44' },
   calendarAddText: { fontSize: 12, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },
   calendarDismiss: { fontSize: 14, color: MUTED, paddingHorizontal: 4 },
-
-  upcomingItem:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
-  upcomingIcon:      { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  upcomingIconText:  { fontSize: 16 },
-  upcomingBody:      { flex: 1, minWidth: 0 },
-  upcomingTitle:     { fontSize: 14, color: TEXT, fontWeight: '400' },
-  upcomingSub:       { fontSize: 12, color: MUTED, marginTop: 2 },
-  upcomingBadge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
-  upcomingBadgeText: { fontSize: 11, fontFamily: FONTS.semibold, fontWeight: '600' },
-  showMoreBtn:       { paddingVertical: 10, paddingHorizontal: 14, borderTopWidth: 1, borderTopColor: BORDER },
-  showMoreText:      { fontSize: 13, color: PURPLE, fontFamily: FONTS.medium, fontWeight: '500' },
 
 });
