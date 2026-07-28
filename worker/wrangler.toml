@@ -2,6 +2,15 @@ name = "contextreply-suggest"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
+# Deploy with `npm run deploy` from this directory (worker/package.json runs
+# `wrangler deploy -c wrangler.toml` explicitly). A bare `wrangler deploy`
+# invoked from here — even with `--name contextreply-suggest` — has been
+# observed picking up the repo root's wrangler.jsonc (the website's
+# assets-only config, name "context-reply") instead of this file, silently
+# overwriting the real worker with an empty assets-only deployment. `--name`
+# only renames the target; it does not force which config file is read —
+# `-c` does.
+
 # Set the Claude API key as a secret (never commit the real value):
 #   wrangler secret put CLAUDE_API_KEY
 # Then add it to your EAS / .env as:

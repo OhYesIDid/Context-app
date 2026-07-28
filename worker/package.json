@@ -1,0 +1,7 @@
+{
+  "name": "contextreply-suggest-worker",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy -c wrangler.toml"
+  }
+}
