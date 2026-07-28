@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { insertMemory, upsertContact } from './database';
+import { getAllContacts, insertMemory, upsertContact, upsertPlatformIdentity } from './database';
 
 // Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg  (no dash before the sender)
 //     Android: DD/MM/YYYY, HH:MM - Sender: msg
@@ -43,8 +43,25 @@ export async function pickAndParseWhatsAppExport(): Promise<{ contactName: strin
   let messageCount = 0;
   const CHUNK = 50;
 
+  // Matched by display name (case-insensitive) so re-importing the same export — e.g. to
+  // backfill the whatsapp platform_identity added below onto contacts created before that
+  // existed — upserts the same contact instead of creating a duplicate. upsertContact's own
+  // conflict target is `id`, not name, so without this every re-import would double up.
+  const existingByName = new Map(
+    (await getAllContacts()).map((c) => [c.displayName.trim().toLowerCase(), c] as const)
+  );
+
   for (const [sender, messages] of bySender) {
-    const contact = await upsertContact({ displayName: sender });
+    const existing = existingByName.get(sender.trim().toLowerCase());
+    const contact = await upsertContact({ id: existing?.id, displayName: sender });
+    await upsertPlatformIdentity({
+      contactId: contact.id,
+      platform: 'whatsapp',
+      identifier: sender,
+      identifierType: 'username',
+      confidence: 1,
+      userConfirmed: true,
+    });
     if (!contactName) contactName = sender;
 
     for (let i = 0; i < messages.length; i += CHUNK) {
