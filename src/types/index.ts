@@ -4,7 +4,10 @@ export type BookingType = 'flight' | 'hotel' | 'train' | 'bus' | 'car' | 'delive
 export type Tone = 'formal' | 'casual' | 'brief';
 export type Relationship = 'colleague' | 'friend' | 'family' | 'flatmate' | 'partner' | 'other';
 export type MemoryType = 'episodic' | 'semantic' | 'spatial' | 'relational' | 'conversation_history';
-export type Platform = 'whatsapp' | 'telegram' | 'instagram' | 'sms' | 'email' | 'messenger' | 'signal' | 'google' | 'phone';
+// 'device' and 'google' additionally serve as bookkeeping-only tags on 'display_name'
+// identity rows (contact-cache entries from the Device/Google imports) — never real
+// messaging platforms a chip is shown for; see VALID_PLATFORMS in ContactDetailModal.tsx.
+export type Platform = 'whatsapp' | 'telegram' | 'instagram' | 'sms' | 'email' | 'messenger' | 'signal' | 'google' | 'phone' | 'device';
 export type IdentifierType = 'phone' | 'username' | 'email' | 'display_name';
 
 export interface ReplyOptions {

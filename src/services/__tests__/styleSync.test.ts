@@ -177,6 +177,28 @@ describe('syncStyleProfile — confirmed-identity resolution', () => {
     expect(await findContactIdByIdentifier('Eve', 'telegram')).toBe(contact.id);
   });
 
+  it('creates a contact for a device-matched sender with no existing JS row, instead of silently dropping the confirmation', async () => {
+    nativeState.confirmedIdentities = { 'com.whatsapp:Paul Diaz': 'device:some-contact-uri' };
+
+    await syncStyleProfile();
+
+    const all = await getAllContacts();
+    expect(all.map((c) => c.displayName)).toEqual(['Paul Diaz']);
+    // Real confirmation, not the provisional bookkeeping tag — must show up as a platform icon.
+    expect(await findContactIdByIdentifier('Paul Diaz', 'whatsapp')).toBe(all[0].id);
+    expect(NativeModules.ProTxtSettings.cacheContactList).toHaveBeenCalled();
+  });
+
+  it('resolves a device-matched sender by fuzzy name match, not just exact', async () => {
+    const contact = await upsertContact({ displayName: 'Paul A. Diaz' });
+    nativeState.confirmedIdentities = { 'com.whatsapp:Paul Diaz': 'device:some-contact-uri' };
+
+    await syncStyleProfile();
+
+    expect(await findContactIdByIdentifier('Paul Diaz', 'whatsapp')).toBe(contact.id);
+    expect(await getAllContacts()).toHaveLength(1); // matched, not duplicated
+  });
+
   it('skips group and anonymous-id conversation keys without crashing', async () => {
     nativeState.confirmedIdentities = {
       'com.whatsapp:group:123': 'some-id',

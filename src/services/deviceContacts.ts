@@ -1,7 +1,6 @@
 import * as Contacts from 'expo-contacts';
-import { randomUUID } from 'expo-crypto';
-import { getAllContacts, getDatabase, invalidateContactsCache } from './database';
-import { encryptField } from './dbCrypto';
+import { getAllContacts, invalidateContactsCache, upsertContact, upsertPlatformIdentity } from './database';
+import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 const PROGRESS_EVERY = 10;
 
@@ -19,58 +18,48 @@ export async function importDeviceContacts(
   const total = filtered.length;
   onProgress?.(0, total);
 
-  // Snapshot existing contacts once to avoid O(n²) re-queries
+  // Snapshot existing contacts once to avoid O(n²) re-queries. Matched by fuzzy name
+  // (not exact-lowercase) so e.g. "Paul Diaz" from a WhatsApp link and "Paul A. Diaz"
+  // from the device address book resolve to the same contact instead of duplicating.
   const existing = await getAllContacts();
-  const byName = new Map(existing.map((c) => [c.displayName.toLowerCase(), c]));
 
-  const db = await getDatabase();
-  const now = new Date().toISOString();
   let count = 0;
 
   for (const c of filtered) {
     const name = c.name!;
-    const prev = byName.get(name.toLowerCase());
-    const id = prev?.id ?? randomUUID();
-
-    const encName = await encryptField(name);
-    await db.runAsync(
-      `INSERT INTO contacts (id, display_name, relationship, preferred_tone, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NULL, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         display_name=excluded.display_name, updated_at=excluded.updated_at, synced_at=NULL`,
-      [id, encName, prev?.relationship ?? null, prev?.preferredTone ?? null, now, now],
-    );
-    byName.set(name.toLowerCase(), { ...prev, id, displayName: name } as never);
+    const prev = findBestNameMatch(name, existing, (contact) => contact.displayName);
+    const contact = await upsertContact({
+      id: prev?.id,
+      displayName: name,
+      relationship: prev?.relationship,
+      preferredTone: prev?.preferredTone,
+    });
+    const id = contact.id;
+    if (!prev) existing.push(contact);
 
     for (const entry of c.emails ?? []) {
       if (entry.email) {
-        await db.runAsync(
-          `INSERT OR IGNORE INTO platform_identities
-             (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-           VALUES (?, ?, 'google', ?, 'email', 0.9, 0, ?, ?)`,
-          [randomUUID(), id, entry.email.toLowerCase(), now, now],
-        );
+        await upsertPlatformIdentity({
+          contactId: id, platform: 'google', identifier: entry.email.toLowerCase(),
+          identifierType: 'email', confidence: 0.9, userConfirmed: false,
+        });
       }
     }
 
     for (const entry of c.phoneNumbers ?? []) {
       if (entry.number) {
-        await db.runAsync(
-          `INSERT OR IGNORE INTO platform_identities
-             (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-           VALUES (?, ?, 'phone', ?, 'phone', 0.9, 0, ?, ?)`,
-          [randomUUID(), id, entry.number.replace(/\s/g, ''), now, now],
-        );
+        await upsertPlatformIdentity({
+          contactId: id, platform: 'phone', identifier: entry.number.replace(/\s/g, ''),
+          identifierType: 'phone', confidence: 0.9, userConfirmed: false,
+        });
       }
     }
 
     // display_name identity enables plaintext name lookup without decrypting all contacts
-    await db.runAsync(
-      `INSERT OR IGNORE INTO platform_identities
-         (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-       VALUES (?, ?, 'device', ?, 'display_name', 0.9, 0, ?, ?)`,
-      [randomUUID(), id, name, now, now],
-    );
+    await upsertPlatformIdentity({
+      contactId: id, platform: 'device', identifier: name,
+      identifierType: 'display_name', confidence: 0.9, userConfirmed: false,
+    });
 
     count++;
     if (count % PROGRESS_EVERY === 0 || count === total) {

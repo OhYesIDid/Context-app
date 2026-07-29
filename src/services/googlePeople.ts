@@ -1,7 +1,6 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { randomUUID } from 'expo-crypto';
-import { getAllContacts, getDatabase, invalidateContactsCache } from './database';
-import { encryptField } from './dbCrypto';
+import { getAllContacts, invalidateContactsCache, upsertContact, upsertPlatformIdentity } from './database';
+import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 const PROGRESS_EVERY = 10;
 
@@ -15,12 +14,11 @@ export async function importGoogleContacts(
   const { accessToken: token } = await GoogleSignin.getTokens();
   if (!token) throw new Error('Not signed in to Google');
 
-  // Snapshot existing contacts once to avoid O(n²) re-queries
+  // Snapshot existing contacts once to avoid O(n²) re-queries. Matched by fuzzy name
+  // (not exact-lowercase) so e.g. "Paul Diaz" from a WhatsApp link and "Paul A. Diaz"
+  // from Google resolve to the same contact instead of creating a duplicate.
   const existing = await getAllContacts();
-  const byName = new Map(existing.map((c) => [c.displayName.toLowerCase(), c]));
 
-  const db = await getDatabase();
-  const now = new Date().toISOString();
   let count = 0;
   let nextPageToken: string | undefined;
 
@@ -51,48 +49,39 @@ export async function importGoogleContacts(
       const name = person.names?.[0]?.displayName;
       if (!name) continue;
 
-      const prev = byName.get(name.toLowerCase());
-      const id = prev?.id ?? randomUUID();
-
-      const encName = await encryptField(name);
-      await db.runAsync(
-        `INSERT INTO contacts (id, display_name, relationship, preferred_tone, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           display_name=excluded.display_name, updated_at=excluded.updated_at, synced_at=NULL`,
-        [id, encName, prev?.relationship ?? null, prev?.preferredTone ?? null, now, now],
-      );
-      byName.set(name.toLowerCase(), { ...prev, id, displayName: name } as never);
+      const prev = findBestNameMatch(name, existing, (c) => c.displayName);
+      const contact = await upsertContact({
+        id: prev?.id,
+        displayName: name,
+        relationship: prev?.relationship,
+        preferredTone: prev?.preferredTone,
+      });
+      const id = contact.id;
+      if (!prev) existing.push(contact);
 
       for (const { value } of person.emailAddresses ?? []) {
         if (value) {
-          await db.runAsync(
-            `INSERT OR IGNORE INTO platform_identities
-               (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-             VALUES (?, ?, 'google', ?, 'email', 1.0, 0, ?, ?)`,
-            [randomUUID(), id, value.toLowerCase(), now, now],
-          );
+          await upsertPlatformIdentity({
+            contactId: id, platform: 'google', identifier: value.toLowerCase(),
+            identifierType: 'email', confidence: 1.0, userConfirmed: false,
+          });
         }
       }
 
       for (const { value } of person.phoneNumbers ?? []) {
         if (value) {
-          await db.runAsync(
-            `INSERT OR IGNORE INTO platform_identities
-               (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-             VALUES (?, ?, 'phone', ?, 'phone', 1.0, 0, ?, ?)`,
-            [randomUUID(), id, value.replace(/\s/g, ''), now, now],
-          );
+          await upsertPlatformIdentity({
+            contactId: id, platform: 'phone', identifier: value.replace(/\s/g, ''),
+            identifierType: 'phone', confidence: 1.0, userConfirmed: false,
+          });
         }
       }
 
       // display_name identity enables plaintext name lookup without decrypting all contacts
-      await db.runAsync(
-        `INSERT OR IGNORE INTO platform_identities
-           (id, contact_id, platform, identifier, identifier_type, confidence, user_confirmed, created_at, updated_at)
-         VALUES (?, ?, 'google', ?, 'display_name', 0.9, 0, ?, ?)`,
-        [randomUUID(), id, name, now, now],
-      );
+      await upsertPlatformIdentity({
+        contactId: id, platform: 'google', identifier: name,
+        identifierType: 'display_name', confidence: 0.9, userConfirmed: false,
+      });
 
       count++;
       if (count % PROGRESS_EVERY === 0) {

@@ -1,5 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { getAllContacts, insertMemory, upsertContact, upsertPlatformIdentity } from './database';
+import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 // Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg  (no dash before the sender)
 //     Android: DD/MM/YYYY, HH:MM - Sender: msg
@@ -43,17 +44,18 @@ export async function pickAndParseWhatsAppExport(): Promise<{ contactName: strin
   let messageCount = 0;
   const CHUNK = 50;
 
-  // Matched by display name (case-insensitive) so re-importing the same export — e.g. to
+  // Matched by fuzzy name (not exact-lowercase) so re-importing the same export — e.g. to
   // backfill the whatsapp platform_identity added below onto contacts created before that
-  // existed — upserts the same contact instead of creating a duplicate. upsertContact's own
-  // conflict target is `id`, not name, so without this every re-import would double up.
-  const existingByName = new Map(
-    (await getAllContacts()).map((c) => [c.displayName.trim().toLowerCase(), c] as const)
-  );
+  // existed — upserts the same contact instead of creating a duplicate, and so a sender
+  // saved slightly differently elsewhere (e.g. "Paul Diaz" here vs "Paul A. Diaz" from a
+  // Google import) still resolves to one contact. upsertContact's own conflict target is
+  // `id`, not name, so without this every re-import would double up.
+  const existing = await getAllContacts();
 
   for (const [sender, messages] of bySender) {
-    const existing = existingByName.get(sender.trim().toLowerCase());
-    const contact = await upsertContact({ id: existing?.id, displayName: sender });
+    const match = findBestNameMatch(sender, existing, (c) => c.displayName);
+    const contact = await upsertContact({ id: match?.id, displayName: sender });
+    if (!match) existing.push(contact);
     await upsertPlatformIdentity({
       contactId: contact.id,
       platform: 'whatsapp',

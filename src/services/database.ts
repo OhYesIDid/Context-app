@@ -677,11 +677,21 @@ export async function upsertPlatformIdentity(
     [id, identity.contactId, identity.platform, encId, hash, identity.identifierType,
      identity.confidence, identity.userConfirmed ? 1 : 0, now, now]
   );
+  // identifier_type is promoted (never demoted) on conflict: a row created as the generic
+  // 'display_name' bookkeeping/provisional tag (ensureContactForConversation, imports) can
+  // later be confirmed with a real type (username/phone/email) by a subsequent call — e.g.
+  // drainConfirmedIdentities upgrading a provisional auto-created contact once the bubble's
+  // "Yes" banner confirms it — and should start showing up as a real platform chip/icon at
+  // that point. A later call that itself passes 'display_name' never overwrites an already-
+  // real type, so a confirmed link can't accidentally regress back to hidden.
   await db.runAsync(
     `UPDATE platform_identities SET
-       contact_id=?, confidence=MAX(confidence, ?), user_confirmed=MAX(user_confirmed, ?), updated_at=?
+       contact_id=?, confidence=MAX(confidence, ?), user_confirmed=MAX(user_confirmed, ?),
+       identifier_type = CASE WHEN ? != 'display_name' THEN ? ELSE identifier_type END,
+       updated_at=?
      WHERE platform=? AND identifier_hash=?`,
-    [identity.contactId, identity.confidence, identity.userConfirmed ? 1 : 0, now,
+    [identity.contactId, identity.confidence, identity.userConfirmed ? 1 : 0,
+     identity.identifierType, identity.identifierType, now,
      identity.platform, hash]
   );
   return { ...identity, id, createdAt: now, updatedAt: now };

@@ -13,7 +13,8 @@ import {
   recordStyleEdit,
   upsertPlatformIdentity,
 } from './database';
-import type { Intent, Platform, StyleEdit } from '../types';
+import type { Contact, Intent, Platform, StyleEdit } from '../types';
+import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 const PACKAGE_TO_PLATFORM: Record<string, Platform> = {
   'com.whatsapp':                      'whatsapp',
@@ -116,6 +117,11 @@ async function restoreConfirmedIdentitiesFromDb(): Promise<void> {
 }
 
 async function drainConfirmedIdentities(confirmed: Record<string, string>): Promise<void> {
+  // Lazily loaded and shared across every 'device:' lookup in this drain, so two convKeys
+  // resolving to the same not-yet-seen device contact in one pass create it once, not twice.
+  let contactsCache: Contact[] | null = null;
+  let createdAny = false;
+
   for (const [convKey, contactId] of Object.entries(confirmed)) {
     const colonIdx = convKey.indexOf(':');
     if (colonIdx < 0) continue;
@@ -133,13 +139,26 @@ async function drainConfirmedIdentities(confirmed: Record<string, string>): Prom
       );
       sqliteContactId = row?.id ?? null;
     } else {
-      // Device contact — look up by identifier first (fast), fall back to cache
+      // Device contact — look up by identifier first (fast), fall back to fuzzy name match
+      // (not exact-lowercase) against the cache, so e.g. "Paul Diaz" here still resolves to
+      // a "Paul A. Diaz" contact created elsewhere.
       sqliteContactId = await findContactIdByIdentifier(senderName);
       if (!sqliteContactId) {
-        // Legacy imported contact without display_name identity — use cache (rare)
-        const contacts = await getAllContacts();
-        const match = contacts.find((c) => c.displayName.toLowerCase() === senderName.toLowerCase());
+        if (!contactsCache) contactsCache = await getAllContacts();
+        const match = findBestNameMatch(senderName, contactsCache, (c) => c.displayName);
         sqliteContactId = match?.id ?? null;
+      }
+      if (!sqliteContactId) {
+        // A phone/device match resolved to a real Android contact ConTxt has never seen on
+        // the JS side (no import, no manual link yet) — previously this just `continue`d,
+        // silently dropping the confirmation: it persisted forever in native
+        // confirmed_identities but nothing downstream (Contacts tab, style learning,
+        // follow-ups) ever saw it. Create it via the same helper the bubble's own
+        // "auto-create on first send" path already uses, rather than a bespoke insert.
+        sqliteContactId = await ensureContactForConversation(senderName, platform);
+        contactsCache = contactsCache ?? [];
+        contactsCache.push({ id: sqliteContactId, displayName: senderName } as Contact);
+        createdAny = true;
       }
     }
     if (!sqliteContactId) continue;
@@ -155,17 +174,25 @@ async function drainConfirmedIdentities(confirmed: Record<string, string>): Prom
       platform,
       identifier: senderName,
       // NOT 'display_name' — that tag is reserved for device/google contact-cache
-      // bookkeeping rows (see database.ts/deviceContacts.ts/googlePeople.ts), which the
-      // UI deliberately filters out of platform chips/icons (ContactDetailModal.tsx,
-      // App.tsx's contactPlatforms grouping). This row represents a real, user-confirmed
+      // bookkeeping rows (see database.ts/deviceContacts.ts/googlePeople.ts) and
+      // ensureContactForConversation's own provisional guess, which the UI deliberately
+      // filters out of platform chips/icons (ContactDetailModal.tsx, App.tsx's
+      // contactPlatforms grouping). This row represents a real, user-confirmed
       // messaging-platform link (the bubble's own "Yes" banner) — same as
       // ContactDetailModal's own backfillConfirmedLinks does for the identical scenario —
-      // so it needs the same 'username' tag to actually show up.
+      // so it needs the same 'username' tag to actually show up. upsertPlatformIdentity
+      // promotes identifier_type on conflict, so this also upgrades any provisional
+      // 'display_name' row ensureContactForConversation just created above.
       identifierType: 'username',
       confidence: 1.0,
       userConfirmed: true,
     });
   }
+
+  // A newly-created contact needs to be pushed into the native fuzzy-match cache
+  // immediately — otherwise it's unmatchable by name on a second platform until some
+  // unrelated trigger (a preference edit, a later import) happens to refresh it.
+  if (createdAny) await refreshContactListCache();
 }
 
 async function drainPendingContacts(pending: PendingContact[]): Promise<void> {

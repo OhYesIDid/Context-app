@@ -203,6 +203,39 @@ describe('platform identity resolution', () => {
     expect(confirmed.confidence).toBe(0.9);
     expect(confirmed.userConfirmed).toBe(true);
   });
+
+  it('promotes identifier_type from the provisional display_name tag to a real one on conflict', async () => {
+    const contact = await upsertContact({ displayName: 'Frank' });
+    // e.g. ensureContactForConversation's own provisional guess, hidden from platform chips
+    await upsertPlatformIdentity({
+      contactId: contact.id, platform: 'whatsapp', identifier: 'Frank',
+      identifierType: 'display_name', confidence: 0.5, userConfirmed: false,
+    });
+    // A real confirmation follows for the same (platform, identifier) pair
+    await upsertPlatformIdentity({
+      contactId: contact.id, platform: 'whatsapp', identifier: 'Frank',
+      identifierType: 'username', confidence: 1.0, userConfirmed: true,
+    });
+
+    const [identity] = await getConfirmedPlatformIdentities();
+    expect(identity.identifierType).toBe('username');
+  });
+
+  it('never demotes a real identifier_type back to display_name on a later re-upsert', async () => {
+    const contact = await upsertContact({ displayName: 'Grace' });
+    await upsertPlatformIdentity({
+      contactId: contact.id, platform: 'whatsapp', identifier: 'Grace',
+      identifierType: 'username', confidence: 1.0, userConfirmed: true,
+    });
+    // e.g. a later import re-touching the same identity with only a generic bookkeeping tag
+    await upsertPlatformIdentity({
+      contactId: contact.id, platform: 'whatsapp', identifier: 'Grace',
+      identifierType: 'display_name', confidence: 0.9, userConfirmed: false,
+    });
+
+    const [identity] = await getConfirmedPlatformIdentities();
+    expect(identity.identifierType).toBe('username');
+  });
 });
 
 describe('mergeContact', () => {

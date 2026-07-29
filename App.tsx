@@ -360,6 +360,10 @@ export default function App() {
       const created = await upsertContact({ displayName: sender.displayName });
       setContacts((prev) => [created, ...prev]);
       await handleLinkSenderToContact(sender, created.id);
+      // Otherwise this contact isn't matchable by name on a second platform until some
+      // unrelated trigger (a preference edit, a later import) happens to refresh the
+      // native fuzzy-match cache.
+      refreshContactListCache().catch(() => {});
     } finally {
       setLinkingSenderKey(null);
     }
