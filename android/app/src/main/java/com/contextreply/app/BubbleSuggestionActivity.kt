@@ -225,6 +225,9 @@ class BubbleSuggestionActivity : Activity() {
         val suggestedAction = if (actionJson != null && !isLoading) {
             try { JSONObject(actionJson) } catch (_: Exception) { null }
         } else null
+        // Set when the user taps the action CTA (e.g. "Add to Calendar") directly, so Send
+        // doesn't also post postActionFollowUp's reminder notification for something already done.
+        var actionAlreadyTaken = false
 
         val sendBtn = TextView(this).apply {
             text = "Send"
@@ -247,7 +250,7 @@ class BubbleSuggestionActivity : Activity() {
                 val aiSuggestion = textMap[selectedTone] ?: casualText
                 val text = replyEdit.text.toString().trim().ifEmpty { aiSuggestion }
                 sendAction(ProTxtBgService.ACTION_SEND, text, remoteInputKey, notifId, convKey, intentExtra, aiSuggestion, selectedTone)
-                if (suggestedAction != null) postActionFollowUp(suggestedAction, convKey, notifId, contactMatch)
+                if (suggestedAction != null && !actionAlreadyTaken) postActionFollowUp(suggestedAction, convKey, notifId, contactMatch)
                 finish()
             }
         }
@@ -1094,6 +1097,7 @@ class BubbleSuggestionActivity : Activity() {
                 layoutParams = lp
                 setOnClickListener {
                     logActionFeedback("tapped", actionType, convKey)
+                    if (actionType == "calendar_add" || actionType == "maps_open") actionAlreadyTaken = true
                     when (actionType) {
                         "calendar_add" -> {
                             val title = action.optString("title").ifEmpty { "Event" }
