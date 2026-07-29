@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import type { FollowUp } from '../services/followUps';
 import { formatDueLabel, urgency } from '../services/followUps';
-import { clearPendingCalendarAction, formatCalendarLabel } from '../services/pendingCalendarActions';
+import { clearPendingCalendarAction, formatCalendarLabel, toGoogleCalendarDateRange } from '../services/pendingCalendarActions';
 import type { PendingCalendarAction } from '../services/pendingCalendarActions';
 import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
@@ -223,7 +223,8 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
                   style={styles.calendarAddBtn}
                   onPress={() => {
                     const title = encodeURIComponent(action.title);
-                    const dtStr = action.datetime ? `&dates=${action.datetime.replace(/[-:]/g, '').replace('T', 'T')}` : '';
+                    const range = toGoogleCalendarDateRange(action);
+                    const dtStr = range ? `&dates=${range}` : '';
                     Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}${dtStr}`).catch(() => {});
                     clearPendingCalendarAction(action.id);
                     onCalendarActionDismiss(action.id);
