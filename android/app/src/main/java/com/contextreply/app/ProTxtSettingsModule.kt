@@ -200,6 +200,27 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // contactInsights.ts's native call for the per-contact insights view — same
+    // convKeys-in, per-convKey-JSON-out shape as getClosenessScores, just richer
+    // objects (msgsLast7d/msgsPrior7d/avgReplySecs/mostActiveHour) instead of a single
+    // score. A convKey with no data yet is omitted, not returned as zeros.
+    @ReactMethod
+    fun getContactInsightsRaw(convKeysJson: String, promise: Promise) {
+        try {
+            val convKeys = JSONArray(convKeysJson)
+            val result = JSONObject()
+            for (i in 0 until convKeys.length()) {
+                val convKey = convKeys.optString(i)
+                if (convKey.isEmpty()) continue
+                val insights = ContactSignals.getInsights(reactApplicationContext, convKey)
+                if (insights != null) result.put(convKey, insights)
+            }
+            promise.resolve(result.toString())
+        } catch (e: Exception) {
+            promise.reject("GET_INSIGHTS_FAILED", e)
+        }
+    }
+
     // Re-points a convKey's confirmed_identities entry at a real contact — the same
     // write the bubble's "Yes, link" banner already does, just reached by the user
     // manually browsing unmatched senders in Settings instead of a system-suggested

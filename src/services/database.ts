@@ -9,6 +9,7 @@ import type {
   BookingSegment,
   BookingType,
   Contact,
+  Intent,
   Memory,
   PlatformIdentity,
   SavedPlace,
@@ -526,6 +527,21 @@ export async function getRecentStyleEdits(limit: number): Promise<StyleEdit[]> {
     createdAt: r.created_at,
     syncedAt: r.synced_at ?? undefined,
   })));
+}
+
+// Most common intent among this contact's style_edits — "what do they usually message
+// about." Every suggestion (sent, edited, or dismissed) already gets an intent-tagged
+// row via drainQueue(), so this needs no new tracking, just an aggregate over data
+// already being recorded. Returns null if the contact has no tagged edits yet.
+export async function getTopIntentForContact(contactId: string): Promise<Intent | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ intent: string }>(
+    `SELECT intent, COUNT(*) as c FROM style_edits
+     WHERE contact_id = ? AND intent IS NOT NULL
+     GROUP BY intent ORDER BY c DESC LIMIT 1`,
+    [contactId]
+  );
+  return (row?.intent as Intent) ?? null;
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────

@@ -2,17 +2,36 @@ package com.contextreply.app
 
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import java.util.Calendar
+import java.util.TimeZone
 
-// closenessScore() is internal specifically so this is testable without a Context —
-// see build.gradle's stub-android.jar setup, same rationale as ContactMatcherTest.
+// closenessScore()/computeInsights() are internal specifically so they're testable
+// without a Context — see build.gradle's stub-android.jar setup, same rationale as
+// ContactMatcherTest.
 class ContactSignalsTest {
 
     private val DAY = 86_400_000L
     private val NOW = 100_000_000_000L
+    private lateinit var originalTimeZone: TimeZone
+
+    // computeInsights()'s mostActiveHour uses Calendar.getInstance() (JVM default zone)
+    // — pin it to UTC for the duration of this class so hour-of-day assertions are
+    // deterministic regardless of the machine running the test.
+    @Before fun fixTimeZone() {
+        originalTimeZone = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+    }
+
+    @After fun restoreTimeZone() {
+        TimeZone.setDefault(originalTimeZone)
+    }
 
     // Builds a "ts"/"delays" blob matching recordIncoming/recordReply's real shape.
     // Timestamps are oldest-first, most-recent-last — the same order the real ts
@@ -22,6 +41,15 @@ class ContactSignalsTest {
         obj.put("ts", JSONArray(timestamps))
         if (delays != null) obj.put("delays", JSONArray(delays))
         return obj
+    }
+
+    // Epoch millis for a specific UTC hour-of-day, on 1+dayOffset Jan 2026 — arbitrary
+    // fixed reference dates, only the hour-of-day and relative spacing matter.
+    private fun epochAtHour(hour: Int, dayOffset: Int = 0): Long {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.set(2026, Calendar.JANUARY, 1 + dayOffset, hour, 0, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     @Test fun `returns null when there is no timestamp data`() {
@@ -74,5 +102,41 @@ class ContactSignalsTest {
         val ts = (30 downTo 1).map { NOW - it * 100L }
         val score = ContactSignals.closenessScore(sigObj(ts, listOf(10, 15, 20)), NOW)!!
         assertTrue(score in 0.0..1.0)
+    }
+
+    // ── computeInsights() ───────────────────────────────────────────────────────
+
+    @Test fun `returns null insights when there is no timestamp data`() {
+        assertNull(ContactSignals.computeInsights(JSONObject(), NOW))
+    }
+
+    @Test fun `counts messages in the last 7 days separately from the prior 7 days`() {
+        val recent = listOf(NOW - 1 * DAY, NOW - 2 * DAY)
+        val prior = listOf(NOW - 10 * DAY)
+        val insights = ContactSignals.computeInsights(sigObj(recent + prior), NOW)!!
+        assertEquals(2, insights.getInt("msgsLast7d"))
+        assertEquals(1, insights.getInt("msgsPrior7d"))
+    }
+
+    @Test fun `average reply time only appears once there are at least two samples`() {
+        val ts = listOf(NOW)
+        val noDelays = ContactSignals.computeInsights(sigObj(ts), NOW)!!
+        assertFalse(noDelays.has("avgReplySecs"))
+
+        val withDelays = ContactSignals.computeInsights(sigObj(ts, listOf(60, 120)), NOW)!!
+        assertEquals(90, withDelays.getInt("avgReplySecs"))
+    }
+
+    @Test fun `most active hour is omitted below the 5-sample threshold`() {
+        val ts = (1..4).map { epochAtHour(14) - it * 1000L } // 4 samples, all near 14:00
+        val insights = ContactSignals.computeInsights(sigObj(ts), NOW)!!
+        assertFalse(insights.has("mostActiveHour"))
+    }
+
+    @Test fun `most active hour picks the hour with the most timestamps`() {
+        val fourteens = (0 until 4).map { epochAtHour(14, dayOffset = it) }
+        val nines = (0 until 2).map { epochAtHour(9, dayOffset = it) }
+        val insights = ContactSignals.computeInsights(sigObj(fourteens + nines), NOW)!!
+        assertEquals(14, insights.getInt("mostActiveHour"))
     }
 }

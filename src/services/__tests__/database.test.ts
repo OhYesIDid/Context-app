@@ -50,6 +50,7 @@ import {
   getSemanticMemoriesByContact,
   recordStyleEdit,
   getRecentStyleEdits,
+  getTopIntentForContact,
   markSynced,
   getPendingSyncItems,
   upsertBookings,
@@ -387,6 +388,29 @@ describe('style edits', () => {
 
     const recent = await getRecentStyleEdits(10);
     expect(recent.map((e) => e.originalSuggestion)).toEqual(['second', 'first']);
+  });
+});
+
+describe('getTopIntentForContact', () => {
+  it('returns the most frequent intent among a contact\'s style edits', async () => {
+    const contact = await upsertContact({ displayName: 'Priya' });
+    await recordStyleEdit({ originalSuggestion: 'a', userEdit: 'a', contactId: contact.id, intent: 'eta' });
+    await recordStyleEdit({ originalSuggestion: 'b', userEdit: 'b', contactId: contact.id, intent: 'eta' });
+    await recordStyleEdit({ originalSuggestion: 'c', userEdit: 'c', contactId: contact.id, intent: 'booking' });
+
+    expect(await getTopIntentForContact(contact.id)).toBe('eta');
+  });
+
+  it('ignores rows with no intent tagged', async () => {
+    const contact = await upsertContact({ displayName: 'Sam' });
+    await recordStyleEdit({ originalSuggestion: 'a', userEdit: 'a', contactId: contact.id });
+
+    expect(await getTopIntentForContact(contact.id)).toBeNull();
+  });
+
+  it('returns null for a contact with no style edits at all', async () => {
+    const contact = await upsertContact({ displayName: 'No History' });
+    expect(await getTopIntentForContact(contact.id)).toBeNull();
   });
 });
 

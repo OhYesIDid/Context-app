@@ -207,6 +207,56 @@ object ContactSignals {
         return closenessScore(obj, System.currentTimeMillis())
     }
 
+    // ── Per-contact insights (IDEAS.md "Per-contact data insights") ────────────
+    //
+    // Raw numbers behind getContactContext()'s prose, for display rather than prompt
+    // injection — msgsLast7d/msgsPrior7d and avgReplySecs reuse the exact same math as
+    // the volume-trend and reply-speed sections above; mostActiveHour is a new
+    // aggregation (mode of hour-of-day) over timestamps already being collected, no new
+    // tracking needed. Pure and internal so it's unit-testable without a Context —
+    // getInsights() below is the only production caller.
+    internal fun computeInsights(obj: JSONObject, now: Long): JSONObject? {
+        val tsArr = obj.optJSONArray("ts") ?: return null
+        if (tsArr.length() == 0) return null
+        val timestamps = (0 until tsArr.length()).map { tsArr.getLong(it) }
+
+        val week1Start = now - 7L * 86_400_000L
+        val week2Start = now - 14L * 86_400_000L
+        val msgsLast7d = timestamps.count { it >= week1Start }
+        val msgsPrior7d = timestamps.count { it in week2Start until week1Start }
+
+        val delays = obj.optJSONArray("delays")
+        val avgReplySecs = if (delays != null && delays.length() >= 2) {
+            (0 until delays.length()).map { delays.getInt(it) }.average().toInt()
+        } else null
+
+        // Mode of hour-of-day — same >=5-sample threshold as the weekday/daytime pattern
+        // signal in getContactContext(), below which a single outlier hour would be
+        // presented as a confident pattern it isn't.
+        val mostActiveHour = if (timestamps.size >= 5) {
+            val cal = Calendar.getInstance()
+            val counts = IntArray(24)
+            for (ts in timestamps) {
+                cal.timeInMillis = ts
+                counts[cal.get(Calendar.HOUR_OF_DAY)]++
+            }
+            counts.indices.maxByOrNull { counts[it] }
+        } else null
+
+        return JSONObject().apply {
+            put("msgsLast7d", msgsLast7d)
+            put("msgsPrior7d", msgsPrior7d)
+            if (avgReplySecs != null) put("avgReplySecs", avgReplySecs)
+            if (mostActiveHour != null) put("mostActiveHour", mostActiveHour)
+        }
+    }
+
+    /** Returns raw insight numbers for this convKey as a JSON object, or null if there's no data yet. */
+    fun getInsights(context: Context, convKey: String): JSONObject? {
+        val obj = try { load(Prefs.main(context), sigKey(convKey)) } catch (_: Exception) { return null }
+        return computeInsights(obj, System.currentTimeMillis())
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun load(prefs: SharedPreferences, key: String): JSONObject {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -10,10 +10,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
+import type { Contact, Intent, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { deletePlatformIdentitiesByContactAndPlatform, getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, logMerge, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { getUnmatchedSenders, linkSenderToContact, unlinkPlatform } from '../services/contactLinking';
 import { recomputeClosenessScore } from '../services/contactCloseness';
+import { getContactInsights } from '../services/contactInsights';
+import type { ContactInsights } from '../services/contactInsights';
 import type { UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
 import { PURPLE, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
@@ -43,6 +45,36 @@ const PLATFORM_LABEL: Record<string, string> = {
   phone:     'Phone',
 };
 
+const INTENT_LABEL: Record<Intent, string> = {
+  eta: 'ETA', availability: 'Availability', booking: 'Bookings',
+  location_share: 'Location', incoming_location: 'Location', task: 'Tasks',
+  general: 'General chat', other: 'General chat',
+};
+
+function formatReplySpeed(secs: number): string {
+  if (secs < 60) return 'within a minute';
+  if (secs < 3_600) return `~${Math.round(secs / 60)} min`;
+  if (secs < 86_400) return `~${Math.round(secs / 3_600)}h`;
+  return 'over a day';
+}
+
+// mostActiveHour is already computed in the device's own local time zone
+// (ContactSignals.kt's Calendar.getInstance() uses the default zone), so no conversion
+// is needed here — it's already the hour the user would recognize as "their" time.
+function formatHour(hour: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h}${hour < 12 ? 'am' : 'pm'}`;
+}
+
+function formatVolumeTrend(last7d: number, prior7d: number): string | null {
+  if (last7d === 0) return null;
+  const msg = `msg${last7d === 1 ? '' : 's'}`;
+  if (prior7d === 0) return `${last7d} ${msg} this week`;
+  if (last7d >= prior7d * 2) return `${last7d} ${msg} this week (up from ${prior7d})`;
+  if (prior7d >= last7d * 2) return `${last7d} ${msg} this week (down from ${prior7d})`;
+  return `${last7d} ${msg} this week`;
+}
+
 interface Props {
   contactId: string | null;
   onClose: () => void;
@@ -59,6 +91,8 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
   const [linkSearch, setLinkSearch] = useState('');
   const [linking, setLinking] = useState<string | null>(null);
   const [unlinking, setUnlinking] = useState<Platform | null>(null);
+  const [insights, setInsights] = useState<ContactInsights | null>(null);
+  const contactIdRef = useRef<string | null>(null);
 
   const reloadIdentities = (id: string) => {
     getPlatformIdentitiesByContact(id)
@@ -101,7 +135,9 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
 
   useEffect(() => {
     if (!contactId) { setLoading(false); return; }
+    contactIdRef.current = contactId;
     setLoading(true);
+    setInsights(null);
     Promise.all([
       getContactById(contactId),
       getPlatformIdentitiesByContact(contactId),
@@ -121,6 +157,12 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
     recomputeClosenessScore(contactId).then((score) => {
       if (score == null) return;
       setContact((prev) => (prev && prev.id === contactId ? { ...prev, closenessScore: score } : prev));
+    });
+
+    // Same fire-and-forget pattern as closeness above, and the same guard against a
+    // stale response landing after the modal moved on.
+    getContactInsights(contactId).then((result) => {
+      setInsights((prev) => (contactId === contactIdRef.current ? result : prev));
     });
   }, [contactId]);
 
@@ -302,6 +344,33 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
                   <Text style={styles.emptyHint}>Facts will appear here as you have more conversations.</Text>
                 </View>
               )}
+
+              {/* Insights — reply cadence, activity pattern, most common intent */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>INSIGHTS</Text>
+                {(() => {
+                  const rows: string[] = [];
+                  if (insights) {
+                    const trend = formatVolumeTrend(insights.msgsLast7d, insights.msgsPrior7d);
+                    if (trend) rows.push(trend);
+                    if (insights.avgReplySecs != null) rows.push(`Typically replies ${formatReplySpeed(insights.avgReplySecs)}`);
+                    if (insights.mostActiveHour != null) rows.push(`Most active around ${formatHour(insights.mostActiveHour)}`);
+                    if (insights.topIntent) rows.push(`Usually messages about: ${INTENT_LABEL[insights.topIntent]}`);
+                  }
+                  return rows.length > 0 ? (
+                    <View style={styles.memoriesBox}>
+                      {rows.map((row) => (
+                        <View key={row} style={styles.memoryRow}>
+                          <Text style={styles.memoryDot}>·</Text>
+                          <Text style={styles.memoryText}>{row}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyHint}>Patterns will appear here as you exchange more messages.</Text>
+                  );
+                })()}
+              </View>
 
               {/* Relationship */}
               <View style={styles.section}>
