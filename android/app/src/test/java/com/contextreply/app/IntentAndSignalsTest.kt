@@ -137,6 +137,25 @@ class IntentAndSignalsTest {
         assertEquals(a, b)
     }
 
+    // ── cleanModelString ─────────────────────────────────────────────────────────
+
+    @Test fun `treats a literal null or undefined string as absent`() {
+        assertNull(IntentAndSignals.cleanModelString("null"))
+        assertNull(IntentAndSignals.cleanModelString("NULL"))
+        assertNull(IntentAndSignals.cleanModelString("undefined"))
+        assertNull(IntentAndSignals.cleanModelString("  null  "))
+    }
+
+    @Test fun `treats blank and actually-null input as absent`() {
+        assertNull(IntentAndSignals.cleanModelString(""))
+        assertNull(IntentAndSignals.cleanModelString("   "))
+        assertNull(IntentAndSignals.cleanModelString(null))
+    }
+
+    @Test fun `passes through a real value unchanged, trimmed`() {
+        assertEquals("tomorrow", IntentAndSignals.cleanModelString("  tomorrow  "))
+    }
+
     // ── isSameCalendarAction ─────────────────────────────────────────────────────
 
     @Test fun `an exact id match always counts as the same action`() {

@@ -15,6 +15,17 @@ import { clearPendingFollowUp } from '../services/pendingFollowUps';
 import type { PendingFollowUp } from '../services/pendingFollowUps';
 import { PURPLE, BG, SURFACE, BORDER, TEXT, MUTED, GREEN, AMBER, RED, CONTEXT, FONTS } from '../theme';
 
+// Guards against the model occasionally emitting the literal word "null"/"undefined" as a
+// string value for an optional field (dueHint, contactName) instead of omitting it or using
+// real JSON null — seen live as "from Max Hamilton · null" on the Follow-ups card. Treats it
+// the same as a real absence rather than rendering the word itself.
+function cleanText(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') return null;
+  return trimmed;
+}
+
 const URGENCY_DOT: Record<string, string> = {
   overdue: RED,
   today:   AMBER,
@@ -102,14 +113,6 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
         )}
       </View>
 
-      {/* Pro upsell — separate from the setup banner above; different nudge, different fix */}
-      {!isPro && (
-        <Pressable style={styles.proNudge} onPress={onOpenPaywall}>
-          <Text style={styles.proNudgeText}>Suggestions for every message, not just ETA & plans</Text>
-          <Text style={styles.proNudgeAction}>Upgrade</Text>
-        </Pressable>
-      )}
-
       {/* Follow-ups — confirmed + AI-suggested merged into one card, tagged not duplicated */}
       {(pending.length > 0 || pendingFollowUps.length > 0) && (
         <View style={styles.card}>
@@ -139,8 +142,8 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
                 <View style={[styles.dot, { backgroundColor: URGENCY_DOT[u] }]} />
                 <View style={styles.followupContent}>
                   <Text style={[styles.followupText, u === 'overdue' && { color: '#fca5a5' }]} numberOfLines={1}>{f.text}</Text>
-                  {(f.contactName || f.appName) && (
-                    <Text style={styles.followupMeta}>{[f.contactName, f.appName].filter(Boolean).join(' · ')}</Text>
+                  {(cleanText(f.contactName) || cleanText(f.appName)) && (
+                    <Text style={styles.followupMeta}>{[cleanText(f.contactName), cleanText(f.appName)].filter(Boolean).join(' · ')}</Text>
                   )}
                 </View>
                 {label ? <Text style={[styles.followupTime, { color: URGENCY_TIME[u] }]}>{label}</Text> : null}
@@ -152,11 +155,11 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
             <View key={item.id} style={styles.calendarItem}>
               <View style={styles.calendarBody}>
                 <View style={styles.suggestedRow}>
-                  <Text style={styles.calendarTitle} numberOfLines={1}>{item.task}</Text>
+                  <Text style={styles.calendarTitle} numberOfLines={2}>{item.task}</Text>
                   <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
                 </View>
                 <Text style={styles.calendarSub}>
-                  {[item.contactName ? `from ${item.contactName}` : null, item.dueHint].filter(Boolean).join(' · ')}
+                  {[cleanText(item.contactName) ? `from ${cleanText(item.contactName)}` : null, cleanText(item.dueHint)].filter(Boolean).join(' · ')}
                 </Text>
               </View>
               <View style={styles.calendarActions}>
@@ -209,13 +212,13 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
             <View key={action.id} style={styles.calendarItem}>
               <View style={styles.calendarBody}>
                 <View style={styles.suggestedRow}>
-                  <Text style={styles.calendarTitle} numberOfLines={1}>{action.title}</Text>
+                  <Text style={styles.calendarTitle} numberOfLines={2}>{action.title}</Text>
                   <View style={styles.suggestedTag}><Text style={styles.suggestedTagText}>SUGGESTED</Text></View>
                 </View>
                 <Text style={styles.calendarSub}>
-                  {action.contactName ? `with ${action.contactName}` : ''}
-                  {action.contactName && action.datetime ? ' · ' : ''}
-                  {action.datetime ? formatCalendarLabel(action) : 'Time TBD'}
+                  {cleanText(action.contactName) ? `with ${cleanText(action.contactName)}` : ''}
+                  {cleanText(action.contactName) && cleanText(action.datetime) ? ' · ' : ''}
+                  {cleanText(action.datetime) ? formatCalendarLabel(action) : 'Time TBD'}
                 </Text>
               </View>
               <View style={styles.calendarActions}>
@@ -242,6 +245,15 @@ export default function HomeScreen({ followUps, pendingCalendarActions, pendingF
             </View>
           ))}
         </View>
+      )}
+
+      {/* Pro upsell — moved below the content cards so a returning user sees their own
+          follow-ups/tasks first, not a monetization nudge before anything else. */}
+      {!isPro && (
+        <Pressable style={styles.proNudge} onPress={onOpenPaywall}>
+          <Text style={styles.proNudgeText}>Suggestions for every message, not just ETA & plans</Text>
+          <Text style={styles.proNudgeAction}>Upgrade</Text>
+        </Pressable>
       )}
 
     </ScrollView>
@@ -302,10 +314,14 @@ const styles = StyleSheet.create({
   suggestedTag:     { borderWidth: 1, borderColor: CONTEXT + '55', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1.5, flexShrink: 0 },
   suggestedTagText: { fontSize: 8.5, fontFamily: FONTS.semibold, fontWeight: '600', color: CONTEXT, letterSpacing: 0.3 },
 
-  calendarItem:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 14 },
+  // alignItems: 'flex-start' (not 'center') so the Add/✕ actions line up with the title
+  // row specifically, instead of centering against the whole two-line body — centering
+  // put the actions roughly between the title's SUGGESTED badge and the subtitle line,
+  // reading as crowded/overlapping rather than clearly paired with the title row.
+  calendarItem:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
   calendarBody:    { flex: 1, minWidth: 0 },
   calendarTitle:   { fontSize: 14, color: TEXT, fontFamily: FONTS.medium, fontWeight: '500' },
-  calendarSub:     { fontSize: 12, color: MUTED, marginTop: 2 },
+  calendarSub:     { fontSize: 12, color: MUTED, marginTop: 4 },
   calendarActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   calendarAddBtn:  { backgroundColor: '#e2933c22', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#e2933c44' },
   calendarAddText: { fontSize: 12, color: PURPLE, fontFamily: FONTS.semibold, fontWeight: '600' },

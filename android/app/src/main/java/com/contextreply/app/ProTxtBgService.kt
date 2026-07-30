@@ -1851,10 +1851,10 @@ class ProTxtBgService : NotificationListenerService() {
         val id = IntentAndSignals.computeActionId(convKey, task)
         FollowUpStore.upsertPending(
             this, id, task,
-            dueHint = action.optString("dueHint").ifEmpty { null },
+            dueHint = IntentAndSignals.cleanModelString(action.optString("dueHint")),
             // ISO 8601 local datetime resolved by the model from dueHint — lets the JS side
             // store a real due timestamp instead of losing the deadline entirely.
-            dueAt = action.optString("dueAt").ifEmpty { null },
+            dueAt = IntentAndSignals.cleanModelString(action.optString("dueAt")),
             contactName = contactName,
             convKey = convKey,
         )

@@ -135,6 +135,18 @@ object IntentAndSignals {
     fun computeActionId(convKey: String, signature: String): String =
         "$convKey|${signature.trim().lowercase()}".hashCode().and(0x7FFFFFFF).toString()
 
+    // The model occasionally emits the literal word "null"/"undefined" as a string value for
+    // an optional action field (dueHint in particular — seen live as "from Max Hamilton ·
+    // null" on the Follow-ups card) instead of omitting the field or using real JSON null,
+    // which JSONObject.optString(key).ifEmpty{null} doesn't catch since a non-empty string
+    // like "null" passes the emptiness check. Call at the point an optional field is first
+    // read from the worker's JSON so the bad value is never stored in the first place.
+    fun cleanModelString(raw: String?): String? {
+        val trimmed = raw?.trim() ?: return null
+        if (trimmed.isEmpty() || trimmed.equals("null", ignoreCase = true) || trimmed.equals("undefined", ignoreCase = true)) return null
+        return trimmed
+    }
+
     // computeActionId's exact-title match still misses a same event re-worded across
     // messages ("Surrey Hills Ride with Stew" vs "Surrey Hills ride with Stew - transport"
     // — different signature, different id, so both survived as separate pending_calendar_actions

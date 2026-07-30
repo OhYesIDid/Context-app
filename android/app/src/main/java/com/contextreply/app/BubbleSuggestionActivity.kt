@@ -1158,8 +1158,8 @@ class BubbleSuggestionActivity : Activity() {
                             text = "✓ Added to follow-ups"
                             setTextColor(GREEN)
                             val task    = action.optString("task").ifEmpty { actionLabel }
-                            val dueHint = action.optString("dueHint").ifEmpty { null }
-                            val dueAt   = action.optString("dueAt").ifEmpty { null }
+                            val dueHint = IntentAndSignals.cleanModelString(action.optString("dueHint"))
+                            val dueAt   = IntentAndSignals.cleanModelString(action.optString("dueAt"))
                             val id      = convKey?.let { IntentAndSignals.computeActionId(it, task) }
                             if (id != null) {
                                 val contact = contactMatch?.optString("displayName")?.ifEmpty { null } ?: ""

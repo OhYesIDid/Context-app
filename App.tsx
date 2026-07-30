@@ -957,8 +957,13 @@ export default function App() {
           of taking a tab slot of its own. */}
       <View style={styles.bottomNav}>
         {([
-          { key: 'home',      icon: '⌂',  label: 'Home'      },
-          { key: 'followups', icon: '☑',  label: 'Follow-ups' },
+          // 🏠/✅ rather than the previous ⌂/☑ dingbats — those rendered as flat,
+          // recolorable monochrome glyphs while Upcoming/Contacts below are full-color
+          // emoji that ignore navIconActive's color change entirely, so the four tabs
+          // read as two different icon styles side by side. Matches the app's dominant
+          // emoji-as-icon language used everywhere else (card icons, platform icons).
+          { key: 'home',      icon: '🏠',  label: 'Home'      },
+          { key: 'followups', icon: '✅',  label: 'Follow-ups' },
           { key: 'upcoming',  icon: '🗓',  label: 'Upcoming'  },
           { key: 'contacts',  icon: '👥',  label: 'Contacts'  },
         ] as { key: Tab; icon: string; label: string }[]).map(tab => {

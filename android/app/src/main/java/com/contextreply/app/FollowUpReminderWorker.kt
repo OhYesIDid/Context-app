@@ -36,9 +36,13 @@ class FollowUpReminderWorker(context: Context, params: WorkerParameters) : Worke
         // store.isEmpty(convKey)/hasReminderFired guards).
         val pending = FollowUpStore.getPending(ctx, id) ?: return Result.success()
         val task = pending.optString("task").ifEmpty { null } ?: return Result.success()
-        val contactName = pending.optString("contactName").ifEmpty { null }
-        val dueHint = pending.optString("dueHint").ifEmpty { null }
-        val dueAt = pending.optString("dueAt").ifEmpty { null }
+        val contactName = IntentAndSignals.cleanModelString(pending.optString("contactName"))
+        // Belt-and-suspenders against entries already stored before the cleanModelString
+        // guard existed at the write side (upsertPendingFollowUp) — without this, an
+        // already-persisted literal "null" dueHint would show up as "Due: null" in the
+        // reminder notification text below.
+        val dueHint = IntentAndSignals.cleanModelString(pending.optString("dueHint"))
+        val dueAt = IntentAndSignals.cleanModelString(pending.optString("dueAt"))
 
         postFollowUpNotification(ctx, id, task, contactName, dueHint, dueAt)
         return Result.success()
