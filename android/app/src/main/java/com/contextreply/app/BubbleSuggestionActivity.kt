@@ -1103,23 +1103,47 @@ class BubbleSuggestionActivity : Activity() {
                             val title = action.optString("title").ifEmpty { "Event" }
                             val datetimeStr = action.optString("datetime").ifEmpty { null }
                             val duration = action.optInt("durationMinutes", 60)
-                            val calIntent = Intent(Intent.ACTION_INSERT).apply {
-                                data = CalendarContract.Events.CONTENT_URI
-                                putExtra(CalendarContract.Events.TITLE, title)
-                                if (datetimeStr != null) {
-                                    ActionDateTime.parse(datetimeStr)?.let { dt ->
-                                        val startMs = dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            val parsedDt = datetimeStr?.let { ActionDateTime.parse(it) }
+
+                            fun fallBackToIntentInsert() {
+                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                                    data = CalendarContract.Events.CONTENT_URI
+                                    putExtra(CalendarContract.Events.TITLE, title)
+                                    if (parsedDt != null) {
+                                        val startMs = parsedDt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                                         putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
                                         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, startMs + duration * 60_000L)
                                     }
                                 }
+                                try { startActivity(calIntent) } catch (_: Exception) {}
                             }
+
                             // Clear from homescreen pending list now that it's been acted on
-                            convKey?.let { key ->
-                                val id = IntentAndSignals.computeActionId(key, title)
-                                ProTxtBgService.getInstance()?.clearPendingCalendarAction(id)
+                            val planId = convKey?.let { IntentAndSignals.computeActionId(it, title) }
+                            planId?.let { ProTxtBgService.getInstance()?.clearPendingCalendarAction(it) }
+
+                            // Phase A of research-evolving-plans-memory: try a real Calendar API
+                            // create first — it's trackable (returns an id, unlike the old
+                            // Intent-only path) and one-tap (no manual Save screen). Needs a
+                            // resolved datetime, a planId, and the write scope actually granted;
+                            // falls back to exactly the old Intent hand-off on any failure so
+                            // this never regresses for a user who hasn't re-signed-in yet.
+                            val service = ProTxtBgService.getInstance()
+                            if (parsedDt != null && planId != null && service != null) {
+                                service.createOrPatchCalendarEvent(title, parsedDt, duration, planId) { eventId ->
+                                    runOnUiThread {
+                                        if (eventId != null) {
+                                            isClickable = false
+                                            text = "✓ Added to calendar"
+                                            setTextColor(GREEN)
+                                        } else {
+                                            fallBackToIntentInsert()
+                                        }
+                                    }
+                                }
+                            } else {
+                                fallBackToIntentInsert()
                             }
-                            try { startActivity(calIntent) } catch (_: Exception) {}
                         }
                         "maps_open" -> {
                             val address = action.optString("address").ifEmpty { null } ?: return@setOnClickListener

@@ -29,6 +29,7 @@ import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -1348,6 +1349,64 @@ class ProTxtBgService : NotificationListenerService() {
             }
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) android.util.Log.w("ProTxtBgService", "Calendar fetch failed: ${e.message}")
+            null
+        }
+    }
+
+    // Phase A of research-evolving-plans-memory: creates (or patches, if a prior create for
+    // this same planId succeeded — see CalendarEventStore) a real Google Calendar event via
+    // the API, instead of the old Intent.ACTION_INSERT hand-off that never returned an id
+    // to update later. Dispatches onto workerPool — this does network I/O and must never run
+    // on a caller's UI thread (BubbleSuggestionActivity's click handler in particular).
+    // onResult fires on a workerPool thread; callers touching UI must hop back themselves.
+    // Needs the calendar.events (write) scope — see googleAuth.ts's configure() — so on any
+    // failure (not signed in, scope not yet granted, network error, non-2xx response)
+    // onResult(null) lets the caller fall back to the old Intent-based hand-off unchanged.
+    fun createOrPatchCalendarEvent(
+        title: String, start: LocalDateTime, durationMinutes: Int, planId: String,
+        onResult: (String?) -> Unit,
+    ) {
+        workerPool.execute {
+            onResult(fetchOrPatchCalendarEventBlocking(title, start, durationMinutes, planId))
+        }
+    }
+
+    private fun fetchOrPatchCalendarEventBlocking(
+        title: String, start: LocalDateTime, durationMinutes: Int, planId: String,
+    ): String? {
+        return try {
+            val existingEventId = CalendarEventStore.get(this, planId)
+            val account = GoogleSignIn.getLastSignedInAccount(this) ?: return null
+            val token = GoogleAuthUtil.getToken(
+                this, account.account ?: return null,
+                "oauth2:https://www.googleapis.com/auth/calendar.events"
+            )
+            val body = CalendarWriteHelper.buildEventBody(title, start, durationMinutes, planId)
+            val conn = URL(CalendarWriteHelper.eventUrl(existingEventId)).openConnection() as HttpURLConnection
+            // HttpURLConnection has no native PATCH support on Android (throws
+            // ProtocolException) — Google's own documented workaround is POST plus this
+            // override header, not a raw PATCH request line.
+            conn.requestMethod = "POST"
+            if (existingEventId != null) conn.setRequestProperty("X-HTTP-Method-Override", "PATCH")
+            conn.doOutput = true
+            conn.connectTimeout = 8_000
+            conn.readTimeout = 8_000
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                android.util.Log.w("ProTxt", "Calendar write failed: HTTP $code")
+                conn.disconnect()
+                return null
+            }
+            val responseText = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            val eventId = CalendarWriteHelper.extractEventId(responseText)
+            if (eventId != null) CalendarEventStore.put(this, planId, eventId)
+            eventId
+        } catch (e: Exception) {
+            android.util.Log.w("ProTxt", "Calendar write error", e)
             null
         }
     }

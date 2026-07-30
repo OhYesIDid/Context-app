@@ -10,6 +10,14 @@ export function configureGoogleSignin(): void {
       // call) — incremental authorization was producing tokens that Gmail's
       // API rejected with 403 even after the scope showed as "connected".
       'https://www.googleapis.com/auth/gmail.readonly',
+      // Added 2026-07-30 for Phase A of research-evolving-plans-memory — writing/
+      // patching calendar events natively (ProTxtBgService.createOrPatchCalendarEvent)
+      // needs write access; calendar.readonly above stays too since it covers the
+      // existing busy/free + event-lookup reads and calendar.events alone doesn't
+      // guarantee the same read surface. Existing signed-in users need to sign out
+      // and back in once to pick up the merged scope — same as the gmail.readonly
+      // addition above; the old session doesn't auto-upgrade.
+      'https://www.googleapis.com/auth/calendar.events',
     ],
     offlineAccess: false,
   });
