@@ -162,6 +162,10 @@ class ProTxtBgService : NotificationListenerService() {
     val sbnIdByConvKey = ConcurrentHashMap<String, Int>()
     // Reverse map: "$packageName:$sbnId" → convKey, for resolving outbound notifications.
     private val sbnKeyToConvKey = ConcurrentHashMap<String, String>()
+    // Diagnostic only (see buildConversationKey) — most recent Notification.shortcutId hash
+    // observed for each convKey, used to detect whether the same title-derived key is ever
+    // associated with two different shortcutIds (a real, observed same-name collision).
+    private val shortcutHashByConvKey = ConcurrentHashMap<String, Int>()
     // Timestamp of the most recent outbound send, keyed by "$packageName:$sbnId".
     // Suppresses the notification update the messaging app posts after a RemoteInput reply.
     val recentlySentAt = ConcurrentHashMap<String, Long>()
@@ -976,7 +980,43 @@ class ProTxtBgService : NotificationListenerService() {
             else -> "id:${sbn.id}"
         }
         if (BuildConfig.DEBUG) android.util.Log.d("ProTxt", "convKey=$packageName:[hashed]  isGroup=$isGroup  sbnId=${sbn.id}")
+        logShortcutIdDiagnostic(sbn, packageName, key)
         return "$packageName:$key"
+    }
+
+    // Diagnostic only — does NOT affect the key returned above. Investigating whether
+    // Notification.getShortcutId() (API 30+) is a reliable enough per-conversation
+    // identifier to fix the same-name convKey collision (see IDEAS.md) without repeating
+    // the 2026-06-16 sbn.id regression — sbn.id was found to be reused across unrelated
+    // conversations on this device, but shortcutId is a semantically different, system-
+    // managed per-conversation API (backs Android's own Conversations/Bubbles features)
+    // that hasn't been verified reliable on this OEM (OPPO/ColorOS — see
+    // project-bubble-debug memory for this project's history of OEM notification-API
+    // quirks) yet. Only ever logs one-way hashes, never the actual title/name, so this is
+    // safe to leave unconditional — not BuildConfig.DEBUG-gated — even in the release
+    // build real usage happens on; that's the whole point, since the existing debug-only
+    // log line above never fires there. `catch (Throwable)`, not `Exception`, per this
+    // project's own established lesson about OEM notification-framework NoSuchMethodError
+    // crashes (also project-bubble-debug memory).
+    private fun logShortcutIdDiagnostic(sbn: StatusBarNotification, packageName: String, key: String) {
+        try {
+            val shortcutId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) sbn.notification.shortcutId else null
+            val fullKey = "$packageName:$key"
+            val shortcutHash = shortcutId?.hashCode()
+            val prevShortcutHash = shortcutHashByConvKey[fullKey]
+            if (shortcutHash != null && prevShortcutHash != null && prevShortcutHash != shortcutHash) {
+                android.util.Log.w(
+                    "ProTxtDiag",
+                    "convKey collision candidate: keyHash=${fullKey.hashCode()} prevShortcutHash=$prevShortcutHash newShortcutHash=$shortcutHash"
+                )
+            } else {
+                android.util.Log.d(
+                    "ProTxtDiag",
+                    "convKey=${fullKey.hashCode()} shortcutIdPresent=${shortcutId != null} shortcutHash=$shortcutHash"
+                )
+            }
+            if (shortcutHash != null) shortcutHashByConvKey[fullKey] = shortcutHash
+        } catch (_: Throwable) {}
     }
 
     // If this is a fresh 1:1 conversation (no thread history yet) whose title is a real
