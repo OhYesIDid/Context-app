@@ -41,6 +41,9 @@ import {
   mergeContact,
   ensureContactForConversation,
   incrementContactInteraction,
+  upsertContactName,
+  logMerge,
+  getMergeLogForContact,
   upsertPlatformIdentity,
   getConfirmedPlatformIdentities,
   insertMemory,
@@ -61,7 +64,7 @@ import {
 beforeEach(async () => {
   await getDatabase();
   // children before parents — foreign_keys=ON rejects deleting a referenced contact row
-  for (const table of ['platform_identities', 'memories', 'style_edits', 'contacts', 'saved_places', 'bookings']) {
+  for (const table of ['platform_identities', 'memories', 'style_edits', 'contact_field_sources', 'merge_log', 'contacts', 'saved_places', 'bookings']) {
     mockRawDb.exec(`DELETE FROM ${table}`);
   }
   invalidateContactsCache();
@@ -165,6 +168,47 @@ describe('contacts', () => {
     const fetched = await getContactsByIds([a.id, b.id]);
     expect(fetched.map((c) => c.id).sort()).toEqual([a.id, b.id].sort());
     expect(await getContactsByIds([])).toEqual([]);
+  });
+});
+
+describe('upsertContactName (source-trust survivorship)', () => {
+  it('a later, higher-trust write overrides an earlier lower-trust one', async () => {
+    const contact = await upsertContact({ displayName: 'placeholder' });
+    await upsertContactName(contact.id, 'John S', 'google', 1.0);
+    await upsertContactName(contact.id, 'John Smith', 'device', 0.9);
+
+    const resolved = (await getAllContacts()).find((c) => c.id === contact.id)!;
+    expect(resolved.displayName).toBe('John Smith');
+  });
+
+  it('an earlier higher-trust write is not overridden by a later lower-trust one', async () => {
+    const contact = await upsertContact({ displayName: 'placeholder' });
+    await upsertContactName(contact.id, 'John Smith', 'device', 0.9);
+    await upsertContactName(contact.id, 'jsmith99', 'platform', 0.5);
+
+    const resolved = (await getAllContacts()).find((c) => c.id === contact.id)!;
+    expect(resolved.displayName).toBe('John Smith');
+  });
+
+  it('re-observing the same source updates its own contribution going forward', async () => {
+    const contact = await upsertContact({ displayName: 'placeholder' });
+    await upsertContactName(contact.id, 'Old Name', 'device', 0.9);
+    await upsertContactName(contact.id, 'New Name', 'device', 0.9);
+
+    const resolved = (await getAllContacts()).find((c) => c.id === contact.id)!;
+    expect(resolved.displayName).toBe('New Name');
+  });
+
+  it('does not touch contacts.updated_at when the survivorship winner is unchanged', async () => {
+    const contact = await upsertContact({ displayName: 'placeholder' });
+    await upsertContactName(contact.id, 'John Smith', 'device', 0.9);
+    const before = (await getAllContacts()).find((c) => c.id === contact.id)!.updatedAt;
+    invalidateContactsCache();
+
+    await upsertContactName(contact.id, 'irrelevant', 'platform', 0.5); // lower trust — never wins
+
+    const after = (await getAllContacts()).find((c) => c.id === contact.id)!.updatedAt;
+    expect(after).toBe(before);
   });
 });
 
@@ -277,6 +321,42 @@ describe('mergeContact', () => {
 
     await expect(mergeContact(from.id, to.id)).resolves.toBeUndefined();
     expect(await findContactIdByIdentifier('+442', 'whatsapp')).toBe(to.id);
+  });
+
+  it('folds field-source provenance from both sides without violating the unique index, keeping the more recent observation', async () => {
+    const from = await upsertContact({ displayName: 'A' });
+    const to = await upsertContact({ displayName: 'B' });
+    // Both sides already have a 'device' source row for display_name — the exact
+    // conflict mergeContact's row-by-row fold (not a plain UPDATE) has to handle.
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] }).setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    await upsertContactName(from.id, 'From Device Old', 'device', 0.9);
+    jest.setSystemTime(new Date('2026-01-01T00:00:05Z'));
+    await upsertContactName(to.id, 'To Device New', 'device', 0.9);
+    jest.useRealTimers();
+
+    await expect(mergeContact(from.id, to.id)).resolves.toBeUndefined();
+
+    const merged = (await getAllContacts()).find((c) => c.id === to.id)!;
+    expect(merged.displayName).toBe('To Device New');
+  });
+});
+
+describe('merge_log', () => {
+  it('logs contact creation from ensureContactForConversation', async () => {
+    const id = await ensureContactForConversation('Frank', 'whatsapp');
+    const log = await getMergeLogForContact(id);
+    expect(log.map((l) => l.event)).toContain('created');
+  });
+
+  it('carries prior log entries onto the target contact on merge, alongside the merge event itself', async () => {
+    const from = await upsertContact({ displayName: 'Old Alias' });
+    const to = await upsertContact({ displayName: 'Real Contact' });
+    await logMerge(from.id, 'created', 'whatsapp', 'Old Alias');
+
+    await mergeContact(from.id, to.id);
+
+    const log = await getMergeLogForContact(to.id);
+    expect(log.map((l) => l.event)).toEqual(expect.arrayContaining(['created', 'auto_merged']));
   });
 });
 

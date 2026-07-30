@@ -53,7 +53,7 @@ function booking(overrides: Partial<BookingItem> & Pick<BookingItem, 'id'>): Boo
 
 beforeEach(async () => {
   await getDatabase();
-  for (const table of ['platform_identities', 'memories', 'style_edits', 'contacts', 'saved_places', 'bookings']) {
+  for (const table of ['platform_identities', 'memories', 'style_edits', 'contact_field_sources', 'merge_log', 'contacts', 'saved_places', 'bookings']) {
     mockRawDb.exec(`DELETE FROM ${table}`);
   }
   await AsyncStorage.clear();

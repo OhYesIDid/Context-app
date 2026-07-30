@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
-import { deletePlatformIdentitiesByContactAndPlatform, getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
+import { deletePlatformIdentitiesByContactAndPlatform, getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, logMerge, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { getUnmatchedSenders, linkSenderToContact, unlinkPlatform } from '../services/contactLinking';
 import type { UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
@@ -168,6 +168,7 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
             try {
               await unlinkPlatform(contact.id, platform);
               await deletePlatformIdentitiesByContactAndPlatform(contact.id, platform);
+              await logMerge(contact.id, 'unlinked', platform);
               reloadIdentities(contact.id);
             } finally {
               setUnlinking(null);

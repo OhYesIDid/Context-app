@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { getAllContacts, insertMemory, upsertContact, upsertPlatformIdentity } from './database';
+import { getAllContacts, insertMemory, upsertContact, upsertContactName, upsertPlatformIdentity } from './database';
 import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 // Handles iOS: [DD/MM/YYYY, HH:MM:SS] Sender: msg  (no dash before the sender)
@@ -55,6 +55,9 @@ export async function pickAndParseWhatsAppExport(): Promise<{ contactName: strin
   for (const [sender, messages] of bySender) {
     const match = findBestNameMatch(sender, existing, (c) => c.displayName);
     const contact = await upsertContact({ id: match?.id, displayName: sender });
+    // 'platform' — lowest survivorship trust — so a Device/Google Contacts name already
+    // on file isn't clobbered by whatever this export happened to save the sender as.
+    await upsertContactName(contact.id, sender, 'platform', 0.6);
     if (!match) existing.push(contact);
     await upsertPlatformIdentity({
       contactId: contact.id,

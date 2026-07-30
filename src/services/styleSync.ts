@@ -9,6 +9,7 @@ import {
   getDatabase,
   getRecentStyleEdits,
   incrementContactInteraction,
+  logMerge,
   mergeContact,
   recordStyleEdit,
   upsertPlatformIdentity,
@@ -187,6 +188,7 @@ async function drainConfirmedIdentities(confirmed: Record<string, string>): Prom
       confidence: 1.0,
       userConfirmed: true,
     });
+    await logMerge(sqliteContactId, 'confirmed', platform, senderName);
   }
 
   // A newly-created contact needs to be pushed into the native fuzzy-match cache

@@ -194,7 +194,7 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 //   const MIGRATIONS: Record<number, ...> = {
 //     2: async (db) => { await db.execAsync('ALTER TABLE contacts ADD COLUMN foo TEXT'); },
 //   };
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> = {
   // 1 is reserved as the baseline for installs updating from before version
   // tracking existed — _migrate() above already applied everything "version 1"
@@ -215,6 +215,44 @@ const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> =
       `UPDATE platform_identities SET identifier_type = 'username'
        WHERE identifier_type = 'display_name' AND platform NOT IN ('device', 'google')`
     );
+  },
+
+  // Golden-record source-of-truth work (research-contact-source-of-truth memory,
+  // 2026-07-30). contact_field_sources gives fields that vary by source (currently
+  // just display_name) real provenance instead of last-write-wins — a Google Contacts
+  // re-sync could previously clobber a name Device Contacts had already established,
+  // silently, on every sync. merge_log is an append-only audit trail answering "why
+  // does ConTxt think this is X" for identity decisions that happen without a banner.
+  3: async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS contact_field_sources (
+        id                TEXT PRIMARY KEY NOT NULL,
+        contact_id        TEXT NOT NULL,
+        field_name        TEXT NOT NULL,
+        value             TEXT NOT NULL,
+        source            TEXT NOT NULL,
+        source_confidence REAL NOT NULL DEFAULT 1.0,
+        observed_at       TEXT NOT NULL,
+        is_active         INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_contact_field_sources_unique
+        ON contact_field_sources(contact_id, field_name, source);
+      CREATE INDEX IF NOT EXISTS idx_contact_field_sources_contact
+        ON contact_field_sources(contact_id, field_name);
+
+      CREATE TABLE IF NOT EXISTS merge_log (
+        id          TEXT PRIMARY KEY NOT NULL,
+        contact_id  TEXT NOT NULL,
+        event       TEXT NOT NULL,
+        platform    TEXT,
+        detail      TEXT,
+        created_at  TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_merge_log_contact
+        ON merge_log(contact_id);
+    `);
   },
 };
 
@@ -582,8 +620,8 @@ export async function getContactsByIds(ids: string[]): Promise<Contact[]> {
   return Promise.all(rows.map(rowToContact));
 }
 
-// Migrates all style_edits, platform_identities, and memories from fromId to toId,
-// sums interaction counts, then hard-deletes the orphaned from contact.
+// Migrates all style_edits, platform_identities, memories, and field-source provenance
+// from fromId to toId, sums interaction counts, then hard-deletes the orphaned from contact.
 export async function mergeContact(fromId: string, toId: string): Promise<void> {
   if (fromId === toId) return;
   const db = await getDatabase();
@@ -594,6 +632,29 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
   // plain UPDATE of contact_id can never collide with another row for the same identity (there
   // isn't one to collide with); no copy-then-delete dance or conflict handling is needed here.
   await db.runAsync('UPDATE platform_identities SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
+
+  // contact_field_sources IS keyed uniquely per (contact_id, field_name, source), so unlike
+  // platform_identities above, fromId and toId can each already have a row for the same
+  // field+source (e.g. both were separately imported from Google Contacts) — a plain UPDATE
+  // would violate the unique index. Fold row-by-row instead, keeping whichever of the two is
+  // more recently observed; the WHERE on DO UPDATE makes conflicting inserts a no-op rather
+  // than an error when fromId's row turns out to be the older one.
+  const fromSources = await db.getAllAsync<{
+    field_name: string; value: string; source: string; source_confidence: number; observed_at: string;
+  }>('SELECT field_name, value, source, source_confidence, observed_at FROM contact_field_sources WHERE contact_id = ?', [fromId]);
+  for (const s of fromSources) {
+    await db.runAsync(
+      `INSERT INTO contact_field_sources (id, contact_id, field_name, value, source, source_confidence, observed_at, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+       ON CONFLICT(contact_id, field_name, source) DO UPDATE SET
+         value=excluded.value, source_confidence=excluded.source_confidence, observed_at=excluded.observed_at, is_active=1
+       WHERE excluded.observed_at > contact_field_sources.observed_at`,
+      [randomUUID(), toId, s.field_name, s.value, s.source, s.source_confidence, s.observed_at]
+    );
+  }
+  await db.runAsync('DELETE FROM contact_field_sources WHERE contact_id = ?', [fromId]);
+  await db.runAsync('UPDATE merge_log SET contact_id = ? WHERE contact_id = ?', [toId, fromId]);
+
   await db.runAsync(
     `UPDATE contacts SET
        interaction_count = interaction_count + (
@@ -605,6 +666,13 @@ export async function mergeContact(fromId: string, toId: string): Promise<void> 
   );
   await db.runAsync('DELETE FROM contacts WHERE id = ?', [fromId]);
   invalidateContactsCache();
+
+  // Re-resolve display_name now that toId may have inherited a higher-trust source from fromId.
+  const resolvedName = await resolveFieldValue(toId, 'display_name');
+  if (resolvedName) {
+    await db.runAsync('UPDATE contacts SET display_name = ? WHERE id = ?', [await encryptField(resolvedName), toId]);
+  }
+  await logMerge(toId, 'auto_merged', undefined, `merged from ${fromId}`);
 }
 
 // Creates a contact + provisional platform_identity if one doesn't already exist
@@ -633,6 +701,8 @@ export async function ensureContactForConversation(
     [randomUUID(), contactId, platform, await encryptField(senderName), hash,
      'display_name', 0.5, 0, now, now]
   );
+  await recordFieldSource(contactId, 'display_name', senderName, 'platform', 0.5);
+  await logMerge(contactId, 'created', platform, senderName);
   invalidateContactsCache();
   return contactId;
 }
@@ -657,6 +727,104 @@ export async function updateContactPreferences(
     [relationship ?? null, preferredTone ?? null, new Date().toISOString(), id]
   );
   invalidateContactsCache();
+}
+
+// ── Contact field provenance (golden-record survivorship) ─────────────────────
+// See the research-contact-source-of-truth memory for the full design. Currently
+// only display_name is source-tracked — relationship/preferred_tone stay direct
+// writes (updateContactPreferences) since they're user judgments, never inferred
+// from an import, so there's no competing-source conflict to resolve for them.
+
+export type ContactFieldSource = 'manual' | 'device' | 'google' | 'platform';
+
+// Higher wins on conflict. 'manual' is reserved for a future user-initiated rename —
+// nothing writes it yet, but the ranking already accounts for it so that path slots
+// in later without another schema change.
+const FIELD_SOURCE_TRUST: Record<ContactFieldSource, number> = {
+  manual: 3, device: 2, google: 1, platform: 0,
+};
+
+// Appends/updates this source's observed value for one field. Never deletes a
+// competing source's row — survivorship needs full evidence, not just the latest write.
+async function recordFieldSource(
+  contactId: string, fieldName: string, value: string,
+  source: ContactFieldSource, confidence: number,
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO contact_field_sources
+       (id, contact_id, field_name, value, source, source_confidence, observed_at, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT(contact_id, field_name, source) DO UPDATE SET
+       value=excluded.value, source_confidence=excluded.source_confidence,
+       observed_at=excluded.observed_at, is_active=1`,
+    [randomUUID(), contactId, fieldName, await encryptField(value), source, confidence, new Date().toISOString()]
+  );
+}
+
+// Survivorship rule: highest-trust source wins, tie-broken by most recently observed.
+// Returns null if no source has reported this field yet.
+async function resolveFieldValue(contactId: string, fieldName: string): Promise<string | null> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ value: string; source: string; observed_at: string }>(
+    'SELECT value, source, observed_at FROM contact_field_sources WHERE contact_id = ? AND field_name = ? AND is_active = 1',
+    [contactId, fieldName]
+  );
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => {
+    const trustDiff = (FIELD_SOURCE_TRUST[b.source as ContactFieldSource] ?? 0) - (FIELD_SOURCE_TRUST[a.source as ContactFieldSource] ?? 0);
+    return trustDiff !== 0 ? trustDiff : b.observed_at.localeCompare(a.observed_at);
+  });
+  return decryptFieldSafe(rows[0].value);
+}
+
+// Records this source's observed name, then re-resolves the golden display_name across
+// every source seen so far for this contact — so e.g. a Google Contacts re-sync can no
+// longer silently overwrite a name Device Contacts already established (or vice versa).
+// Only writes contacts.display_name when the resolved winner actually changes, so a
+// re-sync that changes nothing doesn't churn updated_at/synced_at. Returns the winner.
+export async function upsertContactName(
+  contactId: string, name: string, source: ContactFieldSource, confidence = 1.0,
+): Promise<string> {
+  await recordFieldSource(contactId, 'display_name', name, source, confidence);
+  const winner = (await resolveFieldValue(contactId, 'display_name')) ?? name;
+  const current = await getContactById(contactId);
+  if (current && current.displayName !== winner) {
+    const db = await getDatabase();
+    await db.runAsync('UPDATE contacts SET display_name = ?, updated_at = ? WHERE id = ?',
+      [await encryptField(winner), new Date().toISOString(), contactId]);
+    invalidateContactsCache();
+  }
+  return winner;
+}
+
+// ── Merge log (audit trail for identity decisions) ─────────────────────────────
+// Answers "why does ConTxt think this is X" — append-only, written at every point a
+// platform identity lands on a contact_id, whether that happened via a banner the
+// user answered or silently (e.g. a verified phone match). See ContactLinking.kt for
+// the native decision logic this complements; native auto-confirm decisions aren't
+// logged here yet — only what's already observable from the JS/SQLite side (contact
+// creation, drained confirmations, auto-merges, and manual unlink).
+export type MergeLogEvent = 'created' | 'confirmed' | 'auto_merged' | 'unlinked';
+
+export async function logMerge(
+  contactId: string, event: MergeLogEvent, platform?: string, detail?: string,
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    'INSERT INTO merge_log (id, contact_id, event, platform, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [randomUUID(), contactId, event, platform ?? null, detail ?? null, new Date().toISOString()]
+  );
+}
+
+export async function getMergeLogForContact(contactId: string): Promise<{
+  event: string; platform: string | null; detail: string | null; createdAt: string;
+}[]> {
+  const db = await getDatabase();
+  return db.getAllAsync(
+    'SELECT event, platform, detail, created_at as createdAt FROM merge_log WHERE contact_id = ? ORDER BY created_at DESC',
+    [contactId]
+  );
 }
 
 export async function upsertPlatformIdentity(

@@ -1,5 +1,5 @@
 import * as Contacts from 'expo-contacts';
-import { getAllContacts, invalidateContactsCache, upsertContact, upsertPlatformIdentity } from './database';
+import { getAllContacts, invalidateContactsCache, upsertContact, upsertContactName, upsertPlatformIdentity } from './database';
 import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 const PROGRESS_EVERY = 10;
@@ -35,6 +35,9 @@ export async function importDeviceContacts(
       preferredTone: prev?.preferredTone,
     });
     const id = contact.id;
+    // Re-resolves display_name via source-trust survivorship rather than trusting this
+    // sync's raw name — a Google Contacts import that ran since won't get clobbered.
+    await upsertContactName(id, name, 'device', 0.9);
     if (!prev) existing.push(contact);
 
     for (const entry of c.emails ?? []) {

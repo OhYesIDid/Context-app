@@ -1,5 +1,5 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { getAllContacts, invalidateContactsCache, upsertContact, upsertPlatformIdentity } from './database';
+import { getAllContacts, invalidateContactsCache, upsertContact, upsertContactName, upsertPlatformIdentity } from './database';
 import { findBestNameMatch } from '../utils/fuzzyMatch';
 
 const PROGRESS_EVERY = 10;
@@ -57,6 +57,9 @@ export async function importGoogleContacts(
         preferredTone: prev?.preferredTone,
       });
       const id = contact.id;
+      // Re-resolves display_name via source-trust survivorship rather than trusting this
+      // sync's raw name — a Device Contacts import that ran since won't get clobbered.
+      await upsertContactName(id, name, 'google', 1.0);
       if (!prev) existing.push(contact);
 
       for (const { value } of person.emailAddresses ?? []) {
