@@ -135,6 +135,32 @@ object IntentAndSignals {
     fun computeActionId(convKey: String, signature: String): String =
         "$convKey|${signature.trim().lowercase()}".hashCode().and(0x7FFFFFFF).toString()
 
+    // computeActionId's exact-title match still misses a same event re-worded across
+    // messages ("Surrey Hills Ride with Stew" vs "Surrey Hills ride with Stew - transport"
+    // — different signature, different id, so both survived as separate pending_calendar_actions
+    // entries even though they're clearly the same plan). Exact id match always counts as the
+    // same action; short of that, a shared non-null datetime within the same conversation is
+    // treated as the same event even when the wording differs — you can't have two different
+    // real plans with the same contact starting at the exact same moment. Deliberately does NOT
+    // fuzzy-match titles with no datetime at all — that's a weaker signal not backed by a
+    // concrete repro the way the datetime case is; see project-planned-features.md's
+    // taskTextSimilarity() for the equivalent (and more speculative) follow-up-side matcher.
+    fun isSameCalendarAction(
+        existingId: String, existingConvKey: String, existingDatetime: String?,
+        newId: String, newConvKey: String, newDatetime: String?,
+    ): Boolean {
+        if (existingId == newId) return true
+        if (newDatetime == null || existingDatetime == null) return false
+        if (existingConvKey != newConvKey) return false
+        // Compare to the minute, not the full string — the worker's prompt fixes the model's
+        // datetime format to ISO-local ("2026-06-20T18:00:00"), but two separate resolutions of
+        // "the same moment" aren't guaranteed byte-identical down to the second, and
+        // formatCalendarLabel() only ever shows the user hour:minute anyway.
+        return minuteKey(existingDatetime) == minuteKey(newDatetime)
+    }
+
+    private fun minuteKey(isoLocal: String): String = isoLocal.take(16) // "yyyy-MM-ddTHH:mm"
+
     private val INTENT_ENRICHMENTS = mapOf(
         "eta"               to listOf("maps"),
         "availability"      to listOf("calendar"),

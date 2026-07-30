@@ -137,6 +137,52 @@ class IntentAndSignalsTest {
         assertEquals(a, b)
     }
 
+    // ── isSameCalendarAction ─────────────────────────────────────────────────────
+
+    @Test fun `an exact id match always counts as the same action`() {
+        assertTrue(IntentAndSignals.isSameCalendarAction(
+            "id-1", "whatsapp:Stew", null,
+            "id-1", "whatsapp:Stew", null,
+        ))
+    }
+
+    @Test fun `a re-worded title at the same datetime in the same conversation is the same event`() {
+        // The reported bug: "Surrey Hills Ride with Stew" vs "Surrey Hills ride with
+        // Stew - transport" — different signature/id, same person, same start time.
+        assertTrue(IntentAndSignals.isSameCalendarAction(
+            "id-ride", "whatsapp:Stew", "2026-08-01T08:00:00",
+            "id-ride-transport", "whatsapp:Stew", "2026-08-01T08:00:00",
+        ))
+    }
+
+    @Test fun `datetimes differing only in seconds still count as the same event`() {
+        assertTrue(IntentAndSignals.isSameCalendarAction(
+            "id-a", "whatsapp:Stew", "2026-08-01T08:00:00",
+            "id-b", "whatsapp:Stew", "2026-08-01T08:00:47",
+        ))
+    }
+
+    @Test fun `a different start time in the same conversation is a different event`() {
+        assertFalse(IntentAndSignals.isSameCalendarAction(
+            "id-a", "whatsapp:Stew", "2026-08-01T08:00:00",
+            "id-b", "whatsapp:Stew", "2026-08-02T08:00:00",
+        ))
+    }
+
+    @Test fun `the same datetime in a different conversation is a different event`() {
+        assertFalse(IntentAndSignals.isSameCalendarAction(
+            "id-a", "whatsapp:Stew", "2026-08-01T08:00:00",
+            "id-b", "whatsapp:Preet", "2026-08-01T08:00:00",
+        ))
+    }
+
+    @Test fun `never merges on title alone when neither side has a resolved datetime`() {
+        assertFalse(IntentAndSignals.isSameCalendarAction(
+            "id-a", "whatsapp:Stew", null,
+            "id-b", "whatsapp:Stew", null,
+        ))
+    }
+
     // ── computeUrgencyScore ──────────────────────────────────────────────────────
 
     @Test fun `urgency score clamps at 3 even when every signal fires`() {

@@ -197,8 +197,16 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
     }
   };
 
+  // Excludes any unmatched sender whose name is this same contact — getUnmatchedSenders()
+  // has no concept of "already the contact you're viewing" (it only knows a sender is
+  // unmatched, not who it might actually be), so without this a contact who has two
+  // technically-distinct identities under the same display name (e.g. a convKey
+  // collision — see IDEAS.md's "Same-name contact collision" notes) gets offered as a
+  // link target for itself.
+  const ownName = contact?.displayName.trim().toLowerCase();
   const filteredUnmatched = unmatchedSenders.filter(s =>
-    !linkSearch.trim() || s.displayName.toLowerCase().includes(linkSearch.trim().toLowerCase())
+    s.displayName.trim().toLowerCase() !== ownName &&
+    (!linkSearch.trim() || s.displayName.toLowerCase().includes(linkSearch.trim().toLowerCase()))
   );
 
   // Removes both halves of a link: the native confirmed_identities entries that

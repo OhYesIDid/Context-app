@@ -1703,22 +1703,38 @@ class ProTxtBgService : NotificationListenerService() {
     // derived from convKey + title (see IntentAndSignals.computeActionId) so a genuinely
     // distinct second event proposed in the same still-open conversation gets its own entry
     // instead of silently overwriting the first, while a message merely refining the same
-    // event (title unchanged) still updates it in place.
+    // event (title unchanged) still updates it in place. IntentAndSignals.isSameCalendarAction
+    // additionally catches the same event re-worded with a different title (matched on a
+    // shared datetime instead) — see its own doc comment for why this was needed.
     private fun upsertPendingCalendarAction(action: JSONObject, convKey: String, contactName: String) {
         val prefs = Prefs.main(this)
         try {
             val title = action.optString("title").ifEmpty { "Event" }
+            val datetime = action.optString("datetime").ifEmpty { null }
+            val id = IntentAndSignals.computeActionId(convKey, title)
             val existing = JSONArray(prefs.getString("pending_calendar_actions", "[]") ?: "[]")
             val next = JSONArray()
-            val id = IntentAndSignals.computeActionId(convKey, title)
+            var mergedId: String? = null
             for (i in 0 until existing.length()) {
                 val item = existing.optJSONObject(i) ?: continue
-                if (item.optString("id") != id) next.put(item)
+                val itemDatetime = if (item.isNull("datetime")) null else item.optString("datetime")
+                val same = IntentAndSignals.isSameCalendarAction(
+                    item.optString("id"), item.optString("convKey"), itemDatetime,
+                    id, convKey, datetime,
+                )
+                if (same) {
+                    // Keep whichever id this event was already tracked under, so a re-worded
+                    // restatement doesn't change the id a pending Add/Dismiss action in the UI
+                    // is already holding a reference to.
+                    mergedId = item.optString("id")
+                    continue
+                }
+                next.put(item)
             }
             next.put(JSONObject().apply {
-                put("id", id)
+                put("id", mergedId ?: id)
                 put("title", title)
-                put("datetime", action.optString("datetime").ifEmpty { null } ?: JSONObject.NULL)
+                put("datetime", datetime ?: JSONObject.NULL)
                 put("durationMinutes", action.optInt("durationMinutes", 60))
                 put("contactName", contactName.ifEmpty { null } ?: JSONObject.NULL)
                 put("convKey", convKey)
