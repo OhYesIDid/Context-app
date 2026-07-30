@@ -54,7 +54,6 @@ object ContactMatcher {
         val cache = loadCache(context)
         if (cache.length() == 0) return emptyList()
 
-        val needle = senderName.trim().lowercase()
         val results = mutableListOf<MatchResult>()
 
         for (i in 0 until cache.length()) {
@@ -67,8 +66,7 @@ object ContactMatcher {
 
             // Strip app prefixes from cached names (e.g. WhatsApp contacts saved as "WhatsApp: Name")
             val cleanName = ProTxtBgService.stripAppPrefix(displayName.trim())
-            val haystack = cleanName.lowercase()
-            val score = max(jaroWinkler(needle, haystack), tokenSortJaroWinkler(needle, haystack))
+            val score = nameScore(senderName, cleanName)
 
             if (score >= MIN_MATCH) results.add(MatchResult(id, cleanName, tone, score))
         }
@@ -96,6 +94,57 @@ object ContactMatcher {
             }
         }
     } catch (_: Exception) { JSONArray() }
+
+    // ── Name scoring (Phase C — research-contact-source-of-truth memory) ──────
+    //
+    // Best similarity between a raw sender name and a candidate contact name, across
+    // several independent-ish comparisons: the two variants bestMatches() always ran
+    // (raw and sorted-token Jaro-Winkler, for transposed names), plus two added here —
+    // handle-separator normalization and first-name-only comparison — both aimed at
+    // the same gap flagged in IDEAS.md's Cross-Platform Contact Linking section:
+    // "Tom Smith" (device contact) vs "@tom.smith" / "tommyg" (a platform's own display
+    // name) read as the same person to a human but score poorly as opaque strings.
+    // Internal, not private, so it's unit-testable without a Context — bestMatches()
+    // above is the only production caller. Deliberately does NOT change MIN_MATCH/
+    // AUTO_APPLY, and ContactLinking.kt's rule that a name-only match (this whole tier)
+    // never auto-confirms regardless of score is unchanged — a stronger signal here
+    // only changes which banner wording is used ("Is this X?" vs "Possibly X?"), not
+    // whether a banner is shown at all.
+    internal fun nameScore(rawSenderName: String, candidateName: String): Double {
+        val needle = rawSenderName.trim().lowercase()
+        val haystack = candidateName.trim().lowercase()
+        if (needle.isEmpty() || haystack.isEmpty()) return 0.0
+
+        var best = max(jaroWinkler(needle, haystack), tokenSortJaroWinkler(needle, haystack))
+
+        // Handle-style senders ("@tom.smith", "tom_smith") — split on separators and
+        // compare as space-joined name tokens instead of one opaque string.
+        val normalized = normalizeHandle(needle)
+        if (normalized != needle) {
+            best = max(best, max(jaroWinkler(normalized, haystack), tokenSortJaroWinkler(normalized, haystack)))
+        }
+
+        // Compact single-token senders with no separator at all ("tommyg", "tomsmith") —
+        // compare against just the candidate's first name, where Jaro-Winkler's
+        // shared-prefix bonus can still catch a contraction a full-string compare misses.
+        if (' ' !in needle) {
+            val firstToken = haystack.substringBefore(' ')
+            if (firstToken.isNotEmpty() && firstToken != haystack) {
+                best = max(best, jaroWinkler(needle, firstToken))
+            }
+        }
+
+        return best
+    }
+
+    // "@tom.smith99" / "tom_smith" -> "tom smith" — strips a leading '@', splits on common
+    // handle separators, and drops pure-digit tokens (usually a disambiguating suffix, not
+    // part of a name). A no-op input (no '@', no separators) returns itself unchanged.
+    private fun normalizeHandle(s: String): String {
+        val stripped = s.removePrefix("@")
+        val tokens = stripped.split(Regex("[._-]+")).filter { it.isNotBlank() && it.any(Char::isLetter) }
+        return if (tokens.isEmpty()) s else tokens.joinToString(" ")
+    }
 
     // ── Jaro-Winkler ────────────────────────────────────────────────────────
 
