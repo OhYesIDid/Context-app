@@ -154,6 +154,10 @@ export interface Contact {
   preferredTone?: Tone;
   interactionCount?: number;
   notes?: string;
+  // 0-1, rolled up across every platform linked to this contact — see
+  // src/services/contactCloseness.ts. Undefined until first computed, not 0.
+  closenessScore?: number;
+  closenessComputedAt?: string;
   createdAt: string;
   updatedAt: string;
   syncedAt?: string;

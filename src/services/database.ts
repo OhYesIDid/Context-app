@@ -194,7 +194,7 @@ async function _migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 //   const MIGRATIONS: Record<number, ...> = {
 //     2: async (db) => { await db.execAsync('ALTER TABLE contacts ADD COLUMN foo TEXT'); },
 //   };
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> = {
   // 1 is reserved as the baseline for installs updating from before version
   // tracking existed — _migrate() above already applied everything "version 1"
@@ -252,6 +252,18 @@ const MIGRATIONS: Record<number, (db: SQLite.SQLiteDatabase) => Promise<void>> =
       );
       CREATE INDEX IF NOT EXISTS idx_merge_log_contact
         ON merge_log(contact_id);
+    `);
+  },
+
+  // Phase D of the research-contact-source-of-truth memory: a stored, versioned
+  // closeness score (0-1) per contact, rolled up across every platform linked to it
+  // (see contactCloseness.ts) — replaces "recompute from raw signals on every prompt"
+  // with a persisted value that has an actual read path (ContactDetailModal) and a
+  // timestamp so staleness is visible instead of implicit.
+  4: async (db) => {
+    await db.execAsync(`
+      ALTER TABLE contacts ADD COLUMN closeness_score REAL;
+      ALTER TABLE contacts ADD COLUMN closeness_computed_at TEXT;
     `);
   },
 };
@@ -524,6 +536,7 @@ export function invalidateContactsCache() { _contactsCache = null; }
 type ContactRow = {
   id: string; display_name: string; relationship: string | null;
   preferred_tone: string | null; interaction_count: number | null; notes: string | null;
+  closeness_score: number | null; closeness_computed_at: string | null;
   created_at: string; updated_at: string; synced_at: string | null; deleted_at: string | null;
 };
 
@@ -535,6 +548,8 @@ async function rowToContact(r: ContactRow): Promise<Contact> {
     preferredTone: (r.preferred_tone as Contact['preferredTone']) ?? undefined,
     interactionCount: r.interaction_count ?? 0,
     notes: await decryptFieldOrUndefined(r.notes),
+    closenessScore: r.closeness_score ?? undefined,
+    closenessComputedAt: r.closeness_computed_at ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
     syncedAt: r.synced_at ?? undefined, deletedAt: r.deleted_at ?? undefined,
   };
@@ -825,6 +840,19 @@ export async function getMergeLogForContact(contactId: string): Promise<{
     'SELECT event, platform, detail, created_at as createdAt FROM merge_log WHERE contact_id = ? ORDER BY created_at DESC',
     [contactId]
   );
+}
+
+// Stores the rolled-up closeness score computed by contactCloseness.ts. Deliberately
+// doesn't touch updated_at/synced_at — this is a derived value recomputed on read of a
+// contact's own detail view, not a user edit or an import result, so it shouldn't look
+// like one to sync logic or to "last updated" UI.
+export async function updateContactCloseness(contactId: string, score: number): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    'UPDATE contacts SET closeness_score = ?, closeness_computed_at = ? WHERE id = ?',
+    [score, new Date().toISOString(), contactId]
+  );
+  invalidateContactsCache();
 }
 
 export async function upsertPlatformIdentity(

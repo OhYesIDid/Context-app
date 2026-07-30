@@ -178,6 +178,28 @@ class ProTxtSettingsModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // contactCloseness.ts's only native call — given a contact's convKeys (from
+    // getAllConfirmedLinks, filtered to one contactId), returns whichever ones have
+    // enough signal data to score, keyed by convKey so the JS side can decide how to
+    // roll several platforms up into one contact-level score. A convKey with no data
+    // yet is simply omitted, not returned as 0 — no data isn't evidence of distance.
+    @ReactMethod
+    fun getClosenessScores(convKeysJson: String, promise: Promise) {
+        try {
+            val convKeys = JSONArray(convKeysJson)
+            val result = JSONObject()
+            for (i in 0 until convKeys.length()) {
+                val convKey = convKeys.optString(i)
+                if (convKey.isEmpty()) continue
+                val score = ContactSignals.getClosenessScore(reactApplicationContext, convKey)
+                if (score != null) result.put(convKey, score)
+            }
+            promise.resolve(result.toString())
+        } catch (e: Exception) {
+            promise.reject("GET_CLOSENESS_FAILED", e)
+        }
+    }
+
     // Re-points a convKey's confirmed_identities entry at a real contact — the same
     // write the bubble's "Yes, link" banner already does, just reached by the user
     // manually browsing unmatched senders in Settings instead of a system-suggested

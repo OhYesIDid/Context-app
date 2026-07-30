@@ -13,6 +13,7 @@ import {
 import type { Contact, Memory, Platform, PlatformIdentity, Relationship, Tone } from '../types';
 import { deletePlatformIdentitiesByContactAndPlatform, getContactById, getPlatformIdentitiesByContact, getSemanticMemoriesByContact, logMerge, updateContactPreferences, upsertPlatformIdentity } from '../services/database';
 import { getUnmatchedSenders, linkSenderToContact, unlinkPlatform } from '../services/contactLinking';
+import { recomputeClosenessScore } from '../services/contactCloseness';
 import type { UnmatchedSender } from '../services/contactLinking';
 import { PLATFORM_ICONS } from '../services/upcomingEvents';
 import { PURPLE, SURFACE, SURFACE2, BORDER, TEXT, MUTED, FONTS, CONTEXT } from '../theme';
@@ -112,6 +113,15 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
       setMemories(mems);
       backfillConfirmedLinks(contactId, filtered);
     }).catch(() => {}).finally(() => setLoading(false));
+
+    // Recomputes in the background rather than blocking the modal open — the stored
+    // value from getContactById above shows immediately, this just refreshes it.
+    // Guarded so a slow response landing after the modal moved to a different contact
+    // (or closed) doesn't overwrite what's currently on screen.
+    recomputeClosenessScore(contactId).then((score) => {
+      if (score == null) return;
+      setContact((prev) => (prev && prev.id === contactId ? { ...prev, closenessScore: score } : prev));
+    });
   }, [contactId]);
 
   const openLinkPicker = () => {
@@ -233,6 +243,7 @@ export default function ContactDetailModal({ contactId, onClose, onPreferenceCha
                     {[
                       contact.interactionCount ? `${contact.interactionCount} interactions` : null,
                       sinceLabel ? `since ${sinceLabel}` : null,
+                      contact.closenessScore != null ? `${Math.round(contact.closenessScore * 100)}% close` : null,
                     ].filter(Boolean).join(' · ')}
                   </Text>
                 </View>

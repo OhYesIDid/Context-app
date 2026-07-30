@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
+import kotlin.math.pow
 
 /**
  * Tracks zero-permission contact signals derived from notification timestamps:
@@ -148,6 +149,62 @@ object ContactSignals {
         }
 
         return "Contact signals: ${parts.joinToString(". ")}."
+    }
+
+    // ── Closeness score (Phase D — research-contact-source-of-truth memory) ────
+    //
+    // Formalizes three of the four signals getContactContext() already renders as text —
+    // recency, frequency, reply speed — into a single stored 0.0-1.0 number instead of a
+    // regenerate-on-read prompt string, so the JS side has a real value to persist and
+    // roll up across a contact's linked platforms (see contactCloseness.ts). Deliberately
+    // excludes the 4th signal (weekday/daytime contact pattern): that's a categorical
+    // tone-fit signal (professional vs personal), not a "more or less" closeness
+    // magnitude, so it has no natural place in a single scalar.
+    //
+    // Pure and internal (not private) so it's unit-testable without a Context —
+    // getClosenessScore() below is the only production caller.
+    internal fun closenessScore(obj: JSONObject, now: Long): Double? {
+        val tsArr = obj.optJSONArray("ts") ?: return null
+        if (tsArr.length() == 0) return null
+        val timestamps = (0 until tsArr.length()).map { tsArr.getLong(it) }
+        val last = timestamps.last()
+
+        // Recency: exponential decay, 14-day half-life — matches the style-learning
+        // profile's own recency decay elsewhere in the app. Fresher reads as closer.
+        val sinceDays = (now - last) / 86_400_000.0
+        val recency = 0.5.pow(sinceDays / 14.0).coerceIn(0.0, 1.0)
+
+        // Frequency: last-7-day volume, capped — 20+ msgs/week reads as maximally frequent.
+        val week1Start = now - 7L * 86_400_000L
+        val r7 = timestamps.count { it >= week1Start }
+        val frequency = (r7 / 20.0).coerceIn(0.0, 1.0)
+
+        // Reciprocity: average reply latency, only when there's enough data to trust it —
+        // absence of delay data means "not enough replies sent yet," not "distant," so it's
+        // excluded (weight redistributed to the other two) rather than defaulted to 0.
+        val delays = obj.optJSONArray("delays")
+        val reciprocity = if (delays != null && delays.length() >= 2) {
+            val avgSecs = (0 until delays.length()).map { delays.getInt(it) }.average()
+            when {
+                avgSecs < 60      -> 1.0
+                avgSecs < 1_800   -> 0.85
+                avgSecs < 3_600   -> 0.7
+                avgSecs < 86_400  -> 0.4
+                else              -> 0.15
+            }
+        } else null
+
+        return if (reciprocity != null) {
+            recency * 0.35 + frequency * 0.35 + reciprocity * 0.30
+        } else {
+            recency * 0.5 + frequency * 0.5
+        }
+    }
+
+    /** Returns the stored closeness score (0.0-1.0) for this convKey, or null if there's no data yet. */
+    fun getClosenessScore(context: Context, convKey: String): Double? {
+        val obj = try { load(Prefs.main(context), sigKey(convKey)) } catch (_: Exception) { return null }
+        return closenessScore(obj, System.currentTimeMillis())
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
