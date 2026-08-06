@@ -84,6 +84,9 @@ When the user taps the "Add to Calendar" action button, pre-populate the sender 
 ### Screenshot OCR
 Take a screenshot of any message → app reads it and suggests a reply. Eliminates copy-paste entirely for apps not covered by the notification listener. Biggest UX jump for platform coverage.
 
+### Auto-clear follow-ups past their due time
+Reported 2026-08-06. `FollowUp` (`src/services/followUps.ts`) already carries an optional `dueAt` ms timestamp — extracted from phrasing like "call Susan back in 20 mins" via `parseDueAt` — but nothing currently acts on it once it passes. A follow-up sits in the list forever unless the user manually marks it done or deletes it, even long after it's clearly stale (e.g. a 20-minute callback reminder still showing days later). Add auto-clear: once `dueAt` has passed by some grace buffer, drop the follow-up from the active list automatically if it's still `status: 'pending'`. The buffer should scale with how the deadline was phrased, not be a flat window — a 20-minute callback and a "by Friday" task imply very different tolerances for "still relevant after the deadline passed." Needs a policy for what "appropriate" means per case (e.g. buffer proportional to the original lead time from `createdAt` to `dueAt`, with sane min/max bounds) — open question, not yet designed.
+
 ---
 
 ## Someday
