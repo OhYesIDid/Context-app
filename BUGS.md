@@ -2,7 +2,11 @@
 
 ## Open
 
-_No open bugs._
+### [BUG-003] "Leave" feature — extend the calendar/departure prompt to non-calendar events (unfinished, resume on laptop)
+**Area:** Worker prompt (`calendar_add` action) / departure-time or "when to leave" logic
+**Status:** In progress on a laptop CLI session as of 2026-08-06; not committed or pushed anywhere, so none of that work exists in this repo yet. Confirmed via full branch sweep (all 11 remote branches, latest commit dated 2026-07-30) that nothing newer has landed.
+**What it needs:** The laptop session was extending a "leave"/departure-time prompt so it also covers non-calendar events — i.e. plans detected from a message or booking (via the worker's `calendar_add` action, `worker/src/index.ts` `SYSTEM_PROMPT` around line 618) or from Gmail bookings (`src/services/upcomingEvents.ts`), not just entries that already exist as real Google Calendar events. Exact scope/design wasn't captured before the laptop went out of reach — confirm with Tommy before continuing, don't assume.
+**Next step:** On the laptop, `git add` / `git commit` / `git push` whatever's in the working tree (even to a scratch branch) so this can be picked up from any session instead of being laptop-local.
 
 ---
 
