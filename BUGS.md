@@ -14,6 +14,12 @@
 **Expected:** The leave-time calculation needs a buffer added on top of raw travel time, and that buffer should vary by event type — e.g. a flight needs ~2 hours (international may need more), a train/bus needs a few minutes for the platform, a restaurant/meeting needs little to none. Buffer should not be a flat constant across all event/booking types.
 **Fix:** Not yet fixed — logged for the laptop CLI session to pick up alongside BUG-003, since it's the same feature and the same missing source.
 
+### [BUG-005] "Leave" nudge fires for bookings where it isn't a sensible thing to say
+**Area:** Same "leave"/departure-nudge feature as BUG-003/BUG-004.
+**Symptom:** Reported by Tommy 2026-08-06 — e.g. a coach booking that departs from the airport after a flight lands got a "leave now" nudge, but that framing doesn't make sense for it: the user isn't leaving from their current location at a time they control the same way a flight from home is — their departure point/time for that leg is contingent on when the previous leg (the flight) actually lands, not a fixed clock time from wherever they are now.
+**Expected:** Before generating a leave-now nudge, the logic needs to consider whether the nudge is even appropriate for that booking/leg — not just calculate a leave-time and buffer (BUG-004) unconditionally for every booking type. Likely needs to detect connecting/dependent legs within a trip (see `groupIntoTrips`/multi-city segments in `src/services/upcomingEvents.ts`) and either suppress the nudge, or base it on the prior leg's real-time status (e.g. actual flight landing time) instead of a fixed scheduled time, rather than assuming the user's current location and a static departure time.
+**Fix:** Not yet fixed — logged for the laptop CLI session to pick up alongside BUG-003/BUG-004, same feature and same missing source.
+
 ---
 
 ## Resolved
